@@ -71,7 +71,7 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .ival.unset{color:var(--ink-3);font-weight:400}
 .iends{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin:0 1px 7px;gap:10px}
 .iends span:last-child{text-align:right}
-.track{position:relative;height:42px;cursor:pointer;user-select:none;touch-action:none}
+.track{position:relative;height:42px;cursor:pointer;user-select:none;touch-action:pan-y}
 .rail{position:absolute;left:0;right:0;top:17px;height:8px;border-radius:6px;background:var(--panel-2);
   border:1px solid var(--line-2);overflow:hidden}
 .fill{position:absolute;top:0;bottom:0;background:var(--base);opacity:.85}
@@ -123,6 +123,12 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
   border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);opacity:.45;border-radius:3px}
 .wtotal{font-family:var(--mono);font-size:13px;color:var(--ink-2);text-align:center;margin-top:9px}
 .wtotal b{color:var(--accent);font-size:15px}
+.wstep{display:flex;gap:6px;margin-top:7px}
+.wstep button{flex:1;background:var(--panel-2);border:1px solid var(--line-2);border-radius:7px;
+  padding:7px 0;font-size:17px;line-height:1;color:var(--ink-2);cursor:pointer;font-family:var(--mono)}
+.wstep button:hover{background:#1c232a;color:var(--ink)}
+.wstep button:active{transform:translateY(1px)}
+.wheel:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---------- controls ---------- */
 .chips{display:flex;flex-wrap:wrap;gap:7px}
@@ -251,9 +257,13 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
         <p class="sub">Actual sleep, not time in bed.</p>
         <div class="wheelwrap">
           <div class="wcol"><div class="wcap">hours</div>
-            <div class="wheel" id="wH" data-step="1"><div class="wsel"></div></div></div>
+            <div class="wheel" id="wH"><div class="wsel"></div></div>
+            <div class="wstep"><button type="button" data-wstep="wH:-1" aria-label="One hour less">&minus;</button><button type="button" data-wstep="wH:1" aria-label="One hour more">+</button></div>
+          </div>
           <div class="wcol"><div class="wcap">minutes</div>
-            <div class="wheel" id="wM" data-step="5"><div class="wsel"></div></div></div>
+            <div class="wheel" id="wM"><div class="wsel"></div></div>
+            <div class="wstep"><button type="button" data-wstep="wM:-1" aria-label="Five minutes less">&minus;</button><button type="button" data-wstep="wM:1" aria-label="Five minutes more">+</button></div>
+          </div>
         </div>
         <div class="wtotal" id="wTotal">—</div>
         <div class="row" style="margin-top:14px">
@@ -820,30 +830,52 @@ function applyVal(item, v) {
 function bindSliders(root) {
   root.addEventListener("pointerdown", ev => {
     const track = ev.target.closest(".track"); if (!track) return;
-    const item = track.closest(".item"); if (!item) return;
-    ev.preventDefault();
-    let cur = valFromX(track, ev.clientX);
-    applyVal(item, cur);
-    const live = root.querySelector('.item[data-k="' + item.dataset.k + '"] .track');
-    if (!live) return;
-    try { live.setPointerCapture(ev.pointerId); } catch (e) {}
-    const move = e2 => {
-      const nv = valFromX(live, e2.clientX);
-      if (nv !== cur) { cur = nv;
-        const it2 = root.querySelector('.item[data-k="' + item.dataset.k + '"]');
-        if (it2) applyVal(it2, nv);
+    const item = track.closest(".item"); if (!item || !draft) return;
+    const key = item.dataset.k;
+    const mouse = ev.pointerType === "mouse";
+    const sx = ev.clientX, sy = ev.clientY;
+    let dragging = false, done = false;
+    let cur = draft.v[key];
+
+    // A mouse press has no scroll ambiguity, so act on it straight away.
+    if (mouse) {
+      ev.preventDefault();
+      dragging = true;
+      cur = valFromX(track, sx);
+      applyVal(item, cur);
+      try { track.setPointerCapture(ev.pointerId); } catch (e) {}
+    }
+
+    function cleanup() {
+      if (done) return; done = true;
+      track.removeEventListener("pointermove", move);
+      track.removeEventListener("pointerup", up);
+      track.removeEventListener("pointercancel", cancel);
+      try { track.releasePointerCapture(ev.pointerId); } catch (e) {}
+    }
+    function move(e2) {
+      if (done) return;
+      if (!dragging) {
+        const dx = Math.abs(e2.clientX - sx), dy = Math.abs(e2.clientY - sy);
+        if (dy > 8 && dy > dx) { cleanup(); return; }   // scrolling the page — hands off
+        if (dx < 6) return;                             // not enough movement to call it yet
+        dragging = true;
+        try { track.setPointerCapture(e2.pointerId); } catch (e) {}
       }
-    };
-    const up = () => {
-      const t2 = root.querySelector('.item[data-k="' + item.dataset.k + '"] .track');
-      if (t2) { t2.removeEventListener("pointermove", move); t2.removeEventListener("pointerup", up);
-        t2.removeEventListener("pointercancel", up); }
-      live.removeEventListener("pointermove", move); live.removeEventListener("pointerup", up);
-      live.removeEventListener("pointercancel", up);
-    };
-    live.addEventListener("pointermove", move);
-    live.addEventListener("pointerup", up);
-    live.addEventListener("pointercancel", up);
+      e2.preventDefault();
+      const nv = valFromX(track, e2.clientX);
+      if (nv !== cur) { cur = nv; applyVal(item, nv); }
+    }
+    function up(e2) {
+      // never moved: it was a tap, so set the value where they touched
+      if (!dragging) applyVal(item, valFromX(track, e2.clientX));
+      cleanup();
+    }
+    function cancel() { cleanup(); }   // the browser claimed the gesture for scrolling
+
+    track.addEventListener("pointermove", move);
+    track.addEventListener("pointerup", up);
+    track.addEventListener("pointercancel", cancel);
   });
   root.addEventListener("keydown", ev => {
     const track = ev.target.closest(".track"); if (!track) return;
@@ -867,11 +899,46 @@ function buildWheel(el, max, step) {
   h += '<div class="pad"></div>';
   el.innerHTML = h;
   el._items = Array.from(el.querySelectorAll(".wi"));
+  el.tabIndex = 0;
+
   el.addEventListener("scroll", () => {
     clearTimeout(el._t);
     markWheel(el);
     el._t = setTimeout(() => { snapWheel(el); pushSleep(); }, 90);
   }, { passive: true });
+
+  // one wheel notch = one step, not the ~3 the browser would scroll
+  el.addEventListener("wheel", e => {
+    e.preventDefault();
+    stepWheel(el, e.deltaY > 0 ? 1 : -1);
+  }, { passive: false });
+
+  el.addEventListener("keydown", e => {
+    let d = 0;
+    if (e.key === "ArrowDown" || e.key === "ArrowRight") d = 1;
+    else if (e.key === "ArrowUp" || e.key === "ArrowLeft") d = -1;
+    else if (e.key === "PageDown") d = 3;
+    else if (e.key === "PageUp") d = -3;
+    else if (e.key === "Home") { setWheel(el, +el._items[0].dataset.v); pushSleep(); e.preventDefault(); return; }
+    else return;
+    e.preventDefault(); stepWheel(el, d);
+  });
+
+  // tap a number to jump straight to it
+  el.addEventListener("click", e => {
+    const wi = e.target.closest(".wi"); if (!wi) return;
+    const i = el._items.indexOf(wi);
+    if (i > -1) { el.scrollTo({ top: i * 40, behavior: "smooth" });
+      markWheel(el); clearTimeout(el._t);
+      el._t = setTimeout(() => { markWheel(el); pushSleep(); }, 200); }
+  });
+}
+function stepWheel(el, d) {
+  const i = Math.max(0, Math.min(el._items.length - 1, wheelIndex(el) + d));
+  el.scrollTo({ top: i * 40, behavior: "smooth" });
+  markWheel(el);
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { markWheel(el); pushSleep(); }, 200);
 }
 function wheelIndex(el) { return Math.max(0, Math.min(el._items.length - 1, Math.round(el.scrollTop / 40))); }
 function markWheel(el) {
@@ -880,7 +947,7 @@ function markWheel(el) {
 }
 function snapWheel(el) {
   const i = wheelIndex(el);
-  el.scrollTo({ top: i * 40, behavior: "smooth" });
+  if (Math.abs(el.scrollTop - i * 40) > 2) el.scrollTo({ top: i * 40, behavior: "smooth" });
   markWheel(el);
 }
 function wheelVal(el) { const i = wheelIndex(el); return +el._items[i].dataset.v; }
@@ -1858,6 +1925,13 @@ function init() {
       const has = draft.n[k] && draft.n[k].trim();
       nb.lastChild.textContent = has ? "note added" : open ? "hide note" : "what's going on";
       if (open) { const ta = wrap.querySelector("textarea"); if (ta) ta.focus(); }
+      return;
+    }
+    const ws = ev.target.closest("[data-wstep]");
+    if (ws) {
+      const p = ws.dataset.wstep.split(":");
+      const el = document.getElementById(p[0]);
+      if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
     const t = ev.target.closest("[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
