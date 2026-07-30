@@ -469,7 +469,7 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
           browser doesn't lose it. Off by default — this is health data.</div></div>
         <button class="tog" id="togSync" aria-pressed="false"></button></div>
       <div class="row" style="gap:8px;margin-top:6px">
-        <button class="btn sm" id="cfPush">Upload now</button>
+        <button class="btn sm" id="cfPush">Sync now</button>
         <button class="btn sm" id="cfPull">Restore from Cloudflare</button>
       </div>
       <div class="row" style="margin-top:12px;gap:14px">
@@ -663,7 +663,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 3;
+const BUILD = 4;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1119,12 +1119,17 @@ function fillWinSelect() {
 }
 
 /* ---------- due logic ---------- */
+/* what another device already closed today — pulled from the worker */
+let remoteClosed = { date: "", ids: [] };
+
 function dueWindows(date) {
   const today = todayISO(), out = [];
+  const remote = (remoteClosed.date === date) ? remoteClosed.ids : [];
   CFG.windows.forEach(w => {
     if (date === today && minsOf(winTime(w, date)) > nowMins()) return;   // not yet time
     if (ENTRIES.some(x => x.date === date && x.win === w.id)) return;
     if (STATE.skipped[date + "|" + w.id]) return;
+    if (remote.indexOf(w.id) > -1) return;                                // done on another device
     out.push(w);
   });
   return out;
@@ -1884,12 +1889,104 @@ async function reportState() {
     cloudLog("state sync failed: " + e.message, true); }
 }
 
+/* Snapshots belong to the person, not the device, or two devices would keep
+   two separate backups and neither would ever see the other. */
+const acctId = () => CFG.cloud.account || CFG.cloud.uid || "";
+
+/* Ask the worker what's already been closed today on any device. Cheap, and it
+   carries no ratings — safe to run even with snapshots turned off. */
+async function pullDue() {
+  if (!cloudBase() || !CFG.cloud.uid || !CFG.cloud.push) return false;
+  try {
+    const j = await api("/due?uid=" + encodeURIComponent(CFG.cloud.uid));
+    const today = todayISO();
+    if (j && (j.date === today || !j.date)) {
+      const was = remoteClosed.ids.join(",");
+      remoteClosed = { date: today, ids: Array.isArray(j.closed) ? j.closed : [] };
+      if (remoteClosed.ids.join(",") !== was) return true;   // something changed elsewhere
+    }
+  } catch (e) { setSync("bad", "offline"); }
+  return false;
+}
+
+/* Two-way merge. Newest write wins per check-in, and nothing is ever dropped —
+   each side keeps every key the other has. */
+function mergeEntries(remote) {
+  const by = {};
+  ENTRIES.forEach(e => { by[e.date + "|" + e.win] = e; });
+  let added = 0, updated = 0;
+  (remote || []).forEach(r => {
+    if (!r || !r.date || !r.win) return;
+    const k = r.date + "|" + r.win, cur = by[k];
+    if (!cur) { by[k] = fixDraft(r); added++; }
+    else if ((r.ts || "") > (cur.ts || "")) { by[k] = fixDraft(r); updated++; }
+  });
+  ENTRIES = Object.keys(by).map(k => by[k])
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  return { added, updated };
+}
+function mergeSuggestions(remote) {
+  const by = {};
+  (STATE.suggestions || []).forEach(s => { by[s.id] = s; });
+  (remote || []).forEach(s => { if (s && s.id && !by[s.id]) by[s.id] = s;
+    else if (s && s.id && s.done && by[s.id]) by[s.id].done = true; });
+  STATE.suggestions = Object.keys(by).map(k => by[k]).sort((a, b) => a.at < b.at ? -1 : 1);
+}
+
+async function cloudSync(quiet) {
+  const acct = acctId();
+  if (!cloudBase() || !acct) { if (!quiet) toast("Add your Worker URL first", true); return; }
+  syncBusy();
+  let pulled = { added: 0, updated: 0 };
+  try {
+    const o = await api("/backup?uid=" + encodeURIComponent(acct));
+    if (o && Array.isArray(o.entries)) {
+      pulled = mergeEntries(o.entries);
+      if (o.state) {
+        Object.keys(o.state.skipped || {}).forEach(k => {
+          if (!STATE.skipped[k]) STATE.skipped[k] = o.state.skipped[k];
+        });
+        mergeSuggestions(o.state.suggestions);
+      }
+      // a real entry always beats a skip for the same slot
+      Object.keys(STATE.skipped).forEach(k => {
+        const p = k.split("|");
+        if (ENTRIES.some(e => e.date === p[0] && e.win === p[1])) delete STATE.skipped[k];
+      });
+      await saveEnt(); await saveState();
+    }
+  } catch (e) { /* no snapshot yet is fine — we'll create one below */ }
+
+  try {
+    const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: CFG,
+      entries: ENTRIES, state: STATE });
+    const r = await api("/backup?uid=" + encodeURIComponent(acct),
+      { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    setDot("#dCloud", "ok"); syncOk("merged");
+    const note = pulled.added || pulled.updated
+      ? "pulled " + pulled.added + " new / " + pulled.updated + " updated, pushed " +
+        ENTRIES.length + " total"
+      : "in step — " + ENTRIES.length + " entries, " + (r.bytes / 1024).toFixed(1) + " KB";
+    cloudLog(note, true);
+    if (pulled.added || pulled.updated) {
+      fillWinSelect(); setDraft($("#eDate").value || todayISO(), $("#eWin").value || draft.win);
+      renderEntries();
+      if (!quiet) toast("Pulled " + (pulled.added + pulled.updated) + " from your other device");
+    } else if (!quiet) toast("Already in step");
+  } catch (e) {
+    setDot("#dCloud", "warn"); setSync("bad", "offline");
+    cloudLog("sync failed: " + e.message, true);
+    if (!quiet) toast("Sync failed — see the log", true);
+  }
+  refreshDue();
+}
+
 async function cloudUpload(quiet) {
-  if (!cloudBase() || !CFG.cloud.uid) { if (!quiet) toast("Add your Worker URL first", true); return; }
+  if (!cloudBase() || !acctId()) { if (!quiet) toast("Add your Worker URL first", true); return; }
   try {
     syncBusy();
     const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: CFG, entries: ENTRIES, state: STATE });
-    const r = await api("/backup?uid=" + encodeURIComponent(CFG.cloud.uid),
+    const r = await api("/backup?uid=" + encodeURIComponent(acctId()),
       { method: "POST", headers: { "Content-Type": "application/json" }, body });
     setDot("#dCloud", "ok");
     syncOk("backed up");
@@ -1899,9 +1996,9 @@ async function cloudUpload(quiet) {
     if (!quiet) toast("Upload failed — see the log", true); }
 }
 async function cloudDownload() {
-  if (!cloudBase() || !CFG.cloud.uid) { toast("Add your Worker URL first", true); return; }
+  if (!cloudBase() || !acctId()) { toast("Add your Worker URL first", true); return; }
   try {
-    const o = await api("/backup?uid=" + encodeURIComponent(CFG.cloud.uid));
+    const o = await api("/backup?uid=" + encodeURIComponent(acctId()));
     if (!o || !Array.isArray(o.entries)) throw new Error("no snapshot stored");
     if (!confirm("Replace the " + ENTRIES.length + " entries on this device with " +
         o.entries.length + " from Cloudflare?\n\nSnapshot taken " +
@@ -2027,7 +2124,7 @@ function commit(skip, reason) {
   gateKey = null;
   refreshDue();
   reportState();                              // stops the worker nagging
-  if (CFG.cloud.sync) cloudUpload(true);
+  if (CFG.cloud.sync) cloudSync(true);           // and push the entry to the other device
   const due = dueWindows(todayISO());
   setDraft(todayISO(), due.length ? due[due.length - 1].id : draft.win);
 }
@@ -2243,7 +2340,7 @@ function init() {
     await saveCfg();
     if (CFG.cloud.push) { await pushEnable(); cloudLog("nag interval now " + CFG.nagMins + " min", true); }
   };
-  $("#cfPush").onclick = () => cloudUpload(false);
+  $("#cfPush").onclick = () => cloudSync(false);
   $("#cfPull").onclick = () => cloudDownload();
 
   /* notification tap -> jump to the open check-in */
@@ -2313,8 +2410,12 @@ function init() {
   $("#syncLight").onclick = () => { show("data");
     setTimeout(() => { const c = $("#cfLog"); if (c) c.scrollIntoView({ block: "center" }); }, 60); };
 
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) { refreshDue(); reportState(); }
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden) return;
+    const changed = await pullDue();
+    refreshDue(); reportState();
+    if (CFG.cloud.sync) cloudSync(true);
+    else if (changed) toast("Already logged on your other device");
   });
   setInterval(refreshDue, 60000);
   $("#buildTag").textContent = "b" + BUILD;
