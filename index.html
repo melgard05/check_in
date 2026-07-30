@@ -264,7 +264,7 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
     <div class="badge" id="dueBadge">—</div>
   </div>
   <div class="updbar" id="updBar">
-    <span>New build ready.</span>
+    <span id="updTxt">New build ready.</span>
     <button class="btn sm pri" id="updBtn">Reload</button>
     <button class="btn sm gho" id="updLater">Later</button>
   </div>
@@ -352,6 +352,19 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
       <button class="btn gho" style="flex:1 1 110px" id="skipBtn">Skip this one</button>
     </div>
     <div class="mini" style="text-align:center;margin-top:12px">Sliders you don't touch are saved as blank, not as 5.</div>
+
+    <div class="eyebrow">Suggestions</div>
+    <div class="card">
+      <p class="sub" style="margin-bottom:11px">Anything that annoyed you just now, while it's fresh.
+        Saved on this device and carried in backups.</p>
+      <textarea id="sugIn" rows="2" placeholder="What would make this easier to use?"
+        style="min-height:56px"></textarea>
+      <div class="row" style="gap:8px;margin-top:9px">
+        <button class="btn sm pri" id="sugAdd">Add</button>
+        <button class="btn sm" id="sugCopy">Copy all</button>
+      </div>
+      <div id="sugList" style="margin-top:12px"></div>
+    </div>
   </section>
 
   <!-- ============ CHARTS ============ -->
@@ -478,21 +491,6 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
         <span class="cstat"><i class="dot" id="dCloud"></i>worker</span>
       </div>
       <div class="log" id="cfLog">Not connected.</div>
-    </div>
-
-    <div class="card">
-      <h2>Suggestions</h2>
-      <p class="sub">Ideas for this app as they occur to you, so they aren't lost by the next check-in.
-        Kept on this device and included in backups.</p>
-      <div class="row" style="gap:8px;align-items:flex-start">
-        <textarea id="sugIn" rows="2" placeholder="What would make this easier to use?"
-          style="flex:1 1 200px;min-height:56px"></textarea>
-      </div>
-      <div class="row" style="gap:8px;margin-top:8px">
-        <button class="btn sm pri" id="sugAdd">Add</button>
-        <button class="btn sm" id="sugCopy">Copy all</button>
-      </div>
-      <div id="sugList" style="margin-top:12px"></div>
     </div>
 
     <div class="card">
@@ -663,7 +661,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 4;
+const BUILD = 5;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1084,6 +1082,8 @@ function renderLog() {
     '<button class="chip ev" data-tag="' + esc(t) + '" aria-pressed="' +
     (draft.tags.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
   $("#eNote").value = draft.note || "";
+
+  renderSug();
 
   const existing = ENTRIES.some(x => x.date === draft.date && x.win === draft.win);
   const sk = STATE.skipped[draft.date + "|" + draft.win];
@@ -2059,21 +2059,38 @@ async function addSug(text) {
   if (CFG.cloud.sync) cloudUpload(true);
 }
 
-/* ---------- new build ---------- */
+/* ---------- new build ----------
+   Watching the service worker only catches builds where sw.js itself changed,
+   which is a minority of them. Comparing the BUILD constant in the deployed
+   file catches every deploy. */
+let newBuild = 0;
 async function checkBuild() {
   const seen = +(await Store.get("baseline:build") || 0);
   if (seen && seen < BUILD) toast("Updated to build " + BUILD);
   if (seen !== BUILD) await Store.set("baseline:build", String(BUILD));
 }
+async function checkForNewBuild() {
+  try {
+    const r = await fetch("./index.html?cb=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const m = (await r.text()).match(/const BUILD = (\d+)/);
+    if (!m) return;
+    const remote = +m[1];
+    if (remote > BUILD) {
+      newBuild = remote;
+      $("#updTxt").textContent = "Build " + remote + " is ready — you're on " + BUILD + ".";
+      $("#updBar").classList.add("on");
+    }
+  } catch (e) { /* offline, try again later */ }
+}
 function watchForUpdate(reg) {
+  // secondary signal: sw.js changed. The build check above is the primary one.
   if (!reg) return;
-  const offer = w => {
-    if (!w) return;
+  const offer = w => { if (!w) return;
     w.addEventListener("statechange", () => {
-      if (w.state === "installed" && navigator.serviceWorker.controller) $("#updBar").classList.add("on");
-    });
-  };
-  if (reg.waiting && navigator.serviceWorker.controller) $("#updBar").classList.add("on");
+      if (w.state === "installed" && navigator.serviceWorker.controller) checkForNewBuild();
+    }); };
+  if (reg.waiting && navigator.serviceWorker.controller) checkForNewBuild();
   offer(reg.installing);
   reg.addEventListener("updatefound", () => offer(reg.installing));
   setInterval(() => { try { reg.update(); } catch (e) {} }, 30 * 60000);
@@ -2400,9 +2417,15 @@ function init() {
 
   /* ---- new build ---- */
   $("#updBtn").onclick = async () => {
+    // the shell is cached, so a plain reload can hand back the old file
     try {
       const reg = swReg || await navigator.serviceWorker.getRegistration();
-      if (reg && reg.waiting) reg.waiting.postMessage({ type: "skip-waiting" });
+      if (reg) { if (reg.waiting) reg.waiting.postMessage({ type: "skip-waiting" });
+        try { await reg.update(); } catch (e) {} }
+      if (window.caches) {
+        const ks = await caches.keys();
+        await Promise.all(ks.filter(k => k.indexOf("baseline") === 0).map(k => caches.delete(k)));
+      }
     } catch (e) {}
     location.reload();
   };
@@ -2413,7 +2436,7 @@ function init() {
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden) return;
     const changed = await pullDue();
-    refreshDue(); reportState();
+    refreshDue(); reportState(); checkForNewBuild();
     if (CFG.cloud.sync) cloudSync(true);
     else if (changed) toast("Already logged on your other device");
   });
@@ -2421,6 +2444,8 @@ function init() {
   $("#buildTag").textContent = "b" + BUILD;
   checkBuild();
   syncIdle();
+  setTimeout(checkForNewBuild, 3000);
+  setInterval(checkForNewBuild, 20 * 60000);
 }
 
 load().then(init).catch(e => {
