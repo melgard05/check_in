@@ -1,7 +1,7 @@
 /* Baseline service worker — sticky check-in notifications + offline shell */
 
 const CACHE = "baseline-v1";
-const SHELL = ["./", "./baseline.html", "./manifest.json"];
+const SHELL = ["./", "./index.html", "./manifest.json"];
 
 /* WORKER_URL and UID are written in by the app on first subscribe. */
 let CFG = { worker: "", uid: "" };
@@ -127,7 +127,7 @@ self.addEventListener("notificationclick", e => {
         return;
       }
     }
-    await self.clients.openWindow("./baseline.html?due=1");
+    await self.clients.openWindow("./index.html?due=1");
   })());
 });
 
