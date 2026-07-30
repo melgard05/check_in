@@ -494,6 +494,50 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
     </div>
 
     <div class="card">
+      <h2>Firebase</h2>
+      <p class="sub">The durable copy. Per-entry writes to your Realtime Database, locked to your
+        sign-in. Use a project of its own &mdash; don't share one with company data.</p>
+      <label class="fld"><span>Database URL</span>
+        <input type="text" id="fbUrl" placeholder="https://baseline-xxxx-default-rtdb.firebaseio.com"
+               autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="fld" style="margin-top:9px"><span>Web API key</span>
+        <input type="text" id="fbKey" placeholder="AIza..." autocapitalize="off" spellcheck="false"></label>
+      <label class="fld" style="margin-top:9px"><span>Email</span>
+        <input type="text" id="fbEmail" placeholder="you@example.com" autocapitalize="off"
+               spellcheck="false"></label>
+      <label class="fld" style="margin-top:9px"><span>Password &mdash; used once, never stored</span>
+        <input type="password" id="fbPass" autocomplete="current-password"></label>
+      <div class="row" style="margin-top:11px;gap:8px">
+        <button class="btn sm pri" id="fbSignIn">Sign in</button>
+        <button class="btn sm" id="fbSyncBtn">Sync now</button>
+        <button class="btn sm" id="fbOut">Sign out</button>
+      </div>
+      <div class="sw" style="margin-top:6px"><div><div class="t">Keep Firebase in step</div>
+        <div class="d">Writes each check-in as you save it, and pulls anything new on open.</div></div>
+        <button class="tog" id="togFb" aria-pressed="false"></button></div>
+      <div class="row" style="margin-top:10px;gap:14px">
+        <span class="cstat"><i class="dot" id="dFbAuth"></i>signed in</span>
+        <span class="cstat"><i class="dot" id="dFbDb"></i>database</span>
+      </div>
+      <div class="log" id="fbLog">Not connected.</div>
+      <details style="margin-top:11px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--ink-2)">Security rules to paste</summary>
+        <p class="mini" style="margin-top:8px">Realtime Database &rarr; Rules. Without these, anyone who
+          finds the URL can read everything.</p>
+        <textarea readonly rows="11" style="font-family:var(--mono);font-size:11px;margin-top:6px">{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null &amp;&amp; auth.uid === $uid",
+        ".write": "auth != null &amp;&amp; auth.uid === $uid"
+      }
+    }
+  }
+}</textarea>
+      </details>
+    </div>
+
+    <div class="card">
       <h2>Check-in times</h2>
       <p class="sub">Sleep is only asked at the first one.</p>
       <div class="sw"><div><div class="t">Different times on weekends</div>
@@ -537,8 +581,7 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 
     <div class="card">
       <h2>Backup</h2>
-      <p class="sub">Everything is stored on this device only. Nothing leaves it. Back up before you
-        clear your browser or switch phones.</p>
+      <p class="sub" id="bkWhere">Checking where your data lives&hellip;</p>
       <div class="row" style="gap:8px">
         <button class="btn sm" id="bkExport">Download backup</button>
         <button class="btn sm" id="bkShow">Show backup text</button>
@@ -661,7 +704,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 5;
+const BUILD = 7;
 
 const DEFAULT_CFG = {
   windows: [
@@ -672,7 +715,8 @@ const DEFAULT_CFG = {
   weekend: false,
   off: ITEMS.filter(i => i.off).map(i => i.key),
   nag: true, lat: 46.8, meds: "", nagMins: 20,
-  cloud: { url: "", uid: "", account: "", push: false, sync: false }
+  cloud: { url: "", uid: "", account: "", push: false, sync: false },
+  fb: { url: "", apiKey: "", email: "", uid: "", on: false }
 };
 
 /* Sat/Sun get their own time when weekend mode is on. */
@@ -753,6 +797,7 @@ async function load() {
   if (s) { try { Object.assign(STATE, JSON.parse(s)); } catch (er) {} }
   if (!STATE.skipped) STATE.skipped = {};
   if (!Array.isArray(STATE.suggestions)) STATE.suggestions = [];
+  if (!STATE.dirty) STATE.dirty = {};
 }
 const saveCfg   = () => Store.set(K_CFG, JSON.stringify(CFG));
 const saveEnt   = () => Store.set(K_ENT, JSON.stringify(ENTRIES));
@@ -1718,6 +1763,33 @@ function renderCfg() {
       '"' + (i.key === "mood" ? " disabled style=opacity:.45" : "") + "></button></div>").join("");
   });
   $("#itemCfg").innerHTML = h;
+  // say where the data actually is, rather than assuming
+  const bw = $("#bkWhere");
+  if (bw) {
+    const acct = acctId();
+    const dest = [];
+    if (CFG.cloud.sync && cloudBase() && acct) dest.push('Cloudflare KV (account <b>' + esc(acct) + '</b>)');
+    if (CFG.fb.on && fbBase() && CFG.fb.uid) dest.push('your Firebase database');
+    if (dest.length) {
+      bw.innerHTML = 'Kept on this device <b>and</b> copied to ' + dest.join(' and ') +
+        '. Ratings, notes and suggestions all go up. Switch the toggles above off to keep it local.';
+    } else if (cloudBase() && CFG.cloud.push) {
+      bw.innerHTML = 'Kept on <b>this device only</b>. Your worker sees your check-in times and which ' +
+        'ones you have closed, but no ratings or notes. Download a backup before clearing your browser.';
+    } else {
+      bw.innerHTML = 'Kept on <b>this device only</b>. Nothing leaves it. Download a backup before you ' +
+        'clear your browser or switch phones.';
+    }
+    if (!CFG.cloud.account && CFG.cloud.uid && CFG.cloud.sync)
+      bw.innerHTML += '<br><span style="color:var(--warn)">No account set &mdash; this device is ' +
+        'backing up under its own id, so it will never merge with your other devices.</span>';
+  }
+  $("#fbUrl").value = CFG.fb.url || "";
+  $("#fbKey").value = CFG.fb.apiKey || "";
+  $("#fbEmail").value = CFG.fb.email || "";
+  $("#togFb").setAttribute("aria-pressed", CFG.fb.on ? "true" : "false");
+  setDot("#dFbAuth", CFG.fb.uid ? "ok" : "");
+  setDot("#dFbDb", CFG.fb.on && CFG.fb.uid ? "ok" : "");
   $("#medList").value = CFG.meds || "";
   $("#cfgLat").value = CFG.lat;
   const dl = dayLength(todayISO(), CFG.lat);
@@ -2097,6 +2169,142 @@ function watchForUpdate(reg) {
 }
 
 /* ============================================================
+   FIREBASE — the durable copy
+   REST only, no SDK. Signs in once for a refresh token; the password
+   is never written to storage.
+   ============================================================ */
+const fbBase = () => (CFG.fb.url || "").trim().replace(/\/+$/, "");
+function fbLog(msg, keep) {
+  const el = $("#fbLog"); if (!el) return;
+  const line = new Date().toLocaleTimeString() + "  " + msg;
+  el.textContent = keep ? (line + "\n" + el.textContent).split("\n").slice(0, 14).join("\n") : line;
+}
+let fbTok = { id: "", exp: 0 };
+
+async function fbToken() {
+  if (fbTok.id && Date.now() < fbTok.exp - 60000) return fbTok.id;
+  const refresh = await Store.get("baseline:fbrefresh");
+  if (!refresh || !CFG.fb.apiKey) return "";
+  const r = await fetch("https://securetoken.googleapis.com/v1/token?key=" + encodeURIComponent(CFG.fb.apiKey), {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(refresh)
+  });
+  if (!r.ok) { setDot("#dFbAuth", "bad"); fbLog("session expired — sign in again", true); return ""; }
+  const j = await r.json();
+  fbTok = { id: j.id_token, exp: Date.now() + (+j.expires_in || 3600) * 1000 };
+  if (j.refresh_token) await Store.set("baseline:fbrefresh", j.refresh_token);
+  CFG.fb.uid = j.user_id || CFG.fb.uid; await saveCfg();
+  setDot("#dFbAuth", "ok");
+  return fbTok.id;
+}
+
+async function fbSignIn(email, password) {
+  if (!CFG.fb.apiKey) { fbLog("add your Web API key first"); return false; }
+  try {
+    const r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" +
+      encodeURIComponent(CFG.fb.apiKey), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, returnSecureToken: true })
+    });
+    const j = await r.json();
+    if (!r.ok) {
+      const m = (j.error && j.error.message) || "sign-in failed";
+      fbLog(m === "INVALID_LOGIN_CREDENTIALS" ? "email or password not accepted" : m, true);
+      setDot("#dFbAuth", "bad"); return false;
+    }
+    fbTok = { id: j.idToken, exp: Date.now() + (+j.expiresIn || 3600) * 1000 };
+    await Store.set("baseline:fbrefresh", j.refreshToken);   // only the refresh token is kept
+    CFG.fb.uid = j.localId; CFG.fb.email = email; await saveCfg();
+    setDot("#dFbAuth", "ok");
+    fbLog("signed in as " + email, true);
+    return true;
+  } catch (e) { fbLog("sign-in error: " + e.message, true); setDot("#dFbAuth", "bad"); return false; }
+}
+async function fbSignOut() {
+  fbTok = { id: "", exp: 0 };
+  await Store.set("baseline:fbrefresh", "");
+  CFG.fb.on = false; await saveCfg();
+  setDot("#dFbAuth", ""); setDot("#dFbDb", "");
+  fbLog("signed out", true);
+}
+
+const entKey = e => e.date + "_" + e.win;                    // firebase keys dislike . $ # [ ] /
+const fbPath = (tok, p) => fbBase() + "/users/" + CFG.fb.uid + p + ".json?auth=" + encodeURIComponent(tok);
+
+async function fbSync(quiet) {
+  if (!fbBase() || !CFG.fb.uid) { if (!quiet) toast("Set up Firebase first", true); return; }
+  const tok = await fbToken();
+  if (!tok) { if (!quiet) toast("Sign in to Firebase first", true); return; }
+  syncBusy();
+  let added = 0, updated = 0;
+  try {
+    // pull
+    const r = await fetch(fbPath(tok, "/entries"), { cache: "no-store" });
+    if (!r.ok) throw new Error("read failed " + r.status);
+    const remote = (await r.json()) || {};
+    const res = mergeEntries(Object.keys(remote).map(k => remote[k]));
+    added = res.added; updated = res.updated;
+
+    const rs = await fetch(fbPath(tok, "/state"), { cache: "no-store" });
+    if (rs.ok) {
+      const st = (await rs.json()) || {};
+      Object.keys(st.skipped || {}).forEach(k => {
+        const local = k.replace("_", "|");
+        if (!STATE.skipped[local]) STATE.skipped[local] = st.skipped[k];
+      });
+      mergeSuggestions(Object.keys(st.suggestions || {}).map(k => st.suggestions[k]));
+    }
+    Object.keys(STATE.skipped).forEach(k => {
+      const p = k.split("|");
+      if (ENTRIES.some(e => e.date === p[0] && e.win === p[1])) delete STATE.skipped[k];
+    });
+    if (added || updated) { await saveEnt(); await saveState(); }
+
+    // push — only what changed here, unless nothing has been pushed yet
+    const dirty = STATE.dirty || {};
+    const keys = Object.keys(dirty);
+    const payload = {};
+    if (!Object.keys(remote).length) ENTRIES.forEach(e => { payload[entKey(e)] = e; });
+    else keys.forEach(k => { const e = ENTRIES.find(x => entKey(x) === k); if (e) payload[k] = e; });
+
+    if (Object.keys(payload).length) {
+      const pr = await fetch(fbPath(tok, "/entries"), {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!pr.ok) throw new Error("write failed " + pr.status);
+    }
+    const skipOut = {}; Object.keys(STATE.skipped).forEach(k => { skipOut[k.replace("|", "_")] = STATE.skipped[k]; });
+    const sugOut = {}; (STATE.suggestions || []).forEach(s => { sugOut[s.id] = s; });
+    await fetch(fbPath(tok, "/state"), {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skipped: skipOut, suggestions: sugOut,
+        meta: { at: new Date().toISOString(), build: BUILD, device: CFG.cloud.uid || "?" } })
+    });
+
+    STATE.dirty = {}; await saveState();
+    setDot("#dFbDb", "ok"); syncOk("firebase");
+    fbLog((added || updated ? "pulled " + added + " new / " + updated + " updated, " : "") +
+      "pushed " + Object.keys(payload).length + " · " + ENTRIES.length + " entries total", true);
+    if (added || updated) {
+      setDraft($("#eDate").value || todayISO(), $("#eWin").value || draft.win);
+      renderEntries(); refreshDue();
+      if (!quiet) toast("Pulled " + (added + updated) + " from Firebase");
+    } else if (!quiet) toast("Firebase in step");
+  } catch (e) {
+    setDot("#dFbDb", "bad"); setSync("bad", "offline");
+    fbLog("sync failed: " + e.message + (/401|403/.test(e.message) ? " — check your rules" : ""), true);
+    if (!quiet) toast("Firebase sync failed — see the log", true);
+  }
+}
+
+/* run every configured destination */
+async function syncAll(quiet) {
+  if (CFG.cloud.sync) await cloudSync(quiet);
+  if (CFG.fb.on) await fbSync(quiet);
+}
+
+/* ============================================================
    WIRING
    ============================================================ */
 function show(v) {
@@ -2135,13 +2343,14 @@ function commit(skip, reason) {
     delete STATE.skipped[key]; saveState();
     const i = ENTRIES.findIndex(x => x.date === draft.date && x.win === draft.win);
     if (i > -1) ENTRIES[i] = draft; else ENTRIES.push(draft);
-    saveEnt();
+    STATE.dirty = STATE.dirty || {}; STATE.dirty[draft.date + "_" + draft.win] = 1;
+    saveEnt(); saveState();
     toast("Saved");
   }
   gateKey = null;
   refreshDue();
   reportState();                              // stops the worker nagging
-  if (CFG.cloud.sync) cloudSync(true);           // and push the entry to the other device
+  syncAll(true);                               // cloudflare and firebase, whichever are on
   const due = dueWindows(todayISO());
   setDraft(todayISO(), due.length ? due[due.length - 1].id : draft.win);
 }
@@ -2433,12 +2642,54 @@ function init() {
   $("#syncLight").onclick = () => { show("data");
     setTimeout(() => { const c = $("#cfLog"); if (c) c.scrollIntoView({ block: "center" }); }, 60); };
 
+  /* ---- Firebase ---- */
+  const fbSave = async () => {
+    let u = $("#fbUrl").value.trim();
+    if (u && !/^https?:\/\//i.test(u)) u = "https://" + u;
+    CFG.fb.url = u.replace(/\/+$/, "");
+    CFG.fb.apiKey = $("#fbKey").value.trim();
+    CFG.fb.email = $("#fbEmail").value.trim();
+    $("#fbUrl").value = CFG.fb.url;
+    await saveCfg();
+  };
+  $("#fbSignIn").onclick = async () => {
+    await fbSave();
+    const pw = $("#fbPass").value;
+    if (!CFG.fb.url || !CFG.fb.apiKey || !CFG.fb.email || !pw) {
+      toast("URL, API key, email and password all needed", true); return;
+    }
+    fbLog("signing in…");
+    const ok = await fbSignIn(CFG.fb.email, pw);
+    $("#fbPass").value = "";                       // never keep it around
+    if (ok) {
+      CFG.fb.on = true; await saveCfg();
+      $("#togFb").setAttribute("aria-pressed", "true");
+      await fbSync(false);
+      renderCfg();
+    }
+  };
+  $("#fbSyncBtn").onclick = async () => { await fbSave(); fbSync(false); };
+  $("#fbOut").onclick = async () => {
+    if (!confirm("Sign out of Firebase on this device? Your entries stay here and in the database.")) return;
+    await fbSignOut(); $("#togFb").setAttribute("aria-pressed", "false"); renderCfg(); toast("Signed out");
+  };
+  $("#togFb").onclick = async () => {
+    if (CFG.fb.on) { CFG.fb.on = false; await saveCfg();
+      $("#togFb").setAttribute("aria-pressed", "false"); fbLog("paused", true); }
+    else {
+      if (!CFG.fb.uid) { toast("Sign in first", true); return; }
+      CFG.fb.on = true; await saveCfg();
+      $("#togFb").setAttribute("aria-pressed", "true"); fbSync(true);
+    }
+    renderCfg();
+  };
+
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden) return;
     const changed = await pullDue();
     refreshDue(); reportState(); checkForNewBuild();
-    if (CFG.cloud.sync) cloudSync(true);
-    else if (changed) toast("Already logged on your other device");
+    syncAll(true);
+    if (changed && !CFG.cloud.sync && !CFG.fb.on) toast("Already logged on your other device");
   });
   setInterval(refreshDue, 60000);
   $("#buildTag").textContent = "b" + BUILD;
