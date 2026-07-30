@@ -119,7 +119,7 @@ self.addEventListener("notificationclick", e => {
     }
 
     // open or focus the app, and tell it to jump straight to the open check-in
-    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const all = await self.clients.matchAll({ includeUncontrolled: true });
     for (const c of all) {
       if (c.url.indexOf(self.location.origin) === 0) {
         await c.focus();
