@@ -705,7 +705,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 8;
+const BUILD = 9;
 
 const DEFAULT_CFG = {
   windows: [
@@ -793,7 +793,13 @@ async function load() {
   if (!CFG.cloud) CFG.cloud = { url:"", uid:"", push:false, sync:false };
   if (!CFG.nagMins) CFG.nagMins = 20;
   const e = await Store.get(K_ENT);
-  if (e) { try { ENTRIES = (JSON.parse(e) || []).map(fixDraft); } catch (er) { ENTRIES = []; } }
+  if (e) {
+    try {
+      const raw = JSON.parse(e) || [];
+      ENTRIES = raw.filter(x => x && x.date && x.win).map(fixDraft);
+      if (ENTRIES.length !== raw.length) console.warn("dropped", raw.length - ENTRIES.length, "unusable records");
+    } catch (er) { ENTRIES = []; }
+  }
   const s = await Store.get(K_STATE);
   if (s) { try { Object.assign(STATE, JSON.parse(s)); } catch (er) {} }
   if (!STATE.skipped) STATE.skipped = {};
@@ -812,15 +818,26 @@ function newDraft(date, winId) {
     pain: { sites: [], kinds: [] },
     sleep: null, meds: null, tags: [], warns: [], note: "" };
 }
-function fixDraft(d) {                       // older records won't have these
-  if (!d.n) d.n = {};
-  if (!d.pain) d.pain = { sites: [], kinds: [] };
-  if (!Array.isArray(d.pain.sites)) d.pain.sites = [];
-  if (!Array.isArray(d.pain.kinds)) d.pain.kinds = [];
+function fixDraft(d) {                       // older records, and anything Firebase handed back
+  if (!d || typeof d !== "object") return newDraft(todayISO(), (CFG.windows[0] || {}).id || "am");
+  // Firebase deletes keys whose value is an empty array or object, so a saved
+  // entry can come back missing any of these. Rebuild the whole shape.
+  if (!d.v    || typeof d.v !== "object" || Array.isArray(d.v)) d.v = {};
+  if (!d.n    || typeof d.n !== "object" || Array.isArray(d.n)) d.n = {};
+  if (!d.pain || typeof d.pain !== "object") d.pain = {};
+  if (!Array.isArray(d.pain.sites)) d.pain.sites = d.pain.sites ? [].concat(d.pain.sites) : [];
+  if (!Array.isArray(d.pain.kinds)) d.pain.kinds = d.pain.kinds ? [].concat(d.pain.kinds) : [];
+  if (!Array.isArray(d.tags))  d.tags  = d.tags  ? [].concat(d.tags)  : [];
+  if (!Array.isArray(d.warns)) d.warns = d.warns ? [].concat(d.warns) : [];
+  if (typeof d.note !== "string") d.note = d.note == null ? "" : String(d.note);
+  if (d.meds != null && typeof d.meds !== "object") d.meds = null;
+  if (d.sleep != null && typeof d.sleep !== "object") d.sleep = null;
+  if (!d.ts) d.ts = new Date().toISOString();
   return d;
 }
 function setDraft(date, winId) {
-  draft = fixDraft(newDraft(date, winId));
+  try { draft = fixDraft(newDraft(date, winId)); }
+  catch (e) { draft = newDraft(date, winId); }
   $("#eDate").value = date; $("#eWin").value = winId;
   renderLog();
 }
@@ -2703,8 +2720,32 @@ function init() {
 }
 
 load().then(init).catch(e => {
+  console.error(e);
   document.querySelector("main").insertAdjacentHTML("afterbegin",
-    '<div class="card"><h2>Something went wrong starting up</h2><p class="sub">' + esc(e && e.message) + "</p></div>");
+    '<div class="card" style="border-color:var(--bad)"><h2>Something went wrong starting up</h2>' +
+    '<p class="sub">' + esc(e && e.message) + "</p>" +
+    '<p class="sub">Your entries are still on this device and in your database. ' +
+    'Reload first; if that doesn\'t help, Repair rebuilds any records that came back incomplete.</p>' +
+    '<div class="row" style="gap:8px">' +
+      '<button class="btn sm pri" onclick="location.reload()">Reload</button>' +
+      '<button class="btn sm" id="repairBtn">Repair records</button>' +
+      '<button class="btn sm" id="rescueBtn">Copy my data out</button>' +
+    "</div></div>");
+  const rp = document.getElementById("repairBtn");
+  if (rp) rp.onclick = async () => {
+    try {
+      const raw = JSON.parse(await Store.get(K_ENT) || "[]");
+      const fixed = raw.filter(x => x && x.date && x.win).map(fixDraft);
+      await Store.set(K_ENT, JSON.stringify(fixed));
+      location.reload();
+    } catch (er) { alert("Repair failed: " + er.message); }
+  };
+  const rs = document.getElementById("rescueBtn");
+  if (rs) rs.onclick = async () => {
+    const txt = await Store.get(K_ENT) || "[]";
+    try { await navigator.clipboard.writeText(txt); alert("Copied " + txt.length + " characters. Paste somewhere safe."); }
+    catch (er) { prompt("Copy this:", txt); }
+  };
 });
 </script>
 </body>
