@@ -2,7 +2,7 @@
   "name": "Baseline — ADHD / BP tracking",
   "short_name": "Baseline",
   "description": "Mood, sleep, body and trigger tracking with sticky check-in reminders.",
-  "start_url": "./baseline.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
