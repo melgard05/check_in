@@ -39,6 +39,20 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .badge{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--line-2);
   color:var(--ink-2);background:var(--panel)}
 .badge.due{color:#0b0d10;background:var(--warn);border-color:var(--warn);font-weight:700}
+.synclight{display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--line-2);
+  border-radius:99px;padding:3px 9px 3px 7px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
+  cursor:pointer;letter-spacing:.06em}
+.synclight .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3);flex:0 0 7px;transition:background .2s}
+.synclight .dot.ok{background:var(--base);box-shadow:0 0 6px rgba(95,158,122,.9)}
+.synclight .dot.busy{background:var(--accent);animation:pulse 1s ease-in-out infinite}
+.synclight .dot.warn{background:var(--warn)}
+.synclight .dot.bad{background:var(--bad)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.updbar{display:none;align-items:center;gap:8px;margin-top:9px;padding:8px 10px;border-radius:8px;
+  background:#16211f;border:1px solid var(--accent);font-size:13px}
+.updbar.on{display:flex}
+.updbar span{flex:1;color:var(--ink)}
+.updbar .btn{padding:5px 11px;font-size:12.5px}
 
 nav{position:fixed;bottom:0;left:0;right:0;z-index:50;display:grid;grid-template-columns:repeat(4,1fr);
   background:rgba(11,13,16,.96);border-top:1px solid var(--line);
@@ -104,6 +118,17 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .log{font-family:var(--mono);font-size:11px;color:var(--ink-3);background:#0d1114;border:1px solid var(--line);
   border-radius:8px;padding:9px 11px;margin-top:10px;max-height:130px;overflow:auto;white-space:pre-wrap;
   line-height:1.55}
+.wklbl{font-family:var(--mono);font-size:10px;color:var(--ink-3);letter-spacing:.06em;flex:0 0 auto}
+.sug{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)}
+.sug:last-child{border-bottom:0}
+.sug.done .sugtx>div:first-child{text-decoration:line-through;color:var(--ink-3)}
+.sugchk{flex:0 0 19px;height:19px;margin-top:2px;border-radius:5px;border:1px solid var(--line-2);
+  background:var(--panel-2);color:var(--accent);font-size:12px;line-height:1;cursor:pointer;padding:0}
+.sugchk[aria-pressed="true"]{border-color:var(--accent)}
+.sugtx{flex:1;font-size:13.5px;line-height:1.4}
+.sugat{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:3px}
+.sugdel{flex:0 0 22px;background:none;border:0;color:var(--ink-3);font-size:17px;cursor:pointer;padding:0;line-height:1}
+.sugdel:hover{color:var(--bad)}
 
 /* ---------- wheel ---------- */
 .wheelwrap{display:flex;gap:10px;align-items:stretch;position:relative;margin:6px 0 2px}
@@ -233,9 +258,15 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 
 <header>
   <div class="hrow">
-    <div class="brand"><b>Baseline</b> &nbsp;adhd&nbsp;/&nbsp;bp</div>
+    <div class="brand"><b>Baseline</b> &nbsp;<span id="buildTag">b0</span></div>
     <div class="spacer"></div>
+    <button class="synclight" id="syncLight" title="Sync status"><i class="dot" id="syncDot"></i><span id="syncTxt">local</span></button>
     <div class="badge" id="dueBadge">—</div>
+  </div>
+  <div class="updbar" id="updBar">
+    <span>New build ready.</span>
+    <button class="btn sm pri" id="updBtn">Reload</button>
+    <button class="btn sm gho" id="updLater">Later</button>
   </div>
 </header>
 
@@ -413,8 +444,12 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
       <label class="fld"><span>Worker URL</span>
         <input type="text" id="cfUrl" placeholder="https://baseline-push.yourname.workers.dev"
                autocapitalize="off" autocorrect="off" spellcheck="false"></label>
-      <label class="fld" style="margin-top:9px"><span>Device / user id</span>
-        <input type="text" id="cfUid" placeholder="kelly" autocapitalize="off" spellcheck="false"></label>
+      <label class="fld" style="margin-top:9px"><span>Device id</span>
+        <input type="text" id="cfUid" placeholder="kelly-phone" autocapitalize="off" spellcheck="false"></label>
+      <label class="fld" style="margin-top:9px"><span>Account &mdash; same on every device</span>
+        <input type="text" id="cfAcct" placeholder="kelly" autocapitalize="off" spellcheck="false"></label>
+      <div class="mini" style="margin-top:6px">Device id identifies this phone or computer. Account is
+        shared, so logging a check-in anywhere stops the reminder everywhere.</div>
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm" id="cfSave">Save and connect</button>
         <button class="btn sm" id="cfTest">Send a test push</button>
@@ -446,8 +481,26 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
     </div>
 
     <div class="card">
+      <h2>Suggestions</h2>
+      <p class="sub">Ideas for this app as they occur to you, so they aren't lost by the next check-in.
+        Kept on this device and included in backups.</p>
+      <div class="row" style="gap:8px;align-items:flex-start">
+        <textarea id="sugIn" rows="2" placeholder="What would make this easier to use?"
+          style="flex:1 1 200px;min-height:56px"></textarea>
+      </div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn sm pri" id="sugAdd">Add</button>
+        <button class="btn sm" id="sugCopy">Copy all</button>
+      </div>
+      <div id="sugList" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
       <h2>Check-in times</h2>
       <p class="sub">Sleep is only asked at the first one.</p>
+      <div class="sw"><div><div class="t">Different times on weekends</div>
+        <div class="d">Saturday and Sunday use their own schedule.</div></div>
+        <button class="tog" id="togWknd" aria-pressed="false"></button></div>
       <div id="winCfg"></div>
       <div class="sw"><div><div class="t">Nag until finished</div>
         <div class="d">Keeps a badge and a blocking prompt up until the check-in is saved or skipped.</div></div>
@@ -610,16 +663,29 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
+const BUILD = 3;
+
 const DEFAULT_CFG = {
   windows: [
-    { id:"am",  label:"Morning", time:"08:00", sleep:true  },
-    { id:"mid", label:"Midday",  time:"14:00", sleep:false },
-    { id:"pm",  label:"Evening", time:"20:00", sleep:false }
+    { id:"am",  label:"Morning", time:"08:00", timeWe:"09:30", sleep:true  },
+    { id:"mid", label:"Midday",  time:"14:00", timeWe:"14:00", sleep:false },
+    { id:"pm",  label:"Evening", time:"20:00", timeWe:"20:00", sleep:false }
   ],
+  weekend: false,
   off: ITEMS.filter(i => i.off).map(i => i.key),
   nag: true, lat: 46.8, meds: "", nagMins: 20,
-  cloud: { url: "", uid: "", push: false, sync: false }
+  cloud: { url: "", uid: "", account: "", push: false, sync: false }
 };
+
+/* Sat/Sun get their own time when weekend mode is on. */
+function winTime(w, dateISO) {
+  if (!CFG.weekend || !w.timeWe) return w.time;
+  const p = String(dateISO).split("-");
+  const dow = new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1).getDay();
+  return (dow === 0 || dow === 6) ? w.timeWe : w.time;
+}
+const isWeekend = d => { const p = String(d).split("-");
+  const g = new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1).getDay(); return g === 0 || g === 6; };
 
 /* ---------- state ---------- */
 let CFG = JSON.parse(JSON.stringify(DEFAULT_CFG));
@@ -688,6 +754,7 @@ async function load() {
   const s = await Store.get(K_STATE);
   if (s) { try { Object.assign(STATE, JSON.parse(s)); } catch (er) {} }
   if (!STATE.skipped) STATE.skipped = {};
+  if (!Array.isArray(STATE.suggestions)) STATE.suggestions = [];
 }
 const saveCfg   = () => Store.set(K_CFG, JSON.stringify(CFG));
 const saveEnt   = () => Store.set(K_ENT, JSON.stringify(ENTRIES));
@@ -1055,7 +1122,7 @@ function fillWinSelect() {
 function dueWindows(date) {
   const today = todayISO(), out = [];
   CFG.windows.forEach(w => {
-    if (date === today && minsOf(w.time) > nowMins()) return;   // not yet time
+    if (date === today && minsOf(winTime(w, date)) > nowMins()) return;   // not yet time
     if (ENTRIES.some(x => x.date === date && x.win === w.id)) return;
     if (STATE.skipped[date + "|" + w.id]) return;
     out.push(w);
@@ -1610,13 +1677,24 @@ function printSummary() {
    ============================================================ */
 function renderCfg() {
   $("#winCfg").innerHTML = CFG.windows.map((w, i) =>
-    '<div class="sw"><div style="flex:1"><div class="t">' + esc(w.label) + "</div>" +
+    '<div class="sw"><div style="flex:1 1 120px"><div class="t">' + esc(w.label) + "</div>" +
     '<div class="d">' + (w.sleep ? "asks about sleep" : "mood and body only") + "</div></div>" +
-    '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="flex:0 0 116px"></div>').join("");
+    '<div style="display:flex;gap:6px;align-items:center">' +
+      (CFG.weekend ? '<span class="wklbl">M&ndash;F</span>' : "") +
+      '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="width:112px">' +
+      (CFG.weekend
+        ? '<span class="wklbl">S&ndash;S</span><input type="time" data-we="' + i + '" value="' +
+          (w.timeWe || w.time) + '" style="width:112px">'
+        : "") +
+    "</div></div>").join("");
+  $("#togWknd").setAttribute("aria-pressed", CFG.weekend ? "true" : "false");
   $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false");
+  $("#buildTag").textContent = "b" + BUILD;
+  renderSug();
   // cloud panel
   $("#cfUrl").value = CFG.cloud.url || "";
   $("#cfUid").value = CFG.cloud.uid || "";
+  $("#cfAcct").value = CFG.cloud.account || "";
   $("#togPush").setAttribute("aria-pressed", CFG.cloud.push ? "true" : "false");
   $("#togSync").setAttribute("aria-pressed", CFG.cloud.sync ? "true" : "false");
   $("#nagSel").value = String(CFG.nagMins || 20);
@@ -1756,9 +1834,10 @@ async function pushEnable() {
   await api("/subscribe", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      uid: CFG.cloud.uid, sub: sub.toJSON(),
+      uid: CFG.cloud.uid, account: CFG.cloud.account || CFG.cloud.uid, sub: sub.toJSON(),
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time })),
+      windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time,
+        timeWe: CFG.weekend ? (w.timeWe || w.time) : "" })),
       nagMins: CFG.nagMins
     })
   });
@@ -1790,28 +1869,33 @@ async function pushDisable() {
 
 /* tell the worker which check-ins are closed so it stops nagging */
 async function reportState() {
-  if (!cloudBase() || !CFG.cloud.uid || !CFG.cloud.push) return;
+  if (!cloudBase() || !CFG.cloud.uid || !CFG.cloud.push) { syncIdle(); return; }
   const d = todayISO();
   const done = ENTRIES.filter(e => e.date === d).map(e => e.win);
   const skipped = Object.keys(STATE.skipped)
     .filter(k => k.indexOf(d + "|") === 0).map(k => k.split("|")[1]);
+  syncBusy();
   try {
     await api("/state", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid: CFG.cloud.uid, date: d, done, skipped, snoozeUntil: 0 }) });
-    setDot("#dCloud", "ok");
-  } catch (e) { setDot("#dCloud", "warn"); cloudLog("state sync failed: " + e.message, true); }
+      body: JSON.stringify({ uid: CFG.cloud.uid, account: CFG.cloud.account || CFG.cloud.uid,
+        date: d, done, skipped, snoozeUntil: 0 }) });
+    setDot("#dCloud", "ok"); syncOk();
+  } catch (e) { setDot("#dCloud", "warn"); setSync("bad", "offline");
+    cloudLog("state sync failed: " + e.message, true); }
 }
 
 async function cloudUpload(quiet) {
   if (!cloudBase() || !CFG.cloud.uid) { if (!quiet) toast("Add your Worker URL first", true); return; }
   try {
+    syncBusy();
     const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: CFG, entries: ENTRIES, state: STATE });
     const r = await api("/backup?uid=" + encodeURIComponent(CFG.cloud.uid),
       { method: "POST", headers: { "Content-Type": "application/json" }, body });
     setDot("#dCloud", "ok");
+    syncOk("backed up");
     cloudLog("uploaded " + (r.bytes / 1024).toFixed(1) + " KB / " + ENTRIES.length + " entries", true);
     if (!quiet) toast("Uploaded to Cloudflare");
-  } catch (e) { setDot("#dCloud", "warn"); cloudLog("upload failed: " + e.message, true);
+  } catch (e) { setDot("#dCloud", "warn"); setSync("bad", "offline"); cloudLog("upload failed: " + e.message, true);
     if (!quiet) toast("Upload failed — see the log", true); }
 }
 async function cloudDownload() {
@@ -1830,6 +1914,72 @@ async function cloudDownload() {
     fillWinSelect(); setDraft(todayISO(), sleepWin().id); refreshDue(); renderCfg();
     cloudLog("restored " + ENTRIES.length + " entries", true); toast("Restored from Cloudflare");
   } catch (e) { cloudLog("restore failed: " + e.message, true); toast("Restore failed — see the log", true); }
+}
+
+/* ---------- sync light ---------- */
+let syncTimer = null;
+function setSync(state, txt) {
+  const d = $("#syncDot"), t = $("#syncTxt");
+  if (!d) return;
+  d.className = "dot" + (state ? " " + state : "");
+  if (txt) t.textContent = txt;
+}
+function syncBusy() { setSync("busy", "syncing"); }
+function syncOk(txt) {
+  setSync("ok", txt || "synced");
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => setSync("ok", "synced"), 2500);
+}
+function syncIdle() {
+  if (!cloudBase() || !CFG.cloud.uid) { setSync("", "local"); return; }
+  setSync(CFG.cloud.push ? "ok" : "warn", CFG.cloud.push ? "synced" : "no push");
+}
+
+/* ---------- suggestions ---------- */
+function renderSug() {
+  const list = STATE.suggestions || [];
+  const el = $("#sugList"); if (!el) return;
+  if (!list.length) {
+    el.innerHTML = '<div class="mini">Nothing yet. Anything that annoys you while logging is worth writing down here.</div>';
+    return;
+  }
+  el.innerHTML = list.slice().reverse().map(s =>
+    '<div class="sug' + (s.done ? " done" : "") + '">' +
+      '<button class="sugchk" data-sugdone="' + s.id + '" aria-pressed="' + (s.done ? "true" : "false") +
+        '" aria-label="Mark done">' + (s.done ? "&#10003;" : "") + "</button>" +
+      '<div class="sugtx"><div>' + esc(s.text) + "</div>" +
+        '<div class="sugat">' + new Date(s.at).toLocaleDateString(undefined,
+          { month:"short", day:"numeric" }) + "</div></div>" +
+      '<button class="sugdel" data-sugdel="' + s.id + '" aria-label="Delete">&times;</button>' +
+    "</div>").join("");
+}
+async function addSug(text) {
+  text = (text || "").trim(); if (!text) return;
+  STATE.suggestions = STATE.suggestions || [];
+  STATE.suggestions.push({ id: "s" + Date.now().toString(36), at: new Date().toISOString(),
+    text, done: false, build: BUILD });
+  await saveState(); renderSug();
+  if (CFG.cloud.sync) cloudUpload(true);
+}
+
+/* ---------- new build ---------- */
+async function checkBuild() {
+  const seen = +(await Store.get("baseline:build") || 0);
+  if (seen && seen < BUILD) toast("Updated to build " + BUILD);
+  if (seen !== BUILD) await Store.set("baseline:build", String(BUILD));
+}
+function watchForUpdate(reg) {
+  if (!reg) return;
+  const offer = w => {
+    if (!w) return;
+    w.addEventListener("statechange", () => {
+      if (w.state === "installed" && navigator.serviceWorker.controller) $("#updBar").classList.add("on");
+    });
+  };
+  if (reg.waiting && navigator.serviceWorker.controller) $("#updBar").classList.add("on");
+  offer(reg.installing);
+  reg.addEventListener("updatefound", () => offer(reg.installing));
+  setInterval(() => { try { reg.update(); } catch (e) {} }, 30 * 60000);
 }
 
 /* ============================================================
@@ -1927,6 +2077,12 @@ function init() {
       if (open) { const ta = wrap.querySelector("textarea"); if (ta) ta.focus(); }
       return;
     }
+    const sd = ev.target.closest("[data-sugdone]");
+    if (sd) { const s = (STATE.suggestions || []).find(x => x.id === sd.dataset.sugdone);
+      if (s) { s.done = !s.done; saveState(); renderSug(); } return; }
+    const sx = ev.target.closest("[data-sugdel]");
+    if (sx) { STATE.suggestions = (STATE.suggestions || []).filter(x => x.id !== sx.dataset.sugdel);
+      saveState(); renderSug(); return; }
     const ws = ev.target.closest("[data-wstep]");
     if (ws) {
       const p = ws.dataset.wstep.split(":");
@@ -1996,9 +2152,6 @@ function init() {
     $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false"); saveCfg(); refreshDue(); };
   $("#notifBtn").onclick = () => { if (!("Notification" in window)) return;
     Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
-  $("#winCfg").addEventListener("change", ev => { const i = ev.target.dataset.wt;
-    if (i == null) return; CFG.windows[+i].time = ev.target.value; saveCfg(); fillWinSelect();
-    $("#eWin").value = draft.win; refreshDue(); scheduleNotifs(); });
   $("#medSave").onclick = () => { CFG.meds = $("#medList").value; saveCfg(); renderLog(); toast("Med list saved"); };
   $("#medChange").onclick = () => {
     if (draft.tags.indexOf("Med change") < 0) draft.tags.push("Med change");
@@ -2049,7 +2202,9 @@ function init() {
     if (u && !/^https?:\/\//i.test(u)) u = "https://" + u;
     CFG.cloud.url = u.replace(/\/+$/, "");
     CFG.cloud.uid = ($("#cfUid").value.trim() || "").replace(/[^A-Za-z0-9_-]/g, "") || "device1";
+    CFG.cloud.account = ($("#cfAcct").value.trim() || "").replace(/[^A-Za-z0-9_-]/g, "") || CFG.cloud.uid;
     $("#cfUrl").value = CFG.cloud.url; $("#cfUid").value = CFG.cloud.uid;
+    $("#cfAcct").value = CFG.cloud.account;
     await saveCfg();
     if (!CFG.cloud.url) { cloudLog("cleared"); setDot("#dCloud", ""); return; }
     cloudLog("checking " + CFG.cloud.url + " …");
@@ -2100,7 +2255,8 @@ function init() {
         show("log"); refreshDue();
       }
     });
-    swRegister().then(() => {
+    swRegister().then(reg => {
+      watchForUpdate(reg);
       if (CFG.cloud.push && swReg && swReg.active)
         swReg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
     });
@@ -2111,10 +2267,59 @@ function init() {
   }
   reportState();
 
+  /* ---- suggestions ---- */
+  $("#sugAdd").onclick = async () => {
+    const v = $("#sugIn").value;
+    if (!v.trim()) { toast("Nothing to add", true); return; }
+    await addSug(v); $("#sugIn").value = ""; toast("Noted");
+  };
+  $("#sugIn").addEventListener("keydown", e => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); $("#sugAdd").click(); }
+  });
+  $("#sugCopy").onclick = async () => {
+    const l = STATE.suggestions || [];
+    if (!l.length) { toast("Nothing to copy", true); return; }
+    const txt = l.map(s => (s.done ? "[done] " : "") + s.at.slice(0, 10) + " (b" + (s.build || "?") + ")  " +
+      s.text).join("\n");
+    try { await navigator.clipboard.writeText(txt); toast("Copied " + l.length); }
+    catch (e) { $("#expBox").style.display = ""; $("#expBox").value = txt; toast("Copy from the box", true); }
+  };
+
+  /* ---- weekend times ---- */
+  $("#togWknd").onclick = async () => {
+    CFG.weekend = !CFG.weekend;
+    if (CFG.weekend) CFG.windows.forEach(w => { if (!w.timeWe) w.timeWe = w.time; });
+    await saveCfg(); renderCfg(); refreshDue();
+    if (CFG.cloud.push) { await pushEnable(); cloudLog("weekend schedule pushed to the worker", true); }
+  };
+  $("#winCfg").addEventListener("change", ev => {
+    const i = ev.target.dataset.wt, j = ev.target.dataset.we;
+    if (i != null) CFG.windows[+i].time = ev.target.value;
+    else if (j != null) CFG.windows[+j].timeWe = ev.target.value;
+    else return;
+    saveCfg(); fillWinSelect(); $("#eWin").value = draft.win; refreshDue(); scheduleNotifs();
+    if (CFG.cloud.push) pushEnable();          // the worker needs the new schedule
+  });
+
+  /* ---- new build ---- */
+  $("#updBtn").onclick = async () => {
+    try {
+      const reg = swReg || await navigator.serviceWorker.getRegistration();
+      if (reg && reg.waiting) reg.waiting.postMessage({ type: "skip-waiting" });
+    } catch (e) {}
+    location.reload();
+  };
+  $("#updLater").onclick = () => $("#updBar").classList.remove("on");
+  $("#syncLight").onclick = () => { show("data");
+    setTimeout(() => { const c = $("#cfLog"); if (c) c.scrollIntoView({ block: "center" }); }, 60); };
+
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) { refreshDue(); reportState(); }
   });
   setInterval(refreshDue, 60000);
+  $("#buildTag").textContent = "b" + BUILD;
+  checkBuild();
+  syncIdle();
 }
 
 load().then(init).catch(e => {

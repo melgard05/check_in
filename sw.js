@@ -1,6 +1,6 @@
 /* Baseline service worker — sticky check-in notifications + offline shell */
 
-const CACHE = "baseline-v1";
+const CACHE = "baseline-v2";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
 /* WORKER_URL and UID are written in by the app on first subscribe. */
@@ -19,6 +19,7 @@ self.addEventListener("activate", e => {
 /* the page hands us the worker URL + uid so the push handler can call /due */
 self.addEventListener("message", e => {
   const d = e.data || {};
+  if (d.type === "skip-waiting") { self.skipWaiting(); return; }
   if (d.type === "config") {
     CFG.worker = d.worker || "";
     CFG.uid = d.uid || "";
@@ -118,16 +119,19 @@ self.addEventListener("notificationclick", e => {
       return;
     }
 
-    // open or focus the app, and tell it to jump straight to the open check-in
-    const all = await self.clients.matchAll({ includeUncontrolled: true });
+    // open or focus THIS app, and tell it to jump straight to the open check-in.
+    // Match on the registration scope — matching on origin alone would focus
+    // whatever other app on this domain happened to have a tab open.
+    const scope = self.registration.scope;
+    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const c of all) {
-      if (c.url.indexOf(self.location.origin) === 0) {
+      if (c.url.indexOf(scope) === 0) {
         await c.focus();
         c.postMessage({ type: "open-checkin", due: data.due || [] });
         return;
       }
     }
-    await self.clients.openWindow("./index.html?due=1");
+    await self.clients.openWindow(scope);
   })());
 });
 
