@@ -1,0 +1,2052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Baseline</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+:root{
+  /* diverging scale: low end cool, baseline steady, high end warm */
+  --low-2:#2b6f8f; --low-1:#3f95a8; --base:#5f9e7a; --high-1:#c98b3a; --high-2:#c25a4a;
+  --bg:#0b0d10; --panel:#12161b; --panel-2:#171c23; --line:#232a33; --line-2:#2e3742;
+  --ink:#e6ecf2; --ink-2:#9aa8b6; --ink-3:#63707e;
+  --accent:#7fd4c1; --warn:#d9a03c; --bad:#c25a4a;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --r:10px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.45;overscroll-behavior-y:contain}
+body{padding-bottom:86px}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+
+/* ---------- shell ---------- */
+header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d10 70%,rgba(11,13,16,.85));
+  border-bottom:1px solid var(--line);padding:10px 14px 8px;padding-top:max(10px,env(safe-area-inset-top))}
+.hrow{display:flex;align-items:center;gap:10px}
+.brand{font-family:var(--mono);font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink-2)}
+.brand b{color:var(--ink);font-weight:600}
+.spacer{flex:1}
+.badge{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:99px;border:1px solid var(--line-2);
+  color:var(--ink-2);background:var(--panel)}
+.badge.due{color:#0b0d10;background:var(--warn);border-color:var(--warn);font-weight:700}
+
+nav{position:fixed;bottom:0;left:0;right:0;z-index:50;display:grid;grid-template-columns:repeat(4,1fr);
+  background:rgba(11,13,16,.96);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);backdrop-filter:blur(8px)}
+nav button{background:none;border:0;padding:11px 4px 12px;font-family:var(--mono);font-size:10.5px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);display:flex;flex-direction:column;
+  align-items:center;gap:5px;cursor:pointer}
+nav button .ic{width:20px;height:20px;display:block}
+nav button[aria-current="true"]{color:var(--accent)}
+nav button[aria-current="true"] .ic{filter:drop-shadow(0 0 6px rgba(127,212,193,.5))}
+
+main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
+.view{display:none}.view.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:0 0 12px}
+.card>h2{margin:0 0 2px;font-size:15px;font-weight:600;letter-spacing:.01em}
+.card>h2+.sub{margin:0 0 12px}
+.sub{font-size:12.5px;color:var(--ink-3);margin:0 0 10px}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--ink-3);margin:22px 0 8px;display:flex;align-items:center;gap:8px}
+.eyebrow:after{content:"";flex:1;height:1px;background:var(--line)}
+.eyebrow:first-child{margin-top:0}
+
+/* ---------- slider: fills outward from baseline ---------- */
+.item{padding:13px 0 4px;border-bottom:1px solid var(--line);touch-action:pan-y}
+.item:last-child{border-bottom:0}
+.ihead{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.ilabel{font-size:14.5px;font-weight:600}
+.ival{margin-left:auto;font-family:var(--mono);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;
+  min-width:2.2ch;text-align:right}
+.ival.unset{color:var(--ink-3);font-weight:400}
+.iends{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin:0 1px 7px;gap:10px}
+.iends span:last-child{text-align:right}
+.track{position:relative;height:42px;cursor:pointer;user-select:none;touch-action:none}
+.rail{position:absolute;left:0;right:0;top:17px;height:8px;border-radius:6px;background:var(--panel-2);
+  border:1px solid var(--line-2);overflow:hidden}
+.fill{position:absolute;top:0;bottom:0;background:var(--base);opacity:.85}
+.spine{position:absolute;top:9px;bottom:9px;width:2px;background:var(--line-2);left:50%;margin-left:-1px;border-radius:2px}
+.ticks{position:absolute;left:0;right:0;top:29px;height:6px}
+.ticks i{position:absolute;top:0;width:1px;height:4px;background:var(--line-2);transform:translateX(-.5px)}
+.ticks i.mid{height:6px;background:var(--ink-3)}
+.knob{position:absolute;top:11px;width:20px;height:20px;margin-left:-10px;border-radius:50%;
+  background:var(--ink);border:3px solid var(--bg);box-shadow:0 0 0 1px var(--line-2),0 2px 6px rgba(0,0,0,.6);
+  transition:background .12s}
+.track.unset .knob{background:var(--ink-3);width:16px;height:16px;top:13px;margin-left:-8px}
+.track.unset .fill{display:none}
+.pw{font-family:var(--mono);font-size:11px;color:var(--ink-3);font-weight:400;letter-spacing:.02em}
+.notebtn{display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:4px 0 2px;
+  font-size:12px;color:var(--ink-3);cursor:pointer;font-family:var(--mono);letter-spacing:.04em}
+.notebtn svg{width:13px;height:13px;flex:0 0 13px}
+.notebtn[aria-pressed="true"]{color:var(--accent)}
+.notewrap{padding:2px 0 6px}
+.noteta{min-height:0;font-size:14px;padding:8px 10px;line-height:1.35;
+  background:#10151a;border-color:var(--line)}
+.painsum{font-family:var(--mono);font-size:12px;color:var(--ink-2);padding:9px 11px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:8px;margin-top:11px;line-height:1.55}
+.painsum b{color:var(--accent);font-weight:600}
+.painsum .none{color:var(--ink-3)}
+.cstat{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3);flex:0 0 7px}
+.dot.ok{background:var(--base);box-shadow:0 0 6px rgba(95,158,122,.8)}
+.dot.warn{background:var(--warn)}
+.dot.bad{background:var(--bad)}
+.log{font-family:var(--mono);font-size:11px;color:var(--ink-3);background:#0d1114;border:1px solid var(--line);
+  border-radius:8px;padding:9px 11px;margin-top:10px;max-height:130px;overflow:auto;white-space:pre-wrap;
+  line-height:1.55}
+
+/* ---------- wheel ---------- */
+.wheelwrap{display:flex;gap:10px;align-items:stretch;position:relative;margin:6px 0 2px}
+.wcol{flex:1;position:relative}
+.wcap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);
+  text-align:center;margin-bottom:5px}
+.wheel{height:150px;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;
+  background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;position:relative;
+  -webkit-overflow-scrolling:touch;mask-image:linear-gradient(180deg,transparent,#000 28%,#000 72%,transparent);
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 28%,#000 72%,transparent)}
+.wheel::-webkit-scrollbar{display:none}
+.wheel .pad{height:55px}
+.wheel .wi{height:40px;line-height:40px;text-align:center;scroll-snap-align:center;
+  font-family:var(--mono);font-size:19px;color:var(--ink-3);font-variant-numeric:tabular-nums;transition:color .1s}
+.wheel .wi.sel{color:var(--ink);font-weight:600;font-size:22px}
+.wsel{position:absolute;left:0;right:0;top:50%;height:40px;margin-top:-20px;pointer-events:none;
+  border-top:1px solid var(--accent);border-bottom:1px solid var(--accent);opacity:.45;border-radius:3px}
+.wtotal{font-family:var(--mono);font-size:13px;color:var(--ink-2);text-align:center;margin-top:9px}
+.wtotal b{color:var(--accent);font-size:15px}
+
+/* ---------- controls ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{padding:7px 12px;border-radius:99px;border:1px solid var(--line-2);background:var(--panel-2);
+  color:var(--ink-2);font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:#1f2a30;border-color:var(--accent);color:var(--accent)}
+.chip.ev[aria-pressed="true"]{background:#2b2119;border-color:var(--warn);color:var(--warn)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{min-width:0}
+label.fld{display:block;flex:1 1 130px}
+label.fld>span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+input[type=text],input[type=time],input[type=date],input[type=number],select,textarea{
+  width:100%;background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;
+  font-size:15px;color:var(--ink);appearance:none}
+textarea{min-height:74px;resize:vertical;line-height:1.4}
+input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visible,.chip:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+.btn{background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:11px 15px;
+  font-size:14.5px;font-weight:600;cursor:pointer;color:var(--ink)}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#08110f}
+.btn.gho{background:none}
+.btn.sm{padding:7px 11px;font-size:13px;font-weight:500}
+.btn.full{width:100%}
+.btn.dang{border-color:#4a2724;color:#e0857a}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;
+  border-bottom:1px solid var(--line)}
+.sw:last-child{border-bottom:0}
+.sw .t{font-size:14.5px}.sw .d{font-size:12px;color:var(--ink-3)}
+.tog{flex:0 0 46px;height:27px;border-radius:99px;background:var(--panel-2);border:1px solid var(--line-2);
+  position:relative;cursor:pointer;transition:background .15s}
+.tog:after{content:"";position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;
+  background:var(--ink-3);transition:transform .15s,background .15s}
+.tog[aria-pressed="true"]{background:#1f3a34;border-color:var(--accent)}
+.tog[aria-pressed="true"]:after{transform:translateX(19px);background:var(--accent)}
+
+/* ---------- reminder gate ---------- */
+.gate{position:fixed;inset:0;z-index:90;background:rgba(6,8,10,.9);backdrop-filter:blur(5px);
+  display:none;align-items:center;justify-content:center;padding:18px}
+.gate.on{display:flex}
+.gatebox{background:var(--panel);border:1px solid var(--warn);border-radius:14px;max-width:400px;width:100%;
+  padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.7)}
+.gatebox .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--warn)}
+.gatebox h3{margin:7px 0 6px;font-size:19px}
+.gatebox p{margin:0 0 15px;font-size:14px;color:var(--ink-2)}
+.gatebox .row{gap:8px}
+.mini{font-size:11.5px;color:var(--ink-3);margin-top:11px}
+
+/* ---------- charts ---------- */
+.chartcard{padding:12px 8px 10px}
+.chartcard h2{padding:0 6px}
+.chartcard .sub{padding:0 6px}
+svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
+.legend{display:flex;flex-wrap:wrap;gap:6px;padding:10px 6px 2px}
+.lg{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 9px;border-radius:99px;
+  border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-3);cursor:pointer}
+.lg[aria-pressed="true"]{color:var(--ink);border-color:var(--line-2);background:#1a2027}
+.lg i{width:12px;height:3px;border-radius:2px;background:currentColor;flex:0 0 12px}
+.seg{display:flex;gap:0;border:1px solid var(--line-2);border-radius:8px;overflow:hidden}
+.seg button{flex:1;background:var(--panel-2);border:0;border-right:1px solid var(--line-2);padding:8px 6px;
+  font-family:var(--mono);font-size:11.5px;color:var(--ink-3);cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:#1e2a2f;color:var(--accent)}
+.readout{margin:9px 6px 0;padding:10px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  font-family:var(--mono);font-size:12px;color:var(--ink-2);min-height:42px;line-height:1.6}
+.readout b{color:var(--ink);font-weight:600}
+.readout .dt{color:var(--accent)}
+
+/* ---------- patterns ---------- */
+.corr{border-bottom:1px solid var(--line);padding:11px 0}
+.corr:last-child{border-bottom:0}
+.corrhead{display:flex;align-items:baseline;gap:9px}
+.corrhead .n{font-size:14.5px;font-weight:600}
+.corrhead .r{margin-left:auto;font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums}
+.corrbar{height:6px;background:var(--panel-2);border-radius:4px;margin:7px 0 5px;position:relative;
+  border:1px solid var(--line)}
+.corrbar .z{position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line-2)}
+.corrbar .b{position:absolute;top:0;bottom:0;border-radius:3px}
+.corrnote{font-size:12px;color:var(--ink-3)}
+.flag{border-left:3px solid var(--warn);background:#1b1710;padding:11px 13px;border-radius:0 8px 8px 0;
+  margin:0 0 9px;font-size:13.5px}
+.flag.hi{border-color:var(--high-2);background:#1e1413}
+.flag b{display:block;margin-bottom:2px;font-size:13.5px}
+.flag span{color:var(--ink-2);font-size:12.5px}
+.empty{text-align:center;padding:26px 14px;color:var(--ink-3);font-size:13.5px}
+.empty b{display:block;color:var(--ink-2);font-size:15px;margin-bottom:5px;font-weight:600}
+.tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.tbl th{text-align:left;color:var(--ink-3);font-weight:500;padding:6px 8px 6px 0;border-bottom:1px solid var(--line-2);
+  font-size:10.5px;letter-spacing:.12em;text-transform:uppercase}
+.tbl td{padding:7px 8px 7px 0;border-bottom:1px solid var(--line);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(12px);z-index:80;
+  background:var(--accent);color:#08110f;padding:10px 17px;border-radius:99px;font-size:14px;font-weight:600;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.warn{background:var(--warn)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hrow">
+    <div class="brand"><b>Baseline</b> &nbsp;adhd&nbsp;/&nbsp;bp</div>
+    <div class="spacer"></div>
+    <div class="badge" id="dueBadge">—</div>
+  </div>
+</header>
+
+<main>
+  <!-- ============ LOG ============ -->
+  <section class="view on" id="v-log">
+    <div class="card">
+      <div class="row" style="gap:8px">
+        <label class="fld" style="flex:1 1 120px"><span>Date</span><input type="date" id="eDate"></label>
+        <label class="fld" style="flex:1 1 120px"><span>Check-in</span><select id="eWin"></select></label>
+      </div>
+      <div class="mini" id="eStatus"></div>
+    </div>
+
+    <div id="sleepBlock" style="display:none">
+      <div class="eyebrow">Sleep</div>
+      <div class="card">
+        <h2>How long did you sleep?</h2>
+        <p class="sub">Actual sleep, not time in bed.</p>
+        <div class="wheelwrap">
+          <div class="wcol"><div class="wcap">hours</div>
+            <div class="wheel" id="wH" data-step="1"><div class="wsel"></div></div></div>
+          <div class="wcol"><div class="wcap">minutes</div>
+            <div class="wheel" id="wM" data-step="5"><div class="wsel"></div></div></div>
+        </div>
+        <div class="wtotal" id="wTotal">—</div>
+        <div class="row" style="margin-top:14px">
+          <label class="fld"><span>Bedtime</span><input type="time" id="sBed"></label>
+          <label class="fld"><span>Woke at</span><input type="time" id="sWake"></label>
+        </div>
+        <div class="mini" style="margin-top:8px">Timing matters as much as duration — a drifting bedtime is often the earliest signal.</div>
+        <div id="sleepItems"></div>
+      </div>
+    </div>
+
+    <div class="eyebrow">Core — every check-in</div>
+    <div class="card" id="coreItems"></div>
+
+    <div class="eyebrow">Body &amp; behavior</div>
+    <div class="card" id="extraItems"></div>
+
+    <div id="painBlock">
+      <div class="eyebrow">Pain</div>
+      <div class="card">
+        <p class="sub" style="margin-bottom:2px">1 is none, 10 is the worst you can imagine.
+          This one isn't scored against a baseline of 5 — 5 means moderate pain.</p>
+        <div id="painItems"></div>
+        <div class="eyebrow" style="margin:18px 0 8px">Where</div>
+        <div class="chips" id="painSites"></div>
+        <div class="eyebrow" style="margin:18px 0 8px">What it feels like</div>
+        <div class="chips" id="painKinds"></div>
+        <div class="painsum" id="painSum"></div>
+      </div>
+    </div>
+
+    <div id="medBlock">
+      <div class="eyebrow">Medication</div>
+      <div class="card" id="medCard"></div>
+    </div>
+
+    <div id="warnBlock">
+      <div class="eyebrow">Early warning signs</div>
+      <div class="card">
+        <p class="sub" style="margin-bottom:11px">Tap any that fit right now. Nothing tapped is a normal reading.</p>
+        <div class="chips" id="warnChips"></div>
+      </div>
+    </div>
+
+    <div class="eyebrow">What happened</div>
+    <div class="card">
+      <p class="sub" style="margin-bottom:11px">Context that might explain the numbers.</p>
+      <div class="chips" id="tagChips"></div>
+      <label class="fld" style="margin-top:14px"><span>Note</span>
+        <textarea id="eNote" placeholder="Anything worth remembering when you look back at this day."></textarea></label>
+    </div>
+
+    <div class="row" style="margin-top:16px;gap:8px">
+      <button class="btn pri" style="flex:2 1 180px" id="saveBtn">Save check-in</button>
+      <button class="btn gho" style="flex:1 1 110px" id="skipBtn">Skip this one</button>
+    </div>
+    <div class="mini" style="text-align:center;margin-top:12px">Sliders you don't touch are saved as blank, not as 5.</div>
+  </section>
+
+  <!-- ============ CHARTS ============ -->
+  <section class="view" id="v-chart">
+    <div class="seg" id="rangeSeg" style="margin-bottom:12px">
+      <button data-d="7" aria-pressed="false">7d</button>
+      <button data-d="14" aria-pressed="false">14d</button>
+      <button data-d="30" aria-pressed="true">30d</button>
+      <button data-d="90" aria-pressed="false">90d</button>
+      <button data-d="0" aria-pressed="false">All</button>
+    </div>
+    <div class="card chartcard">
+      <h2>Deviation from baseline</h2>
+      <p class="sub">The center line is 5. Above is elevated, below is low. Tap the chart for one day.</p>
+      <svg class="ch" id="mainCh" viewBox="0 0 700 300" preserveAspectRatio="none" role="img"
+           aria-label="Mood and related ratings over time relative to a baseline of 5"></svg>
+      <div class="legend" id="legend"></div>
+      <div class="readout" id="readout">Tap a point on the chart to see that day.</div>
+    </div>
+    <div class="card chartcard">
+      <h2>Sleep</h2>
+      <p class="sub">Bars are hours slept. The band is 7–9h. Dots are bedtime drift.</p>
+      <svg class="ch" id="sleepCh" viewBox="0 0 700 200" preserveAspectRatio="none" role="img"
+           aria-label="Hours slept per night"></svg>
+    </div>
+    <div class="card chartcard" id="dayCard">
+      <h2>Daylight</h2>
+      <p class="sub">Computed from your latitude — no internet needed. Worth overlaying if winter hits you.</p>
+      <svg class="ch" id="dayCh" viewBox="0 0 700 140" preserveAspectRatio="none" role="img"
+           aria-label="Hours of daylight per day"></svg>
+    </div>
+    <div class="card">
+      <h2>Coverage</h2>
+      <p class="sub">How much of the window you actually logged.</p>
+      <div id="coverage"></div>
+    </div>
+  </section>
+
+  <!-- ============ PATTERNS ============ -->
+  <section class="view" id="v-pat">
+    <div class="card">
+      <h2>What moves with mood</h2>
+      <p class="sub">Rank correlation against mood on the same day. Needs 8+ shared days to appear.
+        Correlation is not cause — treat these as leads, not answers.</p>
+      <div id="corrSame"></div>
+    </div>
+    <div class="card">
+      <h2>Yesterday's sleep, today's mood</h2>
+      <p class="sub">Sleep loss tends to show up in mood 1–3 days later, so same-day comparison hides it.</p>
+      <div id="corrLag"></div>
+    </div>
+    <div class="card">
+      <h2>Tag impact</h2>
+      <p class="sub">Average mood on days with a tag vs. days without.</p>
+      <div id="tagImpact"></div>
+    </div>
+    <div class="card">
+      <h2>Worth raising</h2>
+      <p class="sub">Simple threshold checks over recent entries. These are prompts for a conversation
+        with your prescriber, not conclusions.</p>
+      <div id="flags"></div>
+    </div>
+  </section>
+
+  <!-- ============ DATA ============ -->
+  <section class="view" id="v-data">
+    <div class="card">
+      <h2>Export</h2>
+      <p class="sub">CSV downloads. If your network blocks the download, use Show text and copy it.</p>
+      <div class="row" style="gap:8px">
+        <button class="btn sm" data-exp="wide">Daily wide CSV</button>
+        <button class="btn sm" data-exp="long">Long CSV</button>
+        <button class="btn sm" data-exp="sleep">Sleep CSV</button>
+        <button class="btn sm" data-exp="pain">Pain CSV</button>
+        <button class="btn sm" data-exp="notes">Notes CSV</button>
+        <button class="btn sm" data-exp="events">Tags CSV</button>
+      </div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <button class="btn sm" id="showTxt">Show text</button>
+        <button class="btn sm" id="copyTxt">Copy last export</button>
+        <button class="btn sm" id="printBtn">Print summary</button>
+      </div>
+      <textarea id="expBox" style="display:none;margin-top:10px;min-height:150px;font-family:var(--mono);font-size:11px"></textarea>
+    </div>
+
+    <div class="card">
+      <h2>Cloudflare</h2>
+      <p class="sub">Point this at your Worker and reminders keep firing with the app closed.
+        The Worker never sees your ratings unless you turn on snapshots below.</p>
+      <label class="fld"><span>Worker URL</span>
+        <input type="text" id="cfUrl" placeholder="https://baseline-push.yourname.workers.dev"
+               autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="fld" style="margin-top:9px"><span>Device / user id</span>
+        <input type="text" id="cfUid" placeholder="kelly" autocapitalize="off" spellcheck="false"></label>
+      <div class="row" style="margin-top:11px;gap:8px">
+        <button class="btn sm" id="cfSave">Save and connect</button>
+        <button class="btn sm" id="cfTest">Send a test push</button>
+        <button class="btn sm" id="cfOff">Disconnect</button>
+      </div>
+      <div class="sw" style="margin-top:6px"><div><div class="t">Sticky push reminders</div>
+        <div class="d">Worker re-sends every <span id="nagLbl">20</span> min until the check-in is closed.</div></div>
+        <button class="tog" id="togPush" aria-pressed="false"></button></div>
+      <div class="sw"><div><div class="t">Nag interval</div>
+        <div class="d">How long between repeats.</div></div>
+        <select id="nagSel" style="flex:0 0 104px">
+          <option value="10">10 min</option><option value="15">15 min</option>
+          <option value="20">20 min</option><option value="30">30 min</option>
+          <option value="45">45 min</option><option value="60">60 min</option></select></div>
+      <div class="sw"><div><div class="t">Store snapshots in Cloudflare</div>
+        <div class="d">Uploads your whole dataset to your Worker's KV after each save, so a wiped
+          browser doesn't lose it. Off by default — this is health data.</div></div>
+        <button class="tog" id="togSync" aria-pressed="false"></button></div>
+      <div class="row" style="gap:8px;margin-top:6px">
+        <button class="btn sm" id="cfPush">Upload now</button>
+        <button class="btn sm" id="cfPull">Restore from Cloudflare</button>
+      </div>
+      <div class="row" style="margin-top:12px;gap:14px">
+        <span class="cstat"><i class="dot" id="dSw"></i>service worker</span>
+        <span class="cstat"><i class="dot" id="dPush"></i>push</span>
+        <span class="cstat"><i class="dot" id="dCloud"></i>worker</span>
+      </div>
+      <div class="log" id="cfLog">Not connected.</div>
+    </div>
+
+    <div class="card">
+      <h2>Check-in times</h2>
+      <p class="sub">Sleep is only asked at the first one.</p>
+      <div id="winCfg"></div>
+      <div class="sw"><div><div class="t">Nag until finished</div>
+        <div class="d">Keeps a badge and a blocking prompt up until the check-in is saved or skipped.</div></div>
+        <button class="tog" id="togNag" aria-pressed="true"></button></div>
+      <div class="sw"><div><div class="t">Notifications</div>
+        <div class="d" id="notifState">Not enabled</div></div>
+        <button class="btn sm" id="notifBtn">Enable</button></div>
+      <div class="mini">A browser can only pop notifications reliably while this app is open. The badge and the
+        blocking prompt are what actually persist. For true lock-screen nagging you need the service worker
+        plus push worker — see the note at the bottom.</div>
+    </div>
+
+    <div class="card">
+      <h2>What to track</h2>
+      <p class="sub">Turn off anything that's noise. Fewer, honest entries beat many guessed ones.</p>
+      <div id="itemCfg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Medication list</h2>
+      <p class="sub">One per line. Dose changes get marked on the chart.</p>
+      <textarea id="medList" placeholder="Lamotrigine 200mg — morning&#10;Vyvanse 40mg — 7am"></textarea>
+      <div class="row" style="margin-top:9px"><button class="btn sm" id="medSave">Save list</button>
+      <button class="btn sm" id="medChange">Log a dose change today</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Location</h2>
+      <p class="sub">Latitude only, used to compute daylight hours offline.</p>
+      <div class="row">
+        <label class="fld"><span>Latitude</span><input type="number" id="cfgLat" step="0.1" min="-66" max="66"></label>
+        <div style="flex:2 1 160px;font-size:12px;color:var(--ink-3);align-self:end;padding-bottom:9px"
+             id="latNote"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Backup</h2>
+      <p class="sub">Everything is stored on this device only. Nothing leaves it. Back up before you
+        clear your browser or switch phones.</p>
+      <div class="row" style="gap:8px">
+        <button class="btn sm" id="bkExport">Download backup</button>
+        <button class="btn sm" id="bkShow">Show backup text</button>
+        <button class="btn sm" id="bkImport">Restore from text</button>
+      </div>
+      <textarea id="bkBox" style="display:none;margin-top:10px;min-height:120px;font-family:var(--mono);font-size:11px"></textarea>
+      <div class="row" style="margin-top:14px"><button class="btn sm dang" id="wipeBtn">Erase all entries</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Entries</h2>
+      <p class="sub" id="entCount"></p>
+      <div class="scroll"><table class="tbl" id="entTbl"></table></div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-v="log" aria-current="true"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h5"/></svg>Log</button>
+  <button data-v="chart" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h18" opacity=".4"/><path d="M3 17l4-7 4 3 4-8 4 5"/></svg>Charts</button>
+  <button data-v="pat" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="8" r="2.4"/><circle cx="17" cy="16" r="2.4"/><path d="M9 9.6l6 5"/><path d="M4 20h3M17 4h3" opacity=".5"/></svg>Patterns</button>
+  <button data-v="data" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></svg>Data</button>
+</nav>
+
+<div class="gate" id="gate">
+  <div class="gatebox">
+    <div class="k" id="gateK">check-in due</div>
+    <h3 id="gateH">Evening check-in</h3>
+    <p id="gateP">This one is still open. It'll keep coming back until you log it or skip it.</p>
+    <div class="row">
+      <button class="btn pri" style="flex:2 1 150px" id="gateGo">Do it now</button>
+      <button class="btn gho" style="flex:1 1 100px" id="gateSkip">Skip</button>
+    </div>
+    <div class="mini">Skipping is a real answer — it gets recorded as a skip, which is still useful data.</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Baseline — ADHD / bipolar tracking
+   Single file. No network. Local storage only.
+   ============================================================ */
+
+/* ---------- storage adapter: artifact host -> localStorage -> memory ---------- */
+const Store = (() => {
+  const hasWS = typeof window !== "undefined" && window.storage && typeof window.storage.get === "function";
+  let hasLS = false;
+  try { hasLS = !!window.localStorage; localStorage.setItem("__t", "1"); localStorage.removeItem("__t"); }
+  catch (e) { hasLS = false; }
+  const mem = Object.create(null);
+  return {
+    mode: hasWS ? "host" : hasLS ? "local" : "memory",
+    async get(k) {
+      if (hasWS) { try { const r = await window.storage.get(k); return r ? r.value : null; } catch (e) { return null; } }
+      if (hasLS) { try { return localStorage.getItem(k); } catch (e) {} }
+      return k in mem ? mem[k] : null;
+    },
+    async set(k, v) {
+      if (hasWS) { try { await window.storage.set(k, v); return true; } catch (e) {} }
+      if (hasLS) { try { localStorage.setItem(k, v); return true; } catch (e) {} }
+      mem[k] = v; return true;
+    }
+  };
+})();
+const K_ENT = "baseline:entries", K_CFG = "baseline:config", K_STATE = "baseline:state";
+
+/* ---------- item catalog ----------
+   anchor: "center" = 5 is baseline, fill runs outward from the middle.
+           "low"    = 1 is none, fill runs from the left. Pain at 5 is
+                      moderate pain, not a personal baseline, so pain and
+                      the other intake/symptom scales anchor low.
+   note:   true = offer a box to say what's actually going on.            */
+const ITEMS = [
+  // core — asked at every check-in
+  { key:"mood",     label:"Mood",            low:"Deep depression", high:"Elevated / manic", grp:"core", anchor:"center", note:true },
+  { key:"irrit",    label:"Irritability",    low:"Easy-going",      high:"Ready to snap",    grp:"core", anchor:"center", note:true },
+  { key:"energy",   label:"Energy / drive",  low:"Flat, no motor",  high:"Wired, can't sit", grp:"core", anchor:"center", note:true },
+  { key:"anxiety",  label:"Anxiety",         low:"Calm",            high:"Panicked",         grp:"core", anchor:"low",    note:true },
+  { key:"focus",    label:"Focus",           low:"Can't hold a thought", high:"Locked in",   grp:"core", anchor:"center", note:true },
+  { key:"initiate", label:"Task initiation", low:"Frozen, can't start", high:"Starting easily", grp:"core", anchor:"center", note:true },
+  // body & behavior
+  { key:"appetite", label:"Appetite",        low:"No interest",      high:"Ravenous",        grp:"body", anchor:"center", note:true },
+  { key:"nausea",   label:"Nausea / gut",    low:"Fine",             high:"Awful",           grp:"body", anchor:"low",    note:true },
+  { key:"headache", label:"Headache",        low:"None",             high:"Disabling",       grp:"body", anchor:"low",    note:true },
+  { key:"tension",  label:"Muscle tension",  low:"Loose",            high:"Locked up",       grp:"body", anchor:"low",    note:true },
+  { key:"social",   label:"Wanting people",  low:"Hiding from everyone", high:"Very social", grp:"body", anchor:"center", note:true },
+  { key:"spend",    label:"Spending urge",   low:"None",             high:"Hard to resist",  grp:"body", anchor:"low",    note:true },
+  { key:"medeff",   label:"Meds felt right", low:"Did nothing",      high:"Worked well",     grp:"body", anchor:"center", note:true },
+  { key:"caffeine", label:"Caffeine",        low:"None",             high:"A lot",           grp:"body", anchor:"low",    note:true, off:true },
+  { key:"alcohol",  label:"Alcohol",         low:"None",             high:"A lot",           grp:"body", anchor:"low",    note:true, off:true },
+  { key:"thc",      label:"THC / nicotine",  low:"None",             high:"A lot",           grp:"body", anchor:"low",    note:true, off:true },
+  { key:"exercise", label:"Movement",        low:"Sedentary",        high:"Hard workout",    grp:"body", anchor:"low",    note:true },
+  { key:"outside",  label:"Time outside",    low:"None",             high:"Hours",           grp:"body", anchor:"low",    note:true },
+  { key:"cycle",    label:"Cycle symptoms",  low:"None",             high:"Strong",          grp:"body", anchor:"low",    note:true, off:true },
+  // pain — its own section, anchored low
+  { key:"pain",     label:"Pain right now",  low:"None",             high:"Worst imaginable", grp:"pain", anchor:"low",   note:true },
+  { key:"painworst",label:"Worst it got",    low:"None",             high:"Worst imaginable", grp:"pain", anchor:"low",   note:true },
+  { key:"painlimit",label:"Got in the way",  low:"Not at all",       high:"Stopped me cold", grp:"pain", anchor:"low",    note:true },
+  // sleep-only
+  { key:"sleepq",   label:"Sleep quality",   low:"Broken, unrested", high:"Deep, rested",    grp:"sleep", anchor:"center", note:true },
+  { key:"wakefeel", label:"Waking mood",     low:"Dread",            high:"Ready",           grp:"sleep", anchor:"center", note:true }
+];
+const ITEM = {}; ITEMS.forEach(i => ITEM[i.key] = i);
+
+/* standard 0-10 numeric rating scale descriptors */
+const PAIN_WORDS = { 1:"none", 2:"barely there", 3:"mild", 4:"nagging", 5:"moderate",
+  6:"distracting", 7:"hard to ignore", 8:"severe", 9:"can't function", 10:"worst imaginable" };
+const PAIN_SITES = ["Head","Jaw / face","Neck","Shoulders","Upper back","Lower back","Hips",
+  "Knees","Feet / ankles","Hands / wrists","Elbows","Chest","Abdomen","Widespread / all over"];
+const PAIN_KINDS = ["Aching","Sharp / stabbing","Burning","Throbbing","Shooting / nerve",
+  "Stiff","Cramping","Numb / tingling","Deep pressure","Sore to touch"];
+
+const TAGS = ["Conflict","Deadline / pressure","Travel","Missed meds","Poor sleep","Skipped meals",
+  "Alcohol","Illness","Money stress","Big social event","Good news","Time outside","Overstimulated",
+  "Doctor / therapy","Med change"];
+const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending urges","Risk-taking",
+  "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
+  "Very short fuse","Everything is too loud"];
+
+const DEFAULT_CFG = {
+  windows: [
+    { id:"am",  label:"Morning", time:"08:00", sleep:true  },
+    { id:"mid", label:"Midday",  time:"14:00", sleep:false },
+    { id:"pm",  label:"Evening", time:"20:00", sleep:false }
+  ],
+  off: ITEMS.filter(i => i.off).map(i => i.key),
+  nag: true, lat: 46.8, meds: "", nagMins: 20,
+  cloud: { url: "", uid: "", push: false, sync: false }
+};
+
+/* ---------- state ---------- */
+let CFG = JSON.parse(JSON.stringify(DEFAULT_CFG));
+let ENTRIES = [];            // saved records
+let STATE = { skipped: {} }; // "date|win" -> reason
+let draft = null;            // in-progress entry
+let range = 30;
+let series = { mood:true, irrit:true, energy:true, anxiety:false, focus:false, initiate:false,
+  pain:true, sleepq:false };
+let lastExport = "";
+let gateKey = null;
+
+/* ---------- helpers ---------- */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const pad = n => String(n).padStart(2, "0");
+const todayISO = (d = new Date()) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const minsOf = t => { const p = String(t || "").split(":"); return (+p[0] || 0) * 60 + (+p[1] || 0); };
+const nowMins = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const isOn = k => CFG.off.indexOf(k) === -1;
+const activeItems = grp => ITEMS.filter(i => i.grp === grp && isOn(i.key));
+const fmtDate = iso => { const p = iso.split("-");
+  return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { month:"short", day:"numeric" }); };
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+function toast(msg, warn) {
+  const t = $("#toast"); t.textContent = msg; t.className = "toast on" + (warn ? " warn" : "");
+  clearTimeout(t._h); t._h = setTimeout(() => { t.className = "toast" + (warn ? " warn" : ""); }, 2200);
+}
+function winById(id) { return CFG.windows.find(w => w.id === id) || CFG.windows[0]; }
+function sleepWin() { return CFG.windows.find(w => w.sleep) || CFG.windows[0]; }
+
+/* value -> diverging color */
+function vcol(v) {
+  if (v == null) return "var(--ink-3)";
+  if (v <= 2) return "var(--low-2)";
+  if (v <= 4) return "var(--low-1)";
+  if (v === 5) return "var(--base)";
+  if (v <= 7) return "var(--high-1)";
+  return "var(--high-2)";
+}
+const SCOL = { mood:"#7fd4c1", irrit:"#c25a4a", energy:"#c98b3a", anxiety:"#9b7fd4",
+  focus:"#5fa8d4", initiate:"#8fbf6a", pain:"#d4657f", sleepq:"#6f8fd4" };
+
+/* daylight hours from latitude + date, no network */
+function dayLength(iso, lat) {
+  const p = iso.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2]);
+  const n = Math.round((d - new Date(d.getFullYear(), 0, 0)) / 86400000);
+  const dec = 23.44 * Math.PI / 180 * Math.sin(2 * Math.PI * (284 + n) / 365);
+  const phi = lat * Math.PI / 180;
+  let x = -Math.tan(phi) * Math.tan(dec);
+  if (x <= -1) return 24; if (x >= 1) return 0;
+  return 2 * Math.acos(x) * 12 / Math.PI;
+}
+
+/* ---------- persistence ---------- */
+async function load() {
+  const c = await Store.get(K_CFG);
+  if (c) { try { Object.assign(CFG, JSON.parse(c)); } catch (e) {} }
+  if (!Array.isArray(CFG.off)) CFG.off = DEFAULT_CFG.off.slice();
+  if (!Array.isArray(CFG.windows) || !CFG.windows.length) CFG.windows = DEFAULT_CFG.windows.slice();
+  if (!CFG.cloud) CFG.cloud = { url:"", uid:"", push:false, sync:false };
+  if (!CFG.nagMins) CFG.nagMins = 20;
+  const e = await Store.get(K_ENT);
+  if (e) { try { ENTRIES = (JSON.parse(e) || []).map(fixDraft); } catch (er) { ENTRIES = []; } }
+  const s = await Store.get(K_STATE);
+  if (s) { try { Object.assign(STATE, JSON.parse(s)); } catch (er) {} }
+  if (!STATE.skipped) STATE.skipped = {};
+}
+const saveCfg   = () => Store.set(K_CFG, JSON.stringify(CFG));
+const saveEnt   = () => Store.set(K_ENT, JSON.stringify(ENTRIES));
+const saveState = () => Store.set(K_STATE, JSON.stringify(STATE));
+
+/* ---------- draft ---------- */
+function newDraft(date, winId) {
+  const found = ENTRIES.find(x => x.date === date && x.win === winId);
+  if (found) return JSON.parse(JSON.stringify(found));
+  return { date, win: winId, ts: new Date().toISOString(), v: {}, n: {},
+    pain: { sites: [], kinds: [] },
+    sleep: null, meds: null, tags: [], warns: [], note: "" };
+}
+function fixDraft(d) {                       // older records won't have these
+  if (!d.n) d.n = {};
+  if (!d.pain) d.pain = { sites: [], kinds: [] };
+  if (!Array.isArray(d.pain.sites)) d.pain.sites = [];
+  if (!Array.isArray(d.pain.kinds)) d.pain.kinds = [];
+  return d;
+}
+function setDraft(date, winId) {
+  draft = fixDraft(newDraft(date, winId));
+  $("#eDate").value = date; $("#eWin").value = winId;
+  renderLog();
+}
+
+/* ============================================================
+   SLIDERS — fill outward from the baseline notch
+   ============================================================ */
+const BASEPCT = ((5 - 1) / 9) * 100;
+const noteOpen = {};                       // which note boxes are expanded
+
+/* colour for a low-anchored scale: 1 is fine, 10 is not */
+function lcol(v) {
+  if (v == null) return "var(--ink-3)";
+  if (v <= 2) return "var(--base)";
+  if (v <= 4) return "var(--low-1)";
+  if (v <= 6) return "var(--high-1)";
+  return "var(--high-2)";
+}
+const icol = (it, v) => it.anchor === "low" ? lcol(v) : vcol(v);
+
+function fillGeom(it, val) {
+  const pct = ((val - 1) / 9) * 100;
+  if (it.anchor === "low") return { left: 0, width: pct, dot: pct < 1 };
+  if (val === 5) return { left: BASEPCT, width: 0, dot: true };
+  return { left: Math.min(pct, BASEPCT), width: Math.abs(pct - BASEPCT), dot: false };
+}
+
+function sliderHTML(it, val, note) {
+  const has = val != null;
+  const pct = has ? ((val - 1) / 9) * 100 : (it.anchor === "low" ? 0 : BASEPCT);
+  const col = icol(it, val);
+  let fill = "";
+  if (has) {
+    const g = fillGeom(it, val);
+    fill = g.dot
+      ? '<div class="fill" style="left:calc(' + g.left + '% - 3px);width:6px;background:' + col + '"></div>'
+      : '<div class="fill" style="left:' + g.left + '%;width:' + g.width + '%;background:' + col + '"></div>';
+  }
+  let ticks = "";
+  for (let i = 1; i <= 10; i++)
+    ticks += '<i class="' + (i === 5 && it.anchor !== "low" ? "mid" : "") +
+      '" style="left:' + (((i - 1) / 9) * 100) + '%"></i>';
+
+  const hasNote = !!(note && note.trim());
+  const open = noteOpen[it.key] || hasNote;
+  const words = it.grp === "pain" && has ? ' <span class="pw">' + esc(PAIN_WORDS[val] || "") + "</span>" : "";
+
+  return '<div class="item" data-k="' + it.key + '">' +
+    '<div class="ihead"><span class="ilabel">' + esc(it.label) + words + "</span>" +
+      '<span class="ival' + (has ? "" : " unset") + '" style="' + (has ? "color:" + col : "") + '">' +
+        (has ? val : "–") + "</span></div>" +
+    '<div class="iends"><span>1 · ' + esc(it.low) + "</span><span>" + esc(it.high) + " · 10</span></div>" +
+    '<div class="track' + (has ? "" : " unset") + '" role="slider" tabindex="0" aria-label="' + esc(it.label) +
+      '" aria-valuemin="1" aria-valuemax="10" aria-valuenow="' + (has ? val : 5) + '">' +
+      '<div class="rail">' + fill + "</div>" +
+      (it.anchor === "low" ? "" : '<div class="spine" style="left:' + BASEPCT + '%"></div>') +
+      '<div class="ticks">' + ticks + "</div>" +
+      '<div class="knob" style="left:' + pct + "%" + (has ? ";background:" + col : "") + '"></div>' +
+    "</div>" +
+    (it.note !== false
+      ? '<button type="button" class="notebtn" data-note="' + it.key + '" aria-pressed="' +
+          (open ? "true" : "false") + '">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+          (open ? '<path d="M5 12h14"/>' : '<path d="M12 5v14M5 12h14"/>') + "</svg>" +
+          (hasNote ? "note added" : open ? "hide note" : "what's going on") + "</button>" +
+        '<div class="notewrap" data-nw="' + it.key + '" style="' + (open ? "" : "display:none") + '">' +
+          '<textarea class="noteta" data-nt="' + it.key + '" rows="2" placeholder="' +
+          esc(notePlaceholder(it)) + '">' + esc(note || "") + "</textarea></div>"
+      : "") +
+    "</div>";
+}
+function notePlaceholder(it) {
+  if (it.grp === "pain") return "Where exactly, and what makes it worse or better.";
+  if (it.key === "appetite") return "Eating what, skipping what.";
+  if (it.key === "medeff")   return "Which dose, how long it lasted, any crash.";
+  if (it.key === "exercise") return "What you did, how it felt after.";
+  return "What's actually going on with this one.";
+}
+
+function valFromX(track, clientX) {
+  const r = track.getBoundingClientRect();
+  const p = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+  return Math.round(1 + p * 9);
+}
+
+/* update in place — never re-render the item, or an open note box loses focus */
+function applyVal(item, v) {
+  const key = item.dataset.k, it = ITEM[key];
+  draft.v[key] = v;
+  const col = icol(it, v), pct = ((v - 1) / 9) * 100;
+  const track = item.querySelector(".track"), rail = item.querySelector(".rail");
+  const knob = item.querySelector(".knob"), ival = item.querySelector(".ival");
+
+  track.classList.remove("unset");
+  track.setAttribute("aria-valuenow", v);
+  ival.classList.remove("unset");
+  ival.textContent = v;
+  ival.style.color = col;
+  knob.style.left = pct + "%";
+  knob.style.background = col;
+
+  let fill = rail.querySelector(".fill");
+  if (!fill) { fill = document.createElement("div"); fill.className = "fill"; rail.appendChild(fill); }
+  const g = fillGeom(it, v);
+  if (g.dot) { fill.style.left = "calc(" + g.left + "% - 3px)"; fill.style.width = "6px"; }
+  else { fill.style.left = g.left + "%"; fill.style.width = g.width + "%"; }
+  fill.style.background = col;
+
+  if (it.grp === "pain") {
+    let pw = item.querySelector(".pw");
+    if (!pw) { pw = document.createElement("span"); pw.className = "pw";
+      item.querySelector(".ilabel").appendChild(document.createTextNode(" "));
+      item.querySelector(".ilabel").appendChild(pw); }
+    pw.textContent = PAIN_WORDS[v] || "";
+    painSummary();
+  }
+}
+function bindSliders(root) {
+  root.addEventListener("pointerdown", ev => {
+    const track = ev.target.closest(".track"); if (!track) return;
+    const item = track.closest(".item"); if (!item) return;
+    ev.preventDefault();
+    let cur = valFromX(track, ev.clientX);
+    applyVal(item, cur);
+    const live = root.querySelector('.item[data-k="' + item.dataset.k + '"] .track');
+    if (!live) return;
+    try { live.setPointerCapture(ev.pointerId); } catch (e) {}
+    const move = e2 => {
+      const nv = valFromX(live, e2.clientX);
+      if (nv !== cur) { cur = nv;
+        const it2 = root.querySelector('.item[data-k="' + item.dataset.k + '"]');
+        if (it2) applyVal(it2, nv);
+      }
+    };
+    const up = () => {
+      const t2 = root.querySelector('.item[data-k="' + item.dataset.k + '"] .track');
+      if (t2) { t2.removeEventListener("pointermove", move); t2.removeEventListener("pointerup", up);
+        t2.removeEventListener("pointercancel", up); }
+      live.removeEventListener("pointermove", move); live.removeEventListener("pointerup", up);
+      live.removeEventListener("pointercancel", up);
+    };
+    live.addEventListener("pointermove", move);
+    live.addEventListener("pointerup", up);
+    live.addEventListener("pointercancel", up);
+  });
+  root.addEventListener("keydown", ev => {
+    const track = ev.target.closest(".track"); if (!track) return;
+    const item = track.closest(".item"), k = item.dataset.k;
+    let v = draft.v[k] == null ? 5 : draft.v[k];
+    if (ev.key === "ArrowLeft" || ev.key === "ArrowDown") v = Math.max(1, v - 1);
+    else if (ev.key === "ArrowRight" || ev.key === "ArrowUp") v = Math.min(10, v + 1);
+    else if (ev.key === "Home") v = 1; else if (ev.key === "End") v = 10;
+    else return;
+    ev.preventDefault(); applyVal(item, v);
+    const t2 = root.querySelector('.item[data-k="' + k + '"] .track'); if (t2) t2.focus();
+  });
+}
+
+/* ============================================================
+   WHEEL — hours / minutes
+   ============================================================ */
+function buildWheel(el, max, step) {
+  let h = '<div class="wsel"></div><div class="pad"></div>';
+  for (let i = 0; i <= max; i += step) h += '<div class="wi" data-v="' + i + '">' + pad(i) + "</div>";
+  h += '<div class="pad"></div>';
+  el.innerHTML = h;
+  el._items = Array.from(el.querySelectorAll(".wi"));
+  el.addEventListener("scroll", () => {
+    clearTimeout(el._t);
+    markWheel(el);
+    el._t = setTimeout(() => { snapWheel(el); pushSleep(); }, 90);
+  }, { passive: true });
+}
+function wheelIndex(el) { return Math.max(0, Math.min(el._items.length - 1, Math.round(el.scrollTop / 40))); }
+function markWheel(el) {
+  const i = wheelIndex(el);
+  el._items.forEach((n, j) => n.classList.toggle("sel", j === i));
+}
+function snapWheel(el) {
+  const i = wheelIndex(el);
+  el.scrollTo({ top: i * 40, behavior: "smooth" });
+  markWheel(el);
+}
+function wheelVal(el) { const i = wheelIndex(el); return +el._items[i].dataset.v; }
+function setWheel(el, v) {
+  const i = el._items.findIndex(n => +n.dataset.v === v);
+  el.scrollTop = (i < 0 ? 0 : i) * 40; markWheel(el);
+}
+function pushSleep() {
+  if (!draft) return;
+  const h = wheelVal($("#wH")), m = wheelVal($("#wM"));
+  draft.sleep = Object.assign(draft.sleep || {}, { h, m });
+  const tot = h + m / 60;
+  const flag = tot > 0 && tot < 6 ? '  <span style="color:var(--warn)">short</span>' :
+               tot > 10 ? '  <span style="color:var(--warn)">long</span>' : "";
+  $("#wTotal").innerHTML = "total <b>" + h + "h " + pad(m) + "m</b>" +
+    (tot ? '  ·  ' + tot.toFixed(2) + " h" : "") + flag;
+}
+
+/* ============================================================
+   LOG VIEW
+   ============================================================ */
+function renderLog() {
+  const w = winById(draft.win);
+  // sleep block
+  const showSleep = !!w.sleep;
+  $("#sleepBlock").style.display = showSleep ? "" : "none";
+  if (showSleep) {
+    const s = draft.sleep || {};
+    setWheel($("#wH"), s.h == null ? 7 : s.h);
+    setWheel($("#wM"), s.m == null ? 0 : s.m);
+    $("#sBed").value = s.bed || ""; $("#sWake").value = s.wake || "";
+    pushSleep();
+    $("#sleepItems").innerHTML = activeItems("sleep").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+  }
+  $("#coreItems").innerHTML  = activeItems("core").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+  $("#extraItems").innerHTML = activeItems("body").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+
+  // pain
+  const pain = activeItems("pain");
+  $("#painBlock").style.display = pain.length ? "" : "none";
+  if (pain.length) {
+    $("#painItems").innerHTML = pain.map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+    $("#painSites").innerHTML = PAIN_SITES.map(t =>
+      '<button class="chip" data-site="' + esc(t) + '" aria-pressed="' +
+      (draft.pain.sites.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+    $("#painKinds").innerHTML = PAIN_KINDS.map(t =>
+      '<button class="chip" data-kind="' + esc(t) + '" aria-pressed="' +
+      (draft.pain.kinds.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+    painSummary();
+  }
+
+  // meds
+  const meds = (CFG.meds || "").split("\n").map(s => s.trim()).filter(Boolean);
+  $("#medBlock").style.display = meds.length ? "" : "none";
+  if (meds.length) {
+    draft.meds = draft.meds || {};
+    $("#medCard").innerHTML = '<p class="sub" style="margin-bottom:11px">Tap each one you\'ve taken today.</p>' +
+      '<div class="chips">' + meds.map((m, i) =>
+        '<button class="chip" data-med="' + i + '" aria-pressed="' + (draft.meds[i] ? "true" : "false") + '">' +
+        esc(m) + "</button>").join("") + "</div>";
+  }
+  // warns + tags
+  $("#warnChips").innerHTML = WARNS.map(t =>
+    '<button class="chip" data-warn="' + esc(t) + '" aria-pressed="' +
+    (draft.warns.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+  $("#tagChips").innerHTML = TAGS.map(t =>
+    '<button class="chip ev" data-tag="' + esc(t) + '" aria-pressed="' +
+    (draft.tags.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+  $("#eNote").value = draft.note || "";
+
+  const existing = ENTRIES.some(x => x.date === draft.date && x.win === draft.win);
+  const sk = STATE.skipped[draft.date + "|" + draft.win];
+  $("#eStatus").innerHTML = existing
+    ? '<span style="color:var(--accent)">Saved already — editing it will overwrite.</span>'
+    : sk ? '<span style="color:var(--warn)">Marked skipped' + (sk === true ? "" : ": " + esc(sk)) + '.</span>'
+    : "Not logged yet.";
+  $("#saveBtn").textContent = existing ? "Update check-in" : "Save check-in";
+}
+
+function painSummary() {
+  const el = $("#painSum"); if (!el) return;
+  const v = draft.v.pain, s = draft.pain.sites, k = draft.pain.kinds;
+  if (v == null && !s.length && !k.length) {
+    el.innerHTML = '<span class="none">Nothing logged for pain this check-in. Leave it blank if there\'s none.</span>';
+    return;
+  }
+  let out = [];
+  if (v != null) out.push("<b>" + v + "/10</b> " + (PAIN_WORDS[v] || ""));
+  if (draft.v.painworst != null && draft.v.painworst !== v) out.push("peaked at <b>" + draft.v.painworst + "</b>");
+  if (draft.v.painlimit != null) out.push("interference <b>" + draft.v.painlimit + "</b>");
+  if (s.length) out.push(s.join(", ").toLowerCase());
+  if (k.length) out.push(k.join(", ").toLowerCase());
+  const notes = ["pain", "painworst", "painlimit"].filter(x => draft.n[x] && draft.n[x].trim());
+  el.innerHTML = out.join(" &nbsp;·&nbsp; ") +
+    (notes.length ? '<br><span style="color:var(--ink-3)">' +
+      esc(notes.map(x => draft.n[x].trim()).join(" / ")) + "</span>" : "");
+}
+
+function fillWinSelect() {
+  $("#eWin").innerHTML = CFG.windows.map(w =>
+    '<option value="' + w.id + '">' + esc(w.label) + " · " + w.time + (w.sleep ? " (sleep)" : "") + "</option>").join("");
+}
+
+/* ---------- due logic ---------- */
+function dueWindows(date) {
+  const today = todayISO(), out = [];
+  CFG.windows.forEach(w => {
+    if (date === today && minsOf(w.time) > nowMins()) return;   // not yet time
+    if (ENTRIES.some(x => x.date === date && x.win === w.id)) return;
+    if (STATE.skipped[date + "|" + w.id]) return;
+    out.push(w);
+  });
+  return out;
+}
+function refreshDue() {
+  const today = todayISO();
+  const due = dueWindows(today);
+  const b = $("#dueBadge");
+  if (due.length) { b.className = "badge due"; b.textContent = due.length + " due"; }
+  else { b.className = "badge"; b.textContent = "all clear"; }
+  try { if (navigator.setAppBadge) due.length ? navigator.setAppBadge(due.length) : navigator.clearAppBadge(); }
+  catch (e) {}
+  // blocking gate for the most overdue window
+  if (CFG.nag && due.length) {
+    const w = due[due.length - 1], key = today + "|" + w.id;
+    if (key !== gateKey) {
+      gateKey = key;
+      $("#gateH").textContent = w.label + " check-in";
+      $("#gateK").textContent = due.length > 1 ? due.length + " check-ins due" : "check-in due";
+      $("#gate").classList.add("on");
+    }
+  } else { $("#gate").classList.remove("on"); gateKey = null; }
+}
+
+/* ============================================================
+   AGGREGATION
+   ============================================================ */
+function dayList(days) {
+  const dates = {};
+  ENTRIES.forEach(e => dates[e.date] = 1);
+  let keys = Object.keys(dates).sort();
+  if (!keys.length) return [];
+  const end = new Date(), out = [];
+  let startISO;
+  if (days > 0) { const s = new Date(); s.setDate(s.getDate() - (days - 1)); startISO = todayISO(s); }
+  else startISO = keys[0];
+  const s2 = new Date(startISO.split("-")[0], startISO.split("-")[1] - 1, startISO.split("-")[2]);
+  for (let d = new Date(s2); d <= end; d.setDate(d.getDate() + 1)) out.push(todayISO(d));
+  return out;
+}
+function daily(days) {
+  const dates = dayList(days);
+  return dates.map(date => {
+    const es = ENTRIES.filter(e => e.date === date);
+    const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
+      inotes: {}, sites: [], kinds: [] };
+    ITEMS.forEach(it => {
+      const vs = es.map(e => e.v[it.key]).filter(v => v != null);
+      if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
+    });
+    const se = es.find(e => e.sleep && (e.sleep.h != null));
+    if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake };
+    es.forEach(e => { (e.tags || []).forEach(t => row.tags.indexOf(t) < 0 && row.tags.push(t));
+      (e.warns || []).forEach(t => row.warns.indexOf(t) < 0 && row.warns.push(t));
+      if (e.note) row.notes.push(e.note);
+      if (e.n) Object.keys(e.n).forEach(k => {
+        if (!e.n[k]) return;
+        row.inotes[k] = row.inotes[k] ? row.inotes[k] + " | " + e.n[k] : e.n[k];
+      });
+      if (e.pain) {
+        (e.pain.sites || []).forEach(s => row.sites.indexOf(s) < 0 && row.sites.push(s));
+        (e.pain.kinds || []).forEach(s => row.kinds.indexOf(s) < 0 && row.kinds.push(s));
+      }
+      if (e.meds) { const vals = Object.values(e.meds);
+        row.meds = vals.length ? vals.filter(Boolean).length / vals.length : null; } });
+    row.day = dayLength(date, CFG.lat);
+    return row;
+  });
+}
+
+/* Spearman rank correlation */
+function ranks(a) {
+  const idx = a.map((v, i) => [v, i]).sort((x, y) => x[0] - y[0]);
+  const r = new Array(a.length);
+  let i = 0;
+  while (i < idx.length) {
+    let j = i; while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    const avg = (i + j) / 2 + 1;
+    for (let k = i; k <= j; k++) r[idx[k][1]] = avg;
+    i = j + 1;
+  }
+  return r;
+}
+function spearman(xs, ys) {
+  const n = xs.length; if (n < 3) return null;
+  const rx = ranks(xs), ry = ranks(ys);
+  const mx = rx.reduce((a, b) => a + b, 0) / n, my = ry.reduce((a, b) => a + b, 0) / n;
+  let num = 0, dx = 0, dy = 0;
+  for (let i = 0; i < n; i++) { const a = rx[i] - mx, b = ry[i] - my; num += a * b; dx += a * a; dy += b * b; }
+  if (!dx || !dy) return null;
+  return num / Math.sqrt(dx * dy);
+}
+function pair(rows, ka, kb, lag) {
+  lag = lag || 0;
+  const xs = [], ys = [];
+  for (let i = 0; i + lag < rows.length; i++) {
+    const a = ka === "sleep" ? (rows[i].sleep ? rows[i].sleep.hours : null)
+            : ka === "day" ? rows[i].day : rows[i].v[ka];
+    const b = kb === "sleep" ? (rows[i + lag].sleep ? rows[i + lag].sleep.hours : null)
+            : rows[i + lag].v[kb];
+    if (a != null && b != null) { xs.push(a); ys.push(b); }
+  }
+  return { xs, ys, n: xs.length, r: spearman(xs, ys) };
+}
+
+/* ============================================================
+   CHARTS
+   ============================================================ */
+const W = 700, PADL = 30, PADR = 12;
+function xAt(i, n) { return PADL + (n <= 1 ? (W - PADL - PADR) / 2 : (i / (n - 1)) * (W - PADL - PADR)); }
+
+function drawMain() {
+  const rows = daily(range), n = rows.length, H = 300, top = 14, bot = 30;
+  const svg = $("#mainCh");
+  if (!ENTRIES.length) { svg.innerHTML = ""; svg.style.display = "none";
+    $("#readout").innerHTML = '<b>No entries yet.</b> Save a check-in and the chart starts filling in.'; return; }
+  svg.style.display = ""; svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  const yAt = v => top + (10 - v) / 9 * (H - top - bot);
+  let g = "";
+  // bands above / below baseline
+  g += '<rect x="' + PADL + '" y="' + yAt(10) + '" width="' + (W - PADL - PADR) + '" height="' +
+       (yAt(5) - yAt(10)) + '" fill="#c25a4a" opacity="0.045"/>';
+  g += '<rect x="' + PADL + '" y="' + yAt(5) + '" width="' + (W - PADL - PADR) + '" height="' +
+       (yAt(1) - yAt(5)) + '" fill="#2b6f8f" opacity="0.05"/>';
+  for (let v = 1; v <= 10; v++) {
+    const y = yAt(v), mid = v === 5;
+    g += '<line x1="' + PADL + '" x2="' + (W - PADR) + '" y1="' + y + '" y2="' + y +
+         '" stroke="' + (mid ? "#5f9e7a" : "#232a33") + '" stroke-width="' + (mid ? 1.6 : 1) + '"' +
+         (mid ? ' stroke-dasharray="6 4"' : "") + ' opacity="' + (mid ? .9 : .8) + '"/>';
+    if (v === 1 || v === 5 || v === 10)
+      g += '<text x="' + (PADL - 6) + '" y="' + (y + 4) + '" fill="' + (mid ? "#5f9e7a" : "#63707e") +
+           '" font-size="11" font-family="ui-monospace,monospace" text-anchor="end">' + v + "</text>";
+  }
+  g += '<text x="' + (PADL - 6) + '" y="' + (yAt(5) - 9) + '" fill="#5f9e7a" font-size="9" ' +
+       'font-family="ui-monospace,monospace" text-anchor="end" opacity=".8">base</text>';
+  // med-change markers
+  rows.forEach((r, i) => { if (r.tags.indexOf("Med change") > -1) {
+    const x = xAt(i, n);
+    g += '<line x1="' + x + '" x2="' + x + '" y1="' + top + '" y2="' + (H - bot) +
+         '" stroke="#d9a03c" stroke-width="1.2" stroke-dasharray="3 3" opacity=".8"/>' +
+         '<text x="' + x + '" y="' + (top - 3) + '" fill="#d9a03c" font-size="9" ' +
+         'font-family="ui-monospace,monospace" text-anchor="middle">med</text>'; } });
+  // series
+  Object.keys(series).forEach(k => {
+    if (!series[k] || !isOn(k)) return;
+    let d = "", pts = "", open = false;
+    rows.forEach((r, i) => {
+      const v = r.v[k];
+      if (v == null) { open = false; return; }
+      const x = xAt(i, n), y = yAt(v);
+      d += (open ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1) + " "; open = true;
+      pts += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' +
+             (n > 45 ? 1.8 : 2.8) + '" fill="' + SCOL[k] + '"/>';
+    });
+    g += '<path d="' + d + '" fill="none" stroke="' + SCOL[k] +
+         '" stroke-width="' + (k === "mood" ? 2.4 : 1.6) + '" stroke-linejoin="round" stroke-linecap="round" opacity="' +
+         (k === "mood" ? 1 : .75) + '"/>' + pts;
+  });
+  // x labels
+  const step = Math.max(1, Math.ceil(n / 6));
+  rows.forEach((r, i) => { if (i % step === 0 || i === n - 1)
+    g += '<text x="' + xAt(i, n) + '" y="' + (H - 9) + '" fill="#63707e" font-size="10.5" ' +
+         'font-family="ui-monospace,monospace" text-anchor="middle">' + fmtDate(r.date) + "</text>"; });
+  svg.innerHTML = g;
+  svg._rows = rows;
+
+  $("#legend").innerHTML = Object.keys(series).filter(k => isOn(k)).map(k =>
+    '<button class="lg" data-s="' + k + '" aria-pressed="' + (series[k] ? "true" : "false") +
+    '" style="color:' + (series[k] ? SCOL[k] : "var(--ink-3)") + '"><i></i>' + esc(ITEM[k].label) + "</button>").join("");
+}
+
+function drawSleep() {
+  const rows = daily(range), n = rows.length, H = 200, top = 12, bot = 28;
+  const svg = $("#sleepCh");
+  const any = rows.some(r => r.sleep);
+  if (!any) { svg.innerHTML = '<text x="' + (W / 2) + '" y="' + (H / 2) +
+    '" fill="#63707e" font-size="13" text-anchor="middle" font-family="system-ui">' +
+    'Log sleep in the morning check-in to fill this in.</text>';
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H); return; }
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  const MAXH = 12, yAt = h => top + (MAXH - h) / MAXH * (H - top - bot);
+  let g = "";
+  g += '<rect x="' + PADL + '" y="' + yAt(9) + '" width="' + (W - PADL - PADR) + '" height="' +
+       (yAt(7) - yAt(9)) + '" fill="#5f9e7a" opacity="0.1"/>';
+  [0, 3, 6, 7, 9, 12].forEach(h => {
+    const y = yAt(h), t = h === 7 || h === 9;
+    g += '<line x1="' + PADL + '" x2="' + (W - PADR) + '" y1="' + y + '" y2="' + y +
+         '" stroke="' + (t ? "#5f9e7a" : "#232a33") + '" stroke-width="1" opacity="' + (t ? .5 : .8) + '"/>';
+    g += '<text x="' + (PADL - 6) + '" y="' + (y + 4) + '" fill="#63707e" font-size="10.5" ' +
+         'font-family="ui-monospace,monospace" text-anchor="end">' + h + "</text>";
+  });
+  const bw = Math.max(2.5, Math.min(20, (W - PADL - PADR) / Math.max(n, 1) * .62));
+  rows.forEach((r, i) => {
+    if (!r.sleep) return;
+    const h = Math.min(MAXH, r.sleep.hours), x = xAt(i, n), y = yAt(h);
+    const col = h < 6 ? "#c25a4a" : h > 10 ? "#c98b3a" : "#5fa8d4";
+    g += '<rect x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+         '" height="' + (yAt(0) - y).toFixed(1) + '" rx="2" fill="' + col + '" opacity=".8"/>';
+    if (r.sleep.bed) {
+      const bm = minsOf(r.sleep.bed), norm = bm > 720 ? bm - 1440 : bm; // shift PM to negative
+      const by = top + ((norm + 300) / 600) * (H - top - bot) * .25 + 4;
+      g += '<circle cx="' + x.toFixed(1) + '" cy="' + Math.max(top, Math.min(H - bot, by)).toFixed(1) +
+           '" r="2.2" fill="#9b7fd4"/>';
+    }
+  });
+  const step = Math.max(1, Math.ceil(n / 6));
+  rows.forEach((r, i) => { if (i % step === 0 || i === n - 1)
+    g += '<text x="' + xAt(i, n) + '" y="' + (H - 8) + '" fill="#63707e" font-size="10.5" ' +
+         'font-family="ui-monospace,monospace" text-anchor="middle">' + fmtDate(r.date) + "</text>"; });
+  svg.innerHTML = g;
+}
+
+function drawDay() {
+  const rows = daily(range), n = rows.length, H = 140, top = 12, bot = 26;
+  const svg = $("#dayCh"); svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  if (!n) { svg.innerHTML = ""; return; }
+  const lo = 7, hi = 17, yAt = h => top + (hi - h) / (hi - lo) * (H - top - bot);
+  let g = "", d = "";
+  rows.forEach((r, i) => { d += (i ? "L" : "M") + xAt(i, n).toFixed(1) + " " + yAt(r.day).toFixed(1) + " "; });
+  g += '<path d="' + d + '" fill="none" stroke="#d9a03c" stroke-width="2" opacity=".85"/>';
+  [8, 12, 16].forEach(h => { const y = yAt(h);
+    g += '<line x1="' + PADL + '" x2="' + (W - PADR) + '" y1="' + y + '" y2="' + y +
+         '" stroke="#232a33" stroke-width="1"/>' +
+         '<text x="' + (PADL - 6) + '" y="' + (y + 4) + '" fill="#63707e" font-size="10.5" ' +
+         'font-family="ui-monospace,monospace" text-anchor="end">' + h + "h</text>"; });
+  const first = rows[0], last = rows[n - 1];
+  g += '<text x="' + PADL + '" y="' + (H - 8) + '" fill="#63707e" font-size="10.5" ' +
+       'font-family="ui-monospace,monospace">' + fmtDate(first.date) + " · " + first.day.toFixed(1) + "h</text>";
+  g += '<text x="' + (W - PADR) + '" y="' + (H - 8) + '" fill="#63707e" font-size="10.5" ' +
+       'font-family="ui-monospace,monospace" text-anchor="end">' + fmtDate(last.date) + " · " +
+       last.day.toFixed(1) + "h</text>";
+  svg.innerHTML = g;
+}
+
+function drawCoverage() {
+  const rows = daily(range), n = rows.length;
+  const exp = n * CFG.windows.length;
+  const got = rows.reduce((a, r) => a + r.n, 0);
+  const skips = Object.keys(STATE.skipped).length;
+  let bars = rows.map(r => {
+    const f = CFG.windows.length ? r.n / CFG.windows.length : 0;
+    const c = f >= 1 ? "var(--base)" : f > 0 ? "var(--high-1)" : "var(--line-2)";
+    return '<i style="flex:1;height:' + (8 + f * 16) + 'px;background:' + c + ';border-radius:2px"></i>';
+  }).join("");
+  $("#coverage").innerHTML =
+    '<div style="display:flex;gap:2px;align-items:flex-end;height:26px;margin-bottom:9px">' + bars + "</div>" +
+    '<div style="font-family:var(--mono);font-size:12px;color:var(--ink-2)">' +
+    got + " of " + exp + " check-ins &nbsp;·&nbsp; " + (exp ? Math.round(got / exp * 100) : 0) + "%" +
+    (skips ? " &nbsp;·&nbsp; " + skips + " skipped" : "") + "</div>" +
+    '<div class="mini">Gaps are expected. A month at 60% still finds patterns.</div>';
+}
+
+function readoutFor(i) {
+  const rows = $("#mainCh")._rows; if (!rows || !rows[i]) return;
+  const r = rows[i];
+  let s = '<span class="dt">' + fmtDate(r.date) + "</span> &nbsp;";
+  if (!r.n) { s += "no check-ins"; $("#readout").innerHTML = s; return; }
+  s += r.n + " check-in" + (r.n > 1 ? "s" : "") + "<br>";
+  const bits = Object.keys(SCOL).filter(k => r.v[k] != null && isOn(k))
+    .map(k => ITEM[k].label.toLowerCase() + " <b>" + r.v[k].toFixed(1) + "</b>");
+  if (r.sleep) bits.unshift("slept <b>" + Math.floor(r.sleep.hours) + "h " +
+    pad(Math.round((r.sleep.hours % 1) * 60)) + "m</b>");
+  s += bits.join(" &nbsp;·&nbsp; ");
+  if (r.v.pain != null) s += '<br><span style="color:var(--high-2)">pain <b>' + r.v.pain.toFixed(1) + "</b>" +
+    (r.sites.length ? " · " + esc(r.sites.join(", ").toLowerCase()) : "") +
+    (r.kinds.length ? " · " + esc(r.kinds.join(", ").toLowerCase()) : "") + "</span>";
+  if (r.warns.length) s += '<br><span style="color:var(--warn)">' + esc(r.warns.join(", ")) + "</span>";
+  if (r.tags.length) s += "<br>" + esc(r.tags.join(", "));
+  const ino = Object.keys(r.inotes);
+  if (ino.length) s += '<br><span style="color:var(--ink-3)">' +
+    ino.map(k => esc((ITEM[k] ? ITEM[k].label.toLowerCase() : k) + ": " + r.inotes[k])).join(" · ") + "</span>";
+  if (r.notes.length) s += '<br><span style="color:var(--ink-3)">' + esc(r.notes.join(" / ")) + "</span>";
+  $("#readout").innerHTML = s;
+}
+
+/* ============================================================
+   PATTERNS
+   ============================================================ */
+function corrRow(label, r, n, note) {
+  const mag = Math.abs(r), w = mag * 50;
+  const col = r > 0 ? "var(--high-1)" : "var(--low-1)";
+  const strength = mag >= .6 ? "strong" : mag >= .4 ? "moderate" : mag >= .25 ? "weak" : "none to speak of";
+  return '<div class="corr"><div class="corrhead"><span class="n">' + esc(label) + '</span>' +
+    '<span class="r" style="color:' + col + '">' + (r > 0 ? "+" : "") + r.toFixed(2) + "</span></div>" +
+    '<div class="corrbar"><div class="z"></div><div class="b" style="background:' + col + ";" +
+      (r > 0 ? "left:50%;width:" + w + "%" : "right:50%;width:" + w + "%") + '"></div></div>' +
+    '<div class="corrnote">' + strength + " · " + n + " days" + (note ? " · " + esc(note) : "") + "</div></div>";
+}
+function renderPatterns() {
+  const rows = daily(0);
+  const MIN = 8;
+  // same day vs mood
+  const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key).concat(["sleep", "day"]);
+  let list = [];
+  cands.forEach(k => {
+    const p = pair(rows, k, "mood", 0);
+    if (p.r != null && p.n >= MIN) list.push({ k, r: p.r, n: p.n,
+      label: k === "sleep" ? "Hours slept" : k === "day" ? "Daylight hours" : ITEM[k].label });
+  });
+  list.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+  $("#corrSame").innerHTML = list.length
+    ? list.map(x => corrRow(x.label, x.r, x.n)).join("")
+    : '<div class="empty"><b>Not enough overlap yet</b>Needs 8 days where both are logged. ' +
+      'Two or three weeks of check-ins is usually enough to start.</div>';
+  // lagged sleep
+  let lag = [];
+  [0, 1, 2, 3].forEach(L => {
+    const p = pair(rows, "sleep", "mood", L);
+    if (p.r != null && p.n >= MIN) lag.push({ L, r: p.r, n: p.n });
+    ["irrit", "energy", "focus"].forEach(k => {
+      if (L === 0 || !isOn(k)) return;
+      const q = pair(rows, "sleep", k, L);
+      if (q.r != null && q.n >= MIN) lag.push({ L, r: q.r, n: q.n, k });
+    });
+  });
+  $("#corrLag").innerHTML = lag.length
+    ? lag.map(x => corrRow("Sleep → " + (x.k ? ITEM[x.k].label.toLowerCase() : "mood") +
+        (x.L ? ", " + x.L + " day" + (x.L > 1 ? "s" : "") + " later" : ", same day"), x.r, x.n)).join("")
+    : '<div class="empty"><b>Needs more nights</b>Log sleep each morning; this fills in after about two weeks.</div>';
+  // tags
+  const withMood = rows.filter(r => r.v.mood != null);
+  const allT = {};
+  withMood.forEach(r => r.tags.forEach(t => allT[t] = (allT[t] || 0) + 1));
+  const timp = Object.keys(allT).filter(t => allT[t] >= 3).map(t => {
+    const a = withMood.filter(r => r.tags.indexOf(t) > -1).map(r => r.v.mood);
+    const b = withMood.filter(r => r.tags.indexOf(t) < 0).map(r => r.v.mood);
+    if (!a.length || !b.length) return null;
+    const ma = a.reduce((x, y) => x + y, 0) / a.length, mb = b.reduce((x, y) => x + y, 0) / b.length;
+    return { t, ma, mb, d: ma - mb, n: a.length };
+  }).filter(Boolean).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+  $("#tagImpact").innerHTML = timp.length
+    ? '<div class="scroll"><table class="tbl"><tr><th>Tag</th><th>Days</th><th>Mood with</th>' +
+      '<th>Without</th><th>Shift</th></tr>' + timp.map(x =>
+        "<tr><td>" + esc(x.t) + "</td><td>" + x.n + "</td><td>" + x.ma.toFixed(1) + "</td><td>" +
+        x.mb.toFixed(1) + '</td><td style="color:' + (x.d < 0 ? "var(--low-1)" : "var(--high-1)") + '">' +
+        (x.d > 0 ? "+" : "") + x.d.toFixed(1) + "</td></tr>").join("") + "</table></div>" +
+      '<div class="mini">Only tags used on 3+ days appear. Small samples swing wildly.</div>'
+    : '<div class="empty"><b>No tags used enough yet</b>Tag what happened on each check-in — ' +
+      'this table is where the trigger hunting actually pays off.</div>';
+  renderFlags(rows);
+}
+function renderFlags(rows) {
+  const recent = rows.slice(-14).filter(r => r.n);
+  const out = [];
+  const last = n => rows.slice(-n).filter(r => r.n);
+  // short sleep run + high energy
+  const sl = rows.slice(-5).filter(r => r.sleep);
+  const shortRun = sl.filter(r => r.sleep.hours < 6).length;
+  const hiE = rows.slice(-5).filter(r => r.v.energy != null && r.v.energy >= 7).length;
+  if (shortRun >= 2 && hiE >= 2) out.push(["hi",
+    "Short sleep with high energy",
+    shortRun + " nights under 6 hours in the last 5, alongside elevated energy. " +
+    "Sleep loss that doesn't cost you energy is the pattern most worth flagging early."]);
+  // sustained elevation
+  const el = last(5).filter(r => r.v.mood != null && r.v.mood >= 8).length;
+  if (el >= 3) out.push(["hi", "Mood at 8+ for several days",
+    el + " of the last 5 logged days. Worth noting when it started and what changed just before."]);
+  // sustained low
+  const lo = last(7).filter(r => r.v.mood != null && r.v.mood <= 3).length;
+  if (lo >= 4) out.push(["", "Mood at 3 or below for a stretch",
+    lo + " of the last 7 logged days. If this holds another week it's worth a call rather than a wait."]);
+  // mixed features
+  const mx = last(7).filter(r => r.v.mood != null && r.v.irrit != null && r.v.mood <= 4 && r.v.irrit >= 7).length;
+  if (mx >= 2) out.push(["hi", "Low mood with high irritability",
+    mx + " days in the last week. Mixed states are easy to miss and worth naming to your prescriber specifically."]);
+  // med gaps
+  const mg = last(7).filter(r => r.meds != null && r.meds < 1).length;
+  if (mg >= 3) out.push(["", "Doses missed on " + mg + " of the last 7 days",
+    "Adherence gaps make everything else on these charts harder to read."]);
+  // bedtime drift
+  const beds = rows.slice(-10).filter(r => r.sleep && r.sleep.bed).map(r => {
+    const m = minsOf(r.sleep.bed); return m > 720 ? m - 1440 : m; });
+  if (beds.length >= 5) {
+    const mn = Math.min.apply(null, beds), mx2 = Math.max.apply(null, beds);
+    if (mx2 - mn >= 150) out.push(["", "Bedtime swinging by " + Math.round((mx2 - mn) / 60) + "+ hours",
+      "Irregular sleep timing is one of the more actionable things on this whole screen."]);
+  }
+  // sustained pain
+  const ph = last(7).filter(r => r.v.pain != null && r.v.pain >= 7);
+  if (ph.length >= 3) {
+    const sites = {}; ph.forEach(r => r.sites.forEach(s => sites[s] = (sites[s] || 0) + 1));
+    const top = Object.keys(sites).sort((a, b) => sites[b] - sites[a]).slice(0, 3);
+    out.push(["", "Pain at 7+ on " + ph.length + " of the last 7 days",
+      (top.length ? "Mostly " + top.join(", ").toLowerCase() + ". " : "") +
+      "Sustained pain drags mood down on its own, which can look like a mood episode on these charts."]);
+  }
+  // warning signs frequency
+  const wn = {}; last(10).forEach(r => r.warns.forEach(w => wn[w] = (wn[w] || 0) + 1));
+  const rep = Object.keys(wn).filter(w => wn[w] >= 3);
+  if (rep.length) out.push(["", "Recurring early warning signs",
+    rep.map(w => w.toLowerCase() + " (" + wn[w] + "\u00d7)").join(", ") + " in the last 10 logged days."]);
+
+  $("#flags").innerHTML = out.length
+    ? out.map(f => '<div class="flag ' + f[0] + '"><b>' + esc(f[1]) + "</b><span>" + esc(f[2]) + "</span></div>").join("") +
+      '<div class="mini">Threshold checks, not a diagnosis. Screenshot this before an appointment.</div>'
+    : (rows.filter(r => r.n).length < 5
+      ? '<div class="empty"><b>Nothing to check yet</b>These start after about a week of entries.</div>'
+      : '<div class="empty"><b>Nothing tripped</b>None of the threshold checks fired on recent entries.</div>');
+}
+
+/* ============================================================
+   EXPORT
+   ============================================================ */
+function csvCell(v) {
+  if (v == null) return "";
+  const s = String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function toCSV(head, rows) {
+  return [head.join(",")].concat(rows.map(r => r.map(csvCell).join(","))).join("\n");
+}
+function buildExport(kind) {
+  const on = ITEMS.filter(i => isOn(i.key));
+  if (kind === "wide") {
+    const rows = daily(0);
+    // one value column per item, then a matching note column for anything noted
+    const noted = on.filter(i => rows.some(r => r.inotes[i.key]));
+    const head = ["date", "checkins", "sleep_hours", "bedtime", "wake_time", "med_adherence", "daylight_hours"]
+      .concat(on.map(i => i.key))
+      .concat(["pain_sites", "pain_kinds"])
+      .concat(noted.map(i => i.key + "_note"))
+      .concat(["warning_signs", "tags", "notes"]);
+    return toCSV(head, rows.map(r => [r.date, r.n,
+      r.sleep ? r.sleep.hours.toFixed(2) : "", r.sleep ? r.sleep.bed || "" : "",
+      r.sleep ? r.sleep.wake || "" : "", r.meds == null ? "" : r.meds.toFixed(2), r.day.toFixed(2)]
+      .concat(on.map(i => r.v[i.key] == null ? "" : r.v[i.key].toFixed(2)))
+      .concat([r.sites.join("; "), r.kinds.join("; ")])
+      .concat(noted.map(i => r.inotes[i.key] || ""))
+      .concat([r.warns.join("; "), r.tags.join("; "), r.notes.join(" | ")])));
+  }
+  if (kind === "long") {
+    const out = [];
+    ENTRIES.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0).forEach(e => {
+      const w = winById(e.win);
+      Object.keys(e.v).forEach(k => { if (e.v[k] != null)
+        out.push([e.date, w.label, w.time, e.ts, k, ITEM[k] ? ITEM[k].label : k, e.v[k],
+          ITEM[k] ? ITEM[k].anchor : "", (e.n && e.n[k]) || ""]); });
+      // a note with no rating still deserves a row
+      if (e.n) Object.keys(e.n).forEach(k => { if (e.v[k] == null && e.n[k])
+        out.push([e.date, w.label, w.time, e.ts, k, ITEM[k] ? ITEM[k].label : k, "",
+          ITEM[k] ? ITEM[k].anchor : "", e.n[k]]); });
+    });
+    return toCSV(["date", "checkin", "scheduled_time", "logged_at", "item_key", "item", "value",
+      "scale_anchor", "note"], out);
+  }
+  if (kind === "pain") {
+    const out = [];
+    ENTRIES.slice().sort((a, b) => a.date < b.date ? -1 : 1).forEach(e => {
+      const hasP = e.v.pain != null || e.v.painworst != null || e.v.painlimit != null ||
+        (e.pain && ((e.pain.sites || []).length || (e.pain.kinds || []).length));
+      if (!hasP) return;
+      const w = winById(e.win);
+      out.push([e.date, w.label,
+        e.v.pain == null ? "" : e.v.pain,
+        e.v.pain == null ? "" : (PAIN_WORDS[e.v.pain] || ""),
+        e.v.painworst == null ? "" : e.v.painworst,
+        e.v.painlimit == null ? "" : e.v.painlimit,
+        ((e.pain && e.pain.sites) || []).join("; "),
+        ((e.pain && e.pain.kinds) || []).join("; "),
+        [(e.n && e.n.pain) || "", (e.n && e.n.painworst) || "", (e.n && e.n.painlimit) || ""]
+          .filter(Boolean).join(" | "),
+        e.v.mood == null ? "" : e.v.mood,
+        e.v.tension == null ? "" : e.v.tension]);
+    });
+    return toCSV(["date", "checkin", "pain_now", "descriptor", "pain_worst", "interference",
+      "sites", "qualities", "pain_notes", "mood", "muscle_tension"], out);
+  }
+  if (kind === "notes") {
+    const out = [];
+    ENTRIES.slice().sort((a, b) => a.date < b.date ? -1 : 1).forEach(e => {
+      const w = winById(e.win);
+      if (e.n) Object.keys(e.n).forEach(k => { if (e.n[k])
+        out.push([e.date, w.label, k, ITEM[k] ? ITEM[k].label : k,
+          e.v[k] == null ? "" : e.v[k], e.n[k]]); });
+      if (e.note) out.push([e.date, w.label, "_general", "General note", "", e.note]);
+    });
+    return toCSV(["date", "checkin", "item_key", "item", "value", "note"], out);
+  }
+  if (kind === "sleep") {
+    const out = [];
+    ENTRIES.filter(e => e.sleep && e.sleep.h != null).sort((a, b) => a.date < b.date ? -1 : 1).forEach(e => {
+      const h = e.sleep.h + (e.sleep.m || 0) / 60;
+      out.push([e.date, e.sleep.h, e.sleep.m || 0, h.toFixed(2), e.sleep.bed || "", e.sleep.wake || "",
+        e.v.sleepq == null ? "" : e.v.sleepq, e.v.wakefeel == null ? "" : e.v.wakefeel,
+        e.v.mood == null ? "" : e.v.mood]);
+    });
+    return toCSV(["date", "hours", "minutes", "total_hours", "bedtime", "wake_time",
+      "sleep_quality", "waking_mood", "morning_mood"], out);
+  }
+  // events
+  const out = [];
+  ENTRIES.forEach(e => {
+    const w = winById(e.win);
+    (e.tags || []).forEach(t => out.push([e.date, w.label, "tag", t]));
+    (e.warns || []).forEach(t => out.push([e.date, w.label, "warning_sign", t]));
+  });
+  Object.keys(STATE.skipped).forEach(k => {
+    const p = k.split("|");
+    out.push([p[0], winById(p[1]).label, "skipped",
+      STATE.skipped[k] === true ? "" : STATE.skipped[k]]);
+  });
+  out.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  return toCSV(["date", "checkin", "type", "value"], out);
+}
+function download(name, text, mime) {
+  try {
+    const b = new Blob([text], { type: (mime || "text/csv") + ";charset=utf-8" });
+    const u = URL.createObjectURL(b), a = document.createElement("a");
+    a.href = u; a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(u); a.remove(); }, 400);
+    return true;
+  } catch (e) { return false; }
+}
+
+function printSummary() {
+  const rows = daily(90).filter(r => r.n);
+  const w = window.open("", "_blank");
+  if (!w) { toast("Popup blocked — use Show text instead", true); return; }
+  const on = ITEMS.filter(i => isOn(i.key) && (i.grp === "core" || i.key === "pain"));
+  const avg = k => { const v = rows.map(r => r.v[k]).filter(x => x != null);
+    return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : "—"; };
+  const sl = rows.filter(r => r.sleep);
+  const slAvg = sl.length ? (sl.reduce((a, r) => a + r.sleep.hours, 0) / sl.length).toFixed(1) : "—";
+  w.document.write('<!doctype html><meta charset="utf-8"><title>Baseline summary</title><style>' +
+    'body{font:13px/1.5 -apple-system,system-ui,sans-serif;margin:32px;color:#111;max-width:720px}' +
+    'h1{font-size:19px;margin:0 0 3px}h2{font-size:14px;margin:22px 0 7px;border-bottom:1px solid #ccc;padding-bottom:3px}' +
+    'table{border-collapse:collapse;width:100%;font-size:11.5px}th,td{text-align:left;padding:4px 7px 4px 0;' +
+    'border-bottom:1px solid #eee}th{border-bottom:1px solid #999;font-size:10px;text-transform:uppercase;letter-spacing:.08em}' +
+    '.m{font-family:ui-monospace,monospace}.sm{color:#666;font-size:11px}</style>' +
+    "<h1>Baseline &mdash; tracking summary</h1>" +
+    '<div class="sm">Generated ' + new Date().toLocaleString() + " &middot; last 90 days &middot; " +
+    rows.length + " days with entries</div>" +
+    "<h2>Averages</h2><table><tr>" + on.map(i => "<th>" + i.label + "</th>").join("") +
+    "<th>Sleep</th></tr><tr>" + on.map(i => '<td class="m">' + avg(i.key) + "</td>").join("") +
+    '<td class="m">' + slAvg + "h</td></tr></table>" +
+    "<h2>Daily detail</h2><table><tr><th>Date</th><th>Sleep</th>" +
+    on.map(i => "<th>" + i.label.slice(0, 6) + "</th>").join("") + "<th>Warning signs / tags</th></tr>" +
+    rows.slice().reverse().map(r => "<tr><td>" + r.date + '</td><td class="m">' +
+      (r.sleep ? r.sleep.hours.toFixed(1) : "—") + "</td>" +
+      on.map(i => '<td class="m">' + (r.v[i.key] == null ? "—" : r.v[i.key].toFixed(1)) + "</td>").join("") +
+      '<td class="sm">' + esc(r.warns.concat(r.tags).join(", ")) + "</td></tr>").join("") + "</table>" +
+    '<div class="sm" style="margin-top:20px">Self-reported ratings, 1&ndash;10, where 5 is this person\'s ' +
+    'stated baseline. Not a clinical instrument.</div>');
+  w.document.close();
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
+}
+
+/* ============================================================
+   SETTINGS RENDER
+   ============================================================ */
+function renderCfg() {
+  $("#winCfg").innerHTML = CFG.windows.map((w, i) =>
+    '<div class="sw"><div style="flex:1"><div class="t">' + esc(w.label) + "</div>" +
+    '<div class="d">' + (w.sleep ? "asks about sleep" : "mood and body only") + "</div></div>" +
+    '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="flex:0 0 116px"></div>').join("");
+  $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false");
+  // cloud panel
+  $("#cfUrl").value = CFG.cloud.url || "";
+  $("#cfUid").value = CFG.cloud.uid || "";
+  $("#togPush").setAttribute("aria-pressed", CFG.cloud.push ? "true" : "false");
+  $("#togSync").setAttribute("aria-pressed", CFG.cloud.sync ? "true" : "false");
+  $("#nagSel").value = String(CFG.nagMins || 20);
+  $("#nagLbl").textContent = CFG.nagMins || 20;
+  setDot("#dCloud", cloudBase() ? (CFG.cloud.push ? "ok" : "warn") : "");
+  setDot("#dPush", CFG.cloud.push ? "ok" : "");
+
+  const grpName = { core:"Core", body:"Body &amp; behavior", pain:"Pain", sleep:"Sleep" };
+  let h = "";
+  ["core", "body", "pain", "sleep"].forEach(g => {
+    h += '<div class="eyebrow" style="margin-top:16px">' + grpName[g] + "</div>";
+    h += ITEMS.filter(i => i.grp === g).map(i =>
+      '<div class="sw"><div style="flex:1"><div class="t">' + esc(i.label) + "</div>" +
+      '<div class="d">1 ' + esc(i.low) + " → 10 " + esc(i.high) + "</div></div>" +
+      '<button class="tog" data-item="' + i.key + '" aria-pressed="' + (isOn(i.key) ? "true" : "false") +
+      '"' + (i.key === "mood" ? " disabled style=opacity:.45" : "") + "></button></div>").join("");
+  });
+  $("#itemCfg").innerHTML = h;
+  $("#medList").value = CFG.meds || "";
+  $("#cfgLat").value = CFG.lat;
+  const dl = dayLength(todayISO(), CFG.lat);
+  $("#latNote").textContent = "Today: " + dl.toFixed(1) + " h of daylight at " + CFG.lat + "°.";
+  $("#notifState").textContent = !("Notification" in window) ? "Not supported in this browser"
+    : Notification.permission === "granted" ? "Allowed"
+    : Notification.permission === "denied" ? "Blocked in browser settings" : "Not enabled";
+  $("#notifBtn").style.display = ("Notification" in window && Notification.permission === "default") ? "" : "none";
+  renderEntries();
+}
+function renderEntries() {
+  const es = ENTRIES.slice().sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0).slice(0, 60);
+  $("#entCount").textContent = ENTRIES.length + " saved · stored on this device only · showing newest 60";
+  if (!es.length) { $("#entTbl").innerHTML = '<tr><td class="sm">Nothing saved yet.</td></tr>'; return; }
+  $("#entTbl").innerHTML = "<tr><th>Date</th><th>When</th><th>Mood</th><th>Sleep</th><th>Flags</th><th></th></tr>" +
+    es.map(e => "<tr><td>" + e.date + "</td><td>" + esc(winById(e.win).label) + "</td><td>" +
+      (e.v.mood == null ? "—" : e.v.mood) + "</td><td>" +
+      (e.sleep && e.sleep.h != null ? e.sleep.h + "h" + pad(e.sleep.m || 0) : "—") + "</td><td>" +
+      ((e.warns || []).length + (e.tags || []).length || "—") +
+      '</td><td><button class="btn sm gho" data-edit="' + e.date + "|" + e.win + '">Edit</button></td></tr>').join("");
+}
+
+/* ============================================================
+   NOTIFICATIONS (in-session only — see note in Data tab)
+   ============================================================ */
+let notifTimers = [];
+function scheduleNotifs() {
+  notifTimers.forEach(clearTimeout); notifTimers = [];
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const now = nowMins();
+  CFG.windows.forEach(w => {
+    let delta = minsOf(w.time) - now; if (delta < 0) delta += 1440;
+    notifTimers.push(setTimeout(() => {
+      if (dueWindows(todayISO()).some(x => x.id === w.id)) {
+        try { new Notification(w.label + " check-in", {
+          body: "Still open. It'll keep asking until you log or skip it.",
+          tag: "baseline-" + w.id, requireInteraction: true }); } catch (e) {}
+      }
+      scheduleNotifs();
+    }, delta * 60000 + 1000));
+  });
+  // re-nag every 20 min while something is open
+  notifTimers.push(setInterval(() => {
+    const due = dueWindows(todayISO());
+    if (!due.length || !CFG.nag) return;
+    const w = due[due.length - 1];
+    try { new Notification(w.label + " check-in still open", {
+      body: "Two minutes. Or skip it and note why.", tag: "baseline-nag", renotify: true }); } catch (e) {}
+  }, 20 * 60000));
+}
+
+/* ============================================================
+   CLOUDFLARE — sticky push + optional KV snapshots
+   ============================================================ */
+let swReg = null;
+const cloudBase = () => (CFG.cloud.url || "").trim().replace(/\/+$/, "");
+function cloudLog(msg, keep) {
+  const el = $("#cfLog"); if (!el) return;
+  const line = new Date().toLocaleTimeString() + "  " + msg;
+  el.textContent = keep ? (line + "\n" + el.textContent).split("\n").slice(0, 14).join("\n") : line;
+}
+function setDot(id, cls) { const e = $(id); if (e) e.className = "dot" + (cls ? " " + cls : ""); }
+function b64ToU8(s) {
+  const p = "=".repeat((4 - s.length % 4) % 4);
+  const raw = atob((s + p).replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+async function api(path, opts) {
+  const base = cloudBase();
+  if (!base) throw new Error("no worker url");
+  const r = await fetch(base + path, Object.assign({ cache: "no-store" }, opts || {}));
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const ct = r.headers.get("content-type") || "";
+  return ct.indexOf("json") > -1 ? r.json() : r.text();
+}
+
+async function swRegister() {
+  if (!("serviceWorker" in navigator)) { setDot("#dSw", "bad"); return null; }
+  if (location.protocol !== "https:" && location.hostname !== "localhost") {
+    setDot("#dSw", "warn"); cloudLog("service worker needs https — push is off until deployed"); return null;
+  }
+  try {
+    swReg = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+    await navigator.serviceWorker.ready;
+    setDot("#dSw", "ok");
+    return swReg;
+  } catch (e) { setDot("#dSw", "bad"); cloudLog("service worker failed: " + e.message); return null; }
+}
+
+async function pushEnable() {
+  if (!cloudBase()) { toast("Add your Worker URL first", true); return false; }
+  if (!CFG.cloud.uid) { toast("Pick a device id first", true); return false; }
+  if (!("Notification" in window) || !("PushManager" in window)) {
+    cloudLog("this browser has no push support"); setDot("#dPush", "bad"); return false;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") { cloudLog("notifications " + perm); setDot("#dPush", "bad"); return false; }
+  const reg = swReg || await swRegister();
+  if (!reg) return false;
+
+  let pub = "";
+  try { const v = await api("/vapid"); pub = v.publicKey || ""; } catch (e) {}
+  if (!pub) { cloudLog("worker didn't return a VAPID key — check VAPID_PUBLIC is set"); setDot("#dCloud","bad"); return false; }
+
+  let sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    const cur = b64url(sub.options && sub.options.applicationServerKey);
+    if (cur && cur !== pub) { await sub.unsubscribe(); sub = null; }   // key rotated
+  }
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true, applicationServerKey: b64ToU8(pub)
+    }).catch(e => { cloudLog("subscribe failed: " + e.message); return null; });
+  }
+  if (!sub) { setDot("#dPush", "bad"); return false; }
+
+  await api("/subscribe", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      uid: CFG.cloud.uid, sub: sub.toJSON(),
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time })),
+      nagMins: CFG.nagMins
+    })
+  });
+  // give the service worker what it needs to answer /due after being killed
+  if (reg.active) reg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
+  CFG.cloud.push = true; await saveCfg();
+  setDot("#dPush", "ok"); setDot("#dCloud", "ok");
+  cloudLog("subscribed — reminders will fire with the app closed", true);
+  await reportState();
+  return true;
+}
+function b64url(buf) {
+  if (!buf) return "";
+  const b = new Uint8Array(buf); let s = "";
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function pushDisable() {
+  try {
+    const reg = swReg || await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub) await sub.unsubscribe();
+  } catch (e) {}
+  try { await api("/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ uid: CFG.cloud.uid }) }); } catch (e) {}
+  CFG.cloud.push = false; await saveCfg();
+  setDot("#dPush", ""); cloudLog("unsubscribed", true);
+}
+
+/* tell the worker which check-ins are closed so it stops nagging */
+async function reportState() {
+  if (!cloudBase() || !CFG.cloud.uid || !CFG.cloud.push) return;
+  const d = todayISO();
+  const done = ENTRIES.filter(e => e.date === d).map(e => e.win);
+  const skipped = Object.keys(STATE.skipped)
+    .filter(k => k.indexOf(d + "|") === 0).map(k => k.split("|")[1]);
+  try {
+    await api("/state", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: CFG.cloud.uid, date: d, done, skipped, snoozeUntil: 0 }) });
+    setDot("#dCloud", "ok");
+  } catch (e) { setDot("#dCloud", "warn"); cloudLog("state sync failed: " + e.message, true); }
+}
+
+async function cloudUpload(quiet) {
+  if (!cloudBase() || !CFG.cloud.uid) { if (!quiet) toast("Add your Worker URL first", true); return; }
+  try {
+    const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: CFG, entries: ENTRIES, state: STATE });
+    const r = await api("/backup?uid=" + encodeURIComponent(CFG.cloud.uid),
+      { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    setDot("#dCloud", "ok");
+    cloudLog("uploaded " + (r.bytes / 1024).toFixed(1) + " KB / " + ENTRIES.length + " entries", true);
+    if (!quiet) toast("Uploaded to Cloudflare");
+  } catch (e) { setDot("#dCloud", "warn"); cloudLog("upload failed: " + e.message, true);
+    if (!quiet) toast("Upload failed — see the log", true); }
+}
+async function cloudDownload() {
+  if (!cloudBase() || !CFG.cloud.uid) { toast("Add your Worker URL first", true); return; }
+  try {
+    const o = await api("/backup?uid=" + encodeURIComponent(CFG.cloud.uid));
+    if (!o || !Array.isArray(o.entries)) throw new Error("no snapshot stored");
+    if (!confirm("Replace the " + ENTRIES.length + " entries on this device with " +
+        o.entries.length + " from Cloudflare?\n\nSnapshot taken " +
+        new Date(o.at).toLocaleString())) return;
+    ENTRIES = o.entries;
+    if (o.state) STATE = o.state;
+    if (!STATE.skipped) STATE.skipped = {};
+    if (o.cfg) { const keepCloud = CFG.cloud; Object.assign(CFG, o.cfg); CFG.cloud = keepCloud; }
+    await saveEnt(); await saveState(); await saveCfg();
+    fillWinSelect(); setDraft(todayISO(), sleepWin().id); refreshDue(); renderCfg();
+    cloudLog("restored " + ENTRIES.length + " entries", true); toast("Restored from Cloudflare");
+  } catch (e) { cloudLog("restore failed: " + e.message, true); toast("Restore failed — see the log", true); }
+}
+
+/* ============================================================
+   WIRING
+   ============================================================ */
+function show(v) {
+  $$(".view").forEach(s => s.classList.toggle("on", s.id === "v-" + v));
+  $$("nav button").forEach(b => b.setAttribute("aria-current", b.dataset.v === v ? "true" : "false"));
+  window.scrollTo(0, 0);
+  if (v === "chart") { drawMain(); drawSleep(); drawDay(); drawCoverage(); }
+  if (v === "pat") renderPatterns();
+  if (v === "data") renderCfg();
+}
+
+function commit(skip, reason) {
+  const key = draft.date + "|" + draft.win;
+  if (skip) {
+    STATE.skipped[key] = reason || true; saveState();
+    ENTRIES = ENTRIES.filter(x => !(x.date === draft.date && x.win === draft.win)); saveEnt();
+    toast("Marked skipped");
+  } else {
+    const anyVal = Object.keys(draft.v).some(k => draft.v[k] != null);
+    const anySleep = draft.sleep && draft.sleep.h != null && winById(draft.win).sleep;
+    const anyNote = Object.keys(draft.n).some(k => draft.n[k] && draft.n[k].trim());
+    const anyPain = draft.pain.sites.length || draft.pain.kinds.length;
+    if (!anyVal && !anySleep && !anyNote && !anyPain &&
+        !draft.tags.length && !draft.warns.length && !draft.note) {
+      toast("Nothing filled in yet", true); return;
+    }
+    draft.note = $("#eNote").value.trim();
+    Object.keys(draft.n).forEach(k => {                   // drop empty note boxes
+      if (!draft.n[k] || !draft.n[k].trim()) delete draft.n[k]; else draft.n[k] = draft.n[k].trim();
+    });
+    if (winById(draft.win).sleep) {
+      draft.sleep = Object.assign(draft.sleep || {}, { h: wheelVal($("#wH")), m: wheelVal($("#wM")),
+        bed: $("#sBed").value || "", wake: $("#sWake").value || "" });
+    } else draft.sleep = null;
+    draft.ts = new Date().toISOString();
+    delete STATE.skipped[key]; saveState();
+    const i = ENTRIES.findIndex(x => x.date === draft.date && x.win === draft.win);
+    if (i > -1) ENTRIES[i] = draft; else ENTRIES.push(draft);
+    saveEnt();
+    toast("Saved");
+  }
+  gateKey = null;
+  refreshDue();
+  reportState();                              // stops the worker nagging
+  if (CFG.cloud.sync) cloudUpload(true);
+  const due = dueWindows(todayISO());
+  setDraft(todayISO(), due.length ? due[due.length - 1].id : draft.win);
+}
+
+function init() {
+  fillWinSelect();
+  buildWheel($("#wH"), 14, 1);
+  buildWheel($("#wM"), 55, 5);
+  bindSliders($("#coreItems")); bindSliders($("#extraItems"));
+  bindSliders($("#sleepItems")); bindSliders($("#painItems"));
+
+  const due = dueWindows(todayISO());
+  setDraft(todayISO(), due.length ? due[due.length - 1].id : sleepWin().id);
+  refreshDue();
+  scheduleNotifs();
+
+  $$("nav button").forEach(b => b.onclick = () => show(b.dataset.v));
+
+  $("#eDate").onchange = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
+  $("#eWin").onchange  = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
+  $("#sBed").onchange  = () => { draft.sleep = Object.assign(draft.sleep || {}, { bed: $("#sBed").value }); };
+  $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value }); };
+  $("#eNote").oninput  = () => { draft.note = $("#eNote").value; };
+
+  // typing in any per-item note box
+  document.addEventListener("input", ev => {
+    const k = ev.target.dataset && ev.target.dataset.nt;
+    if (!k || !draft) return;
+    draft.n[k] = ev.target.value;
+    const btn = document.querySelector('[data-note="' + k + '"]');
+    if (btn) btn.lastChild.textContent = ev.target.value.trim() ? "note added" : "hide note";
+    if (ITEM[k] && ITEM[k].grp === "pain") painSummary();
+  });
+
+  document.addEventListener("click", ev => {
+    // expand / collapse a note box
+    const nb = ev.target.closest("[data-note]");
+    if (nb) {
+      const k = nb.dataset.note, wrap = document.querySelector('[data-nw="' + k + '"]');
+      const open = wrap.style.display === "none";
+      noteOpen[k] = open;
+      wrap.style.display = open ? "" : "none";
+      nb.setAttribute("aria-pressed", open ? "true" : "false");
+      nb.querySelector("svg").innerHTML = open ? '<path d="M5 12h14"/>' : '<path d="M12 5v14M5 12h14"/>';
+      const has = draft.n[k] && draft.n[k].trim();
+      nb.lastChild.textContent = has ? "note added" : open ? "hide note" : "what's going on";
+      if (open) { const ta = wrap.querySelector("textarea"); if (ta) ta.focus(); }
+      return;
+    }
+    const t = ev.target.closest("[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    if (!t) return;
+    if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
+      i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
+      t.setAttribute("aria-pressed", i > -1 ? "false" : "true"); painSummary(); return; }
+    if (t.dataset.kind) { const v = t.dataset.kind, i = draft.pain.kinds.indexOf(v);
+      i > -1 ? draft.pain.kinds.splice(i, 1) : draft.pain.kinds.push(v);
+      t.setAttribute("aria-pressed", i > -1 ? "false" : "true"); painSummary(); return; }
+    if (t.dataset.tag) { const v = t.dataset.tag, i = draft.tags.indexOf(v);
+      i > -1 ? draft.tags.splice(i, 1) : draft.tags.push(v);
+      t.setAttribute("aria-pressed", i > -1 ? "false" : "true"); return; }
+    if (t.dataset.warn) { const v = t.dataset.warn, i = draft.warns.indexOf(v);
+      i > -1 ? draft.warns.splice(i, 1) : draft.warns.push(v);
+      t.setAttribute("aria-pressed", i > -1 ? "false" : "true"); return; }
+    if (t.dataset.med) { const i = t.dataset.med; draft.meds = draft.meds || {};
+      draft.meds[i] = !draft.meds[i]; t.setAttribute("aria-pressed", draft.meds[i] ? "true" : "false"); return; }
+    if (t.dataset.s) { series[t.dataset.s] = !series[t.dataset.s]; drawMain(); return; }
+    if (t.dataset.d != null && t.closest("#rangeSeg")) {
+      range = +t.dataset.d;
+      $$("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", b === t ? "true" : "false"));
+      drawMain(); drawSleep(); drawDay(); drawCoverage(); return; }
+    if (t.dataset.exp) {
+      const csv = buildExport(t.dataset.exp); lastExport = csv;
+      const name = "baseline-" + t.dataset.exp + "-" + todayISO() + ".csv";
+      download(name, csv) ? toast("Downloaded " + name)
+        : (($("#expBox").style.display = ""), $("#expBox").value = csv, toast("Download blocked — copy the text", true));
+      return; }
+    if (t.dataset.item) { const k = t.dataset.item;
+      const i = CFG.off.indexOf(k); i > -1 ? CFG.off.splice(i, 1) : CFG.off.push(k);
+      t.setAttribute("aria-pressed", i > -1 ? "true" : "false"); saveCfg(); renderLog(); return; }
+    if (t.dataset.edit) { const p = t.dataset.edit.split("|"); setDraft(p[0], p[1]); show("log"); return; }
+  });
+
+  $("#saveBtn").onclick = () => commit(false);
+  $("#skipBtn").onclick = () => { const r = prompt("Skip this check-in. Why? (optional — asleep, at work, forgot)");
+    if (r === null) return; commit(true, r.trim()); };
+
+  $("#gateGo").onclick = () => { $("#gate").classList.remove("on");
+    const due = dueWindows(todayISO());
+    if (due.length) setDraft(todayISO(), due[due.length - 1].id);
+    show("log"); };
+  $("#gateSkip").onclick = () => { const due = dueWindows(todayISO());
+    if (!due.length) { $("#gate").classList.remove("on"); return; }
+    const w = due[due.length - 1];
+    const r = prompt("Skip the " + w.label.toLowerCase() + " check-in. Why? (optional)");
+    if (r === null) return;
+    STATE.skipped[todayISO() + "|" + w.id] = r.trim() || true; saveState();
+    $("#gate").classList.remove("on"); gateKey = null; refreshDue(); };
+
+  $("#mainCh").addEventListener("pointerdown", ev => {
+    const rows = $("#mainCh")._rows; if (!rows || !rows.length) return;
+    const r = $("#mainCh").getBoundingClientRect();
+    const px = (ev.clientX - r.left) / r.width * W;
+    let best = 0, bd = 1e9;
+    rows.forEach((_, i) => { const d = Math.abs(xAt(i, rows.length) - px); if (d < bd) { bd = d; best = i; } });
+    readoutFor(best);
+  });
+
+  $("#togNag").onclick = () => { CFG.nag = !CFG.nag;
+    $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false"); saveCfg(); refreshDue(); };
+  $("#notifBtn").onclick = () => { if (!("Notification" in window)) return;
+    Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
+  $("#winCfg").addEventListener("change", ev => { const i = ev.target.dataset.wt;
+    if (i == null) return; CFG.windows[+i].time = ev.target.value; saveCfg(); fillWinSelect();
+    $("#eWin").value = draft.win; refreshDue(); scheduleNotifs(); });
+  $("#medSave").onclick = () => { CFG.meds = $("#medList").value; saveCfg(); renderLog(); toast("Med list saved"); };
+  $("#medChange").onclick = () => {
+    if (draft.tags.indexOf("Med change") < 0) draft.tags.push("Med change");
+    renderLog(); show("log"); toast("Tagged — save the check-in to record it"); };
+  $("#cfgLat").onchange = () => { const v = parseFloat($("#cfgLat").value);
+    if (!isNaN(v) && v > -67 && v < 67) { CFG.lat = v; saveCfg(); renderCfg(); } };
+
+  $("#showTxt").onclick = () => { const b = $("#expBox");
+    if (!lastExport) lastExport = buildExport("wide");
+    b.style.display = b.style.display === "none" ? "" : "none"; b.value = lastExport; };
+  $("#copyTxt").onclick = async () => { if (!lastExport) lastExport = buildExport("wide");
+    try { await navigator.clipboard.writeText(lastExport); toast("Copied"); }
+    catch (e) { $("#expBox").style.display = ""; $("#expBox").value = lastExport;
+      $("#expBox").select(); toast("Select and copy manually", true); } };
+  $("#printBtn").onclick = printSummary;
+
+  const backup = () => JSON.stringify({ v:1, at:new Date().toISOString(), cfg:CFG, entries:ENTRIES, state:STATE });
+  $("#bkExport").onclick = () => { const t = backup();
+    download("baseline-backup-" + todayISO() + ".json", t, "application/json")
+      ? toast("Backup downloaded")
+      : (($("#bkBox").style.display = ""), $("#bkBox").value = t, toast("Blocked — copy the text", true)); };
+  $("#bkShow").onclick = () => { const b = $("#bkBox");
+    b.style.display = b.style.display === "none" ? "" : "none"; b.value = backup(); };
+  $("#bkImport").onclick = async () => {
+    const b = $("#bkBox");
+    if (b.style.display === "none" || !b.value.trim()) { b.style.display = ""; b.value = "";
+      toast("Paste a backup here, then press Restore again", true); return; }
+    try {
+      const o = JSON.parse(b.value);
+      if (!o || !Array.isArray(o.entries)) throw new Error("bad");
+      if (!confirm("Replace " + ENTRIES.length + " entries with " + o.entries.length + " from this backup?")) return;
+      ENTRIES = o.entries; if (o.cfg) Object.assign(CFG, o.cfg); if (o.state) STATE = o.state;
+      if (!STATE.skipped) STATE.skipped = {};
+      await saveEnt(); await saveCfg(); await saveState();
+      fillWinSelect(); setDraft(todayISO(), sleepWin().id); refreshDue(); renderCfg(); toast("Restored");
+    } catch (e) { toast("That isn't a valid backup", true); }
+  };
+  $("#wipeBtn").onclick = async () => {
+    if (!confirm("Erase all " + ENTRIES.length + " entries? Download a backup first — this cannot be undone.")) return;
+    if (!confirm("Really erase everything?")) return;
+    ENTRIES = []; STATE = { skipped: {} }; await saveEnt(); await saveState();
+    setDraft(todayISO(), sleepWin().id); refreshDue(); renderCfg(); toast("Erased");
+  };
+
+  /* ---- Cloudflare controls ---- */
+  $("#cfSave").onclick = async () => {
+    let u = $("#cfUrl").value.trim();
+    if (u && !/^https?:\/\//i.test(u)) u = "https://" + u;
+    CFG.cloud.url = u.replace(/\/+$/, "");
+    CFG.cloud.uid = ($("#cfUid").value.trim() || "").replace(/[^A-Za-z0-9_-]/g, "") || "device1";
+    $("#cfUrl").value = CFG.cloud.url; $("#cfUid").value = CFG.cloud.uid;
+    await saveCfg();
+    if (!CFG.cloud.url) { cloudLog("cleared"); setDot("#dCloud", ""); return; }
+    cloudLog("checking " + CFG.cloud.url + " …");
+    try {
+      const h = await api("/health");
+      setDot("#dCloud", "ok");
+      cloudLog("worker reachable" + (h.vapidPublic ? ", VAPID key present" : ", but VAPID_PUBLIC is not set"), true);
+      await swRegister();
+      if (h.vapidPublic) { const ok = await pushEnable();
+        $("#togPush").setAttribute("aria-pressed", ok ? "true" : "false"); }
+    } catch (e) { setDot("#dCloud", "bad"); cloudLog("cannot reach worker: " + e.message, true); }
+  };
+  $("#cfTest").onclick = async () => {
+    if (!CFG.cloud.push) { toast("Connect push first", true); return; }
+    try { const r = await api("/test", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: CFG.cloud.uid }) });
+      cloudLog("test push sent, push service returned " + r.status, true);
+      toast(r.ok ? "Test push sent" : "Push service said " + r.status, !r.ok);
+    } catch (e) { cloudLog("test failed: " + e.message, true); toast("Test failed", true); }
+  };
+  $("#cfOff").onclick = async () => { await pushDisable();
+    $("#togPush").setAttribute("aria-pressed", "false"); toast("Disconnected"); };
+  $("#togPush").onclick = async () => {
+    if (CFG.cloud.push) { await pushDisable(); $("#togPush").setAttribute("aria-pressed", "false"); }
+    else { const ok = await pushEnable(); $("#togPush").setAttribute("aria-pressed", ok ? "true" : "false"); }
+  };
+  $("#togSync").onclick = async () => {
+    CFG.cloud.sync = !CFG.cloud.sync;
+    $("#togSync").setAttribute("aria-pressed", CFG.cloud.sync ? "true" : "false");
+    await saveCfg();
+    if (CFG.cloud.sync) { cloudLog("snapshots on — uploading after every save", true); cloudUpload(true); }
+    else cloudLog("snapshots off", true);
+  };
+  $("#nagSel").onchange = async () => {
+    CFG.nagMins = +$("#nagSel").value; $("#nagLbl").textContent = CFG.nagMins;
+    await saveCfg();
+    if (CFG.cloud.push) { await pushEnable(); cloudLog("nag interval now " + CFG.nagMins + " min", true); }
+  };
+  $("#cfPush").onclick = () => cloudUpload(false);
+  $("#cfPull").onclick = () => cloudDownload();
+
+  /* notification tap -> jump to the open check-in */
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", ev => {
+      if (ev.data && ev.data.type === "open-checkin") {
+        const due = dueWindows(todayISO());
+        if (due.length) setDraft(todayISO(), due[due.length - 1].id);
+        show("log"); refreshDue();
+      }
+    });
+    swRegister().then(() => {
+      if (CFG.cloud.push && swReg && swReg.active)
+        swReg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
+    });
+  }
+  if (/[?&]due=1/.test(location.search)) {
+    const due = dueWindows(todayISO());
+    if (due.length) setDraft(todayISO(), due[due.length - 1].id);
+  }
+  reportState();
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { refreshDue(); reportState(); }
+  });
+  setInterval(refreshDue, 60000);
+}
+
+load().then(init).catch(e => {
+  document.querySelector("main").insertAdjacentHTML("afterbegin",
+    '<div class="card"><h2>Something went wrong starting up</h2><p class="sub">' + esc(e && e.message) + "</p></div>");
+});
+</script>
+</body>
+</html>
