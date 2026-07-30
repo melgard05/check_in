@@ -166,9 +166,10 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 label.fld{display:block;flex:1 1 130px}
 label.fld>span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
-input[type=text],input[type=time],input[type=date],input[type=number],select,textarea{
+input[type=text],input[type=password],input[type=time],input[type=date],input[type=number],select,textarea{
   width:100%;background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;
   font-size:15px;color:var(--ink);appearance:none}
+input[type=password]{letter-spacing:.18em;font-family:var(--mono);-webkit-text-security:disc}
 textarea{min-height:74px;resize:vertical;line-height:1.4}
 input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visible,.chip:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
@@ -704,7 +705,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 7;
+const BUILD = 8;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2349,8 +2350,8 @@ function commit(skip, reason) {
   }
   gateKey = null;
   refreshDue();
-  reportState();                              // stops the worker nagging
-  syncAll(true);                               // cloudflare and firebase, whichever are on
+  reportState();                              // stop the nagging straight away
+  syncAll(true).then(() => reportState());     // then report the merged picture
   const due = dueWindows(todayISO());
   setDraft(todayISO(), due.length ? due[due.length - 1].id : draft.win);
 }
@@ -2687,8 +2688,10 @@ function init() {
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden) return;
     const changed = await pullDue();
-    refreshDue(); reportState(); checkForNewBuild();
-    syncAll(true);
+    refreshDue(); checkForNewBuild();
+    await syncAll(true);        // pull entries first
+    await reportState();        // then report what we actually have
+    refreshDue();
     if (changed && !CFG.cloud.sync && !CFG.fb.on) toast("Already logged on your other device");
   });
   setInterval(refreshDue, 60000);
