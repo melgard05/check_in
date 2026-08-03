@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:12-->
+<!DOCTYPE html><!--build:13-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -165,6 +165,8 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
   color:var(--ink-2);font-size:13px;cursor:pointer}
 .chip[aria-pressed="true"]{background:#1f2a30;border-color:var(--accent);color:var(--accent)}
 .chip.ev[aria-pressed="true"]{background:#2b2119;border-color:var(--warn);color:var(--warn)}
+.chip.ctx[aria-pressed="true"]{background:#1b2733;border-color:#5fa8d4;color:#7fbde4}
+.chip.ctx.w[aria-pressed="true"]{background:#2a2333;border-color:#9b7fd4;color:#b6a0e4}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>*{min-width:0}
 label.fld{display:block;flex:1 1 130px}
@@ -283,7 +285,9 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
         <label class="fld" style="flex:1 1 120px"><span>Date</span><input type="date" id="eDate"></label>
         <label class="fld" style="flex:1 1 120px"><span>Check-in</span><select id="eWin"></select></label>
       </div>
-      <div class="mini" id="eStatus"></div>
+      <div class="eyebrow" style="margin:14px 0 8px">Where you were</div>
+      <div class="chips" id="ctxChips"></div>
+      <div class="mini" id="eStatus" style="margin-top:11px"></div>
     </div>
 
     <div id="sleepBlock" style="display:none">
@@ -450,6 +454,11 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
       <h2>Yesterday's sleep, today's mood</h2>
       <p class="sub">Sleep loss tends to show up in mood 1–3 days later, so same-day comparison hides it.</p>
       <div id="corrLag"></div>
+    </div>
+    <div class="card">
+      <h2>Work days vs time off</h2>
+      <p class="sub">Averages on days you worked against days you didn't. Needs 3+ of each.</p>
+      <div id="workSplit"></div>
     </div>
     <div class="card">
       <h2>Tag impact</h2>
@@ -741,6 +750,14 @@ const PAIN_SITES = ["Head","Jaw / face","Neck","Shoulders","Upper back","Lower b
 const PAIN_KINDS = ["Aching","Sharp / stabbing","Burning","Throbbing","Shooting / nerve",
   "Stiff","Cramping","Numb / tingling","Deep pressure","Sore to touch"];
 
+const CTX = [
+  { id:"work",   label:"At work",   work:true  },
+  { id:"remote", label:"Remote",    work:true  },
+  { id:"off",    label:"Day off",   work:false },
+  { id:"away",   label:"Away",      work:false }
+];
+const CTXBY = {}; CTX.forEach(c => CTXBY[c.id] = c);
+
 const TAGS = ["Conflict","Deadline / pressure","Travel","Missed meds","Poor sleep","Skipped meals",
   "Alcohol","Illness","Money stress","Big social event","Good news","Time outside","Overstimulated",
   "Doctor / therapy","Med change"];
@@ -748,7 +765,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 12;
+const BUILD = 13;
 
 const DEFAULT_CFG = {
   windows: [
@@ -877,8 +894,11 @@ const saveState = () => Store.set(K_STATE, JSON.stringify(STATE));
 function newDraft(date, winId) {
   const found = ENTRIES.find(x => x.date === date && x.win === winId);
   if (found) return JSON.parse(JSON.stringify(found));
+  // carry the day's context forward so it only needs answering once
+  const earlier = ENTRIES.filter(x => x.date === date && x.ctx).sort((a, b) => a.ts < b.ts ? 1 : -1)[0];
   return { date, win: winId, ts: new Date().toISOString(), v: {}, n: {},
     pain: { sites: [], kinds: [] }, nap: { on: false, h: 0, m: 0, start: "" },
+    ctx: (earlier && earlier.ctx) || "",
     sleep: null, meds: null, tags: [], warns: [], note: "" };
 }
 function fixDraft(d) {                       // older records, and anything Firebase handed back
@@ -893,6 +913,7 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (!Array.isArray(d.tags))  d.tags  = d.tags  ? [].concat(d.tags)  : [];
   if (!Array.isArray(d.warns)) d.warns = d.warns ? [].concat(d.warns) : [];
   if (typeof d.note !== "string") d.note = d.note == null ? "" : String(d.note);
+  if (typeof d.ctx !== "string" || !CTXBY[d.ctx]) d.ctx = "";
   if (!d.nap || typeof d.nap !== "object" || Array.isArray(d.nap)) d.nap = {};
   d.nap.on = !!d.nap.on;
   d.nap.h = +d.nap.h || 0;
@@ -1198,6 +1219,10 @@ function renderLog() {
     pushSleep();
     $("#sleepItems").innerHTML = activeItems("sleep").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
   }
+  $("#ctxChips").innerHTML = CTX.map(c =>
+    '<button class="chip ctx' + (c.work ? " w" : "") + '" data-ctx="' + c.id + '" aria-pressed="' +
+    (draft.ctx === c.id ? "true" : "false") + '">' + esc(c.label) + "</button>").join("");
+
   // naps
   const wantNap = CFG.napWin && draft.win === CFG.napWin;
   $("#napBlock").style.display = wantNap ? "" : "none";
@@ -1341,13 +1366,19 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0 };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
     });
     const se = es.find(e => e.sleep && (e.sleep.h != null));
     if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake };
+    const cx = es.map(e => e.ctx).filter(Boolean);
+    if (cx.length) {
+      row.ctx = cx.sort((a, b) =>
+        cx.filter(v => v === b).length - cx.filter(v => v === a).length)[0];
+      row.worked = cx.some(c => CTXBY[c] && CTXBY[c].work);
+    }
     const ne = es.find(e => e.nap && e.nap.on);
     if (ne) row.nap = { hours: (+ne.nap.h || 0) + (+ne.nap.m || 0) / 60, start: ne.nap.start || "" };
     row.total = (row.sleep ? row.sleep.hours : 0) + (row.nap ? row.nap.hours : 0);
@@ -1437,6 +1468,15 @@ function drawMain() {
   }
   g += '<text x="' + (PADL - 6) + '" y="' + (yAt(5) - 9) + '" fill="#5f9e7a" font-size="9" ' +
        'font-family="ui-monospace,monospace" text-anchor="end" opacity=".8">base</text>';
+  // faint tint behind days off, so work and non-work separate visually
+  rows.forEach((r, i) => {
+    if (r.worked !== false) return;
+    const half = n > 1 ? (W - PADL - PADR) / (n - 1) / 2 : 12;
+    const x0 = Math.max(PADL, xAt(i, n) - half);
+    g += '<rect x="' + x0.toFixed(1) + '" y="' + top + '" width="' + Math.min(half * 2, W - PADR - x0).toFixed(1) +
+         '" height="' + (H - bot - top) + '" fill="#5fa8d4" opacity="0.055"/>';
+  });
+
   // med-change markers
   rows.forEach((r, i) => { if (r.tags.indexOf("Med change") > -1) {
     const x = xAt(i, n);
@@ -1565,7 +1605,10 @@ function readoutFor(i) {
   const r = rows[i];
   let s = '<span class="dt">' + fmtDate(r.date) + "</span> &nbsp;";
   if (!r.n) { s += "no check-ins"; $("#readout").innerHTML = s; return; }
-  s += r.n + " check-in" + (r.n > 1 ? "s" : "") + "<br>";
+  s += r.n + " check-in" + (r.n > 1 ? "s" : "");
+  if (r.ctx && CTXBY[r.ctx]) s += ' · <span style="color:' +
+    (CTXBY[r.ctx].work ? "#b6a0e4" : "#7fbde4") + '">' + esc(CTXBY[r.ctx].label) + "</span>";
+  s += "<br>";
   const bits = Object.keys(SCOL).filter(k => r.v[k] != null && isOn(k))
     .map(k => ITEM[k].label.toLowerCase() + " <b>" + r.v[k].toFixed(1) + "</b>");
   if (r.sleep) bits.unshift("slept <b>" + Math.floor(r.sleep.hours) + "h " +
@@ -1654,7 +1697,42 @@ function renderPatterns() {
       '<div class="mini">Only tags used on 3+ days appear. Small samples swing wildly.</div>'
     : '<div class="empty"><b>No tags used enough yet</b>Tag what happened on each check-in — ' +
       'this table is where the trigger hunting actually pays off.</div>';
+  renderWorkSplit(rows);
   renderFlags(rows);
+}
+
+function renderWorkSplit(rows) {
+  const el = $("#workSplit"); if (!el) return;
+  const on = rows.filter(r => r.worked === true), off = rows.filter(r => r.worked === false);
+  if (on.length < 3 || off.length < 3) {
+    el.innerHTML = '<div class="empty"><b>Not enough of both yet</b>' +
+      on.length + " work day" + (on.length === 1 ? "" : "s") + " and " + off.length +
+      " off. Tap where you were on each check-in and this fills in." + "</div>";
+    return;
+  }
+  const mean = (set, k) => { const v = set.map(r => k === "sleep" ? (r.sleep ? r.sleep.hours : null)
+      : k === "total" ? (r.total || null) : r.v[k]).filter(x => x != null);
+    return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
+  const keys = ITEMS.filter(i => (i.grp === "core" || i.key === "pain") && isOn(i.key)).map(i => i.key)
+    .concat(["sleep", "total"]);
+  const rowsOut = keys.map(k => {
+    const a = mean(on, k), c = mean(off, k);
+    if (a == null || c == null) return null;
+    return { k, a, c, d: a - c,
+      label: k === "sleep" ? "Hours slept" : k === "total" ? "Total sleep" : ITEM[k].label };
+  }).filter(Boolean).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+
+  // things that get worse when higher shouldn't read as "better" when they rise
+  const badHigh = { irrit:1, anxiety:1, pain:1, spend:1 };
+  el.innerHTML = '<div class="scroll"><table class="tbl"><tr><th></th><th>Working</th><th>Off</th>' +
+    "<th>Difference</th></tr>" + rowsOut.map(x => {
+      const worse = badHigh[x.k] ? x.d > 0 : x.d < 0;
+      const col = Math.abs(x.d) < 0.3 ? "var(--ink-3)" : worse ? "var(--high-2)" : "var(--base)";
+      return "<tr><td>" + esc(x.label) + "</td><td>" + x.a.toFixed(1) + "</td><td>" + x.c.toFixed(1) +
+        '</td><td style="color:' + col + '">' + (x.d > 0 ? "+" : "") + x.d.toFixed(1) + "</td></tr>";
+    }).join("") + "</table></div>" +
+    '<div class="mini">' + on.length + " working days, " + off.length + " off. " +
+    "Green means the better direction for that row. Differences under 0.3 are noise.</div>";
 }
 function renderFlags(rows) {
   const recent = rows.slice(-14).filter(r => r.n);
@@ -1701,6 +1779,22 @@ function renderFlags(rows) {
       (top.length ? "Mostly " + top.join(", ").toLowerCase() + ". " : "") +
       "Sustained pain drags mood down on its own, which can look like a mood episode on these charts."]);
   }
+  // work vs off
+  const wOn = rows.filter(r => r.worked === true && r.v.mood != null);
+  const wOff = rows.filter(r => r.worked === false && r.v.mood != null);
+  if (wOn.length >= 4 && wOff.length >= 4) {
+    const m = set => set.reduce((a, r) => a + r.v.mood, 0) / set.length;
+    const diff = m(wOn) - m(wOff);
+    if (Math.abs(diff) >= 1) out.push(["", diff < 0
+      ? "Mood runs " + Math.abs(diff).toFixed(1) + " lower on work days"
+      : "Mood runs " + diff.toFixed(1) + " higher on work days",
+      diff < 0
+        ? "Across " + wOn.length + " working days and " + wOff.length + " off. Worth knowing whether " +
+          "it's the work itself or the schedule that comes with it — sleep and meal timing usually differ too."
+        : "Across " + wOn.length + " working days and " + wOff.length + " off. Structure and routine " +
+          "suit some people better than open days; worth noticing if time off is consistently harder."]);
+  }
+
   // daytime sleep
   const nap14 = rows.slice(-14).filter(r => r.n);
   const napped = nap14.filter(r => r.nap);
@@ -1748,13 +1842,15 @@ function buildExport(kind) {
     const rows = daily(0);
     // one value column per item, then a matching note column for anything noted
     const noted = on.filter(i => rows.some(r => r.inotes[i.key]));
-    const head = ["date", "checkins", "sleep_hours", "bedtime", "wake_time",
+    const head = ["date", "checkins", "context", "worked", "sleep_hours", "bedtime", "wake_time",
       "nap_hours", "nap_start", "total_sleep_hours", "med_adherence", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
       .concat(noted.map(i => i.key + "_note"))
       .concat(["warning_signs", "tags", "notes"]);
     return toCSV(head, rows.map(r => [r.date, r.n,
+      r.ctx && CTXBY[r.ctx] ? CTXBY[r.ctx].label : "",
+      r.worked == null ? "" : (r.worked ? "yes" : "no"),
       r.sleep ? r.sleep.hours.toFixed(2) : "", r.sleep ? r.sleep.bed || "" : "",
       r.sleep ? r.sleep.wake || "" : "",
       r.nap ? r.nap.hours.toFixed(2) : "", r.nap ? r.nap.start || "" : "",
@@ -1770,14 +1866,14 @@ function buildExport(kind) {
     ENTRIES.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0).forEach(e => {
       const w = winById(e.win);
       Object.keys(e.v).forEach(k => { if (e.v[k] != null)
-        out.push([e.date, w.label, w.time, e.ts, k, ITEM[k] ? ITEM[k].label : k, e.v[k],
+        out.push([e.date, w.label, w.time, e.ts, e.ctx || "", k, ITEM[k] ? ITEM[k].label : k, e.v[k],
           ITEM[k] ? ITEM[k].anchor : "", (e.n && e.n[k]) || ""]); });
       // a note with no rating still deserves a row
       if (e.n) Object.keys(e.n).forEach(k => { if (e.v[k] == null && e.n[k])
-        out.push([e.date, w.label, w.time, e.ts, k, ITEM[k] ? ITEM[k].label : k, "",
+        out.push([e.date, w.label, w.time, e.ts, e.ctx || "", k, ITEM[k] ? ITEM[k].label : k, "",
           ITEM[k] ? ITEM[k].anchor : "", e.n[k]]); });
     });
-    return toCSV(["date", "checkin", "scheduled_time", "logged_at", "item_key", "item", "value",
+    return toCSV(["date", "checkin", "scheduled_time", "logged_at", "context", "item_key", "item", "value",
       "scale_anchor", "note"], out);
   }
   if (kind === "pain") {
@@ -1837,6 +1933,7 @@ function buildExport(kind) {
   const out = [];
   ENTRIES.forEach(e => {
     const w = winById(e.win);
+    if (e.ctx && CTXBY[e.ctx]) out.push([e.date, w.label, "context", CTXBY[e.ctx].label]);
     (e.tags || []).forEach(t => out.push([e.date, w.label, "tag", t]));
     (e.warns || []).forEach(t => out.push([e.date, w.label, "warning_sign", t]));
   });
@@ -2536,7 +2633,8 @@ function commit(skip, reason) {
     const anyNote = Object.keys(draft.n).some(k => draft.n[k] && draft.n[k].trim());
     const anyPain = draft.pain.sites.length || draft.pain.kinds.length;
     const anyNap = draft.nap && draft.nap.on;
-    if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap &&
+    const anyCtx = !!draft.ctx;
+    if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap && !anyCtx &&
         !draft.tags.length && !draft.warns.length && !draft.note) {
       toast("Nothing filled in yet", true); return;
     }
@@ -2630,6 +2728,13 @@ function init() {
     const sx = ev.target.closest("[data-sugdel]");
     if (sx) { STATE.suggestions = (STATE.suggestions || []).filter(x => x.id !== sx.dataset.sugdel);
       saveState(); renderSug(); return; }
+    const cx = ev.target.closest("[data-ctx]");
+    if (cx) {
+      draft.ctx = draft.ctx === cx.dataset.ctx ? "" : cx.dataset.ctx;
+      $$("#ctxChips .chip").forEach(c =>
+        c.setAttribute("aria-pressed", c.dataset.ctx === draft.ctx ? "true" : "false"));
+      return;
+    }
     const dy = ev.target.closest("[data-day]");
     if (dy) {
       const i = +dy.dataset.day;
