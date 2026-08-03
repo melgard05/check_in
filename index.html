@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html><!--build:12-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -311,6 +311,36 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
       </div>
     </div>
 
+    <div id="napBlock" style="display:none">
+      <div class="eyebrow">Daytime sleep</div>
+      <div class="card">
+        <div class="sw" style="border-bottom:0;padding-top:0">
+          <div><div class="t">Napped today</div>
+            <div class="d">Naps change tonight's sleep, and how often you need them says
+              something on its own.</div></div>
+          <button class="tog" id="togNapped" aria-pressed="false"></button>
+        </div>
+        <div id="napDetail" style="display:none">
+          <div class="wheelwrap" style="margin-top:4px">
+            <div class="wcol"><div class="wcap">hours</div>
+              <div class="wheel" id="wNH"><div class="wsel"></div></div>
+              <div class="wstep"><button type="button" data-wstep="wNH:-1" aria-label="One hour less">&minus;</button><button type="button" data-wstep="wNH:1" aria-label="One hour more">+</button></div>
+            </div>
+            <div class="wcol"><div class="wcap">minutes</div>
+              <div class="wheel" id="wNM"><div class="wsel"></div></div>
+              <div class="wstep"><button type="button" data-wstep="wNM:-1" aria-label="Five minutes less">&minus;</button><button type="button" data-wstep="wNM:1" aria-label="Five minutes more">+</button></div>
+            </div>
+          </div>
+          <div class="wtotal" id="napTotal">&mdash;</div>
+          <div class="row" style="margin-top:14px">
+            <label class="fld"><span>Started around</span><input type="time" id="napStart"></label>
+            <div style="flex:1 1 150px;align-self:end;padding-bottom:9px" class="mini" id="napHint"></div>
+          </div>
+          <div id="napItems"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="eyebrow">Core — every check-in</div>
     <div class="card" id="coreItems"></div>
 
@@ -391,7 +421,7 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
     </div>
     <div class="card chartcard">
       <h2>Sleep</h2>
-      <p class="sub">Bars are hours slept. The band is 7–9h. Dots are bedtime drift.</p>
+      <p class="sub">Blue is night sleep, purple stacked on top is naps. The band is 7&ndash;9h. Small dots are bedtime drift.</p>
       <svg class="ch" id="sleepCh" viewBox="0 0 700 200" preserveAspectRatio="none" role="img"
            aria-label="Hours slept per night"></svg>
     </div>
@@ -554,6 +584,9 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
         <div class="mini" id="altSummary" style="margin-top:8px"></div>
       </div>
       <div id="winCfg"></div>
+      <div class="sw"><div style="flex:1"><div class="t">Ask about naps at</div>
+        <div class="d">Daytime sleep, logged once a day.</div></div>
+        <select id="napWinSel" style="flex:0 0 132px"></select></div>
       <div class="sw"><div><div class="t">Nag until finished</div>
         <div class="d">Keeps a badge and a blocking prompt up until the check-in is saved or skipped.</div></div>
         <button class="tog" id="togNag" aria-pressed="true"></button></div>
@@ -694,6 +727,7 @@ const ITEMS = [
   { key:"painworst",label:"Worst it got",    low:"None",             high:"Worst imaginable", grp:"pain", anchor:"low",   note:true },
   { key:"painlimit",label:"Got in the way",  low:"Not at all",       high:"Stopped me cold", grp:"pain", anchor:"low",    note:true },
   // sleep-only
+  { key:"napfeel",  label:"Nap left me",     low:"Groggy, worse",    high:"Refreshed",       grp:"nap",   anchor:"center", note:true },
   { key:"sleepq",   label:"Sleep quality",   low:"Broken, unrested", high:"Deep, rested",    grp:"sleep", anchor:"center", note:true },
   { key:"wakefeel", label:"Waking mood",     low:"Dread",            high:"Ready",           grp:"sleep", anchor:"center", note:true }
 ];
@@ -714,7 +748,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 11;
+const BUILD = 12;
 
 const DEFAULT_CFG = {
   windows: [
@@ -723,6 +757,7 @@ const DEFAULT_CFG = {
     { id:"pm",  label:"Evening", time:"20:00", timeWe:"20:00", sleep:false }
   ],
   weekend: false,
+  napWin: "pm",               // which check-in asks about daytime sleep
   altDays: [0, 6],            // 0 Sun … 6 Sat
   cfgAt: 0,
   off: ITEMS.filter(i => i.off).map(i => i.key),
@@ -744,7 +779,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "off", "meds", "lat", "nagMins"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWin", "off", "meds", "lat", "nagMins"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -843,7 +878,7 @@ function newDraft(date, winId) {
   const found = ENTRIES.find(x => x.date === date && x.win === winId);
   if (found) return JSON.parse(JSON.stringify(found));
   return { date, win: winId, ts: new Date().toISOString(), v: {}, n: {},
-    pain: { sites: [], kinds: [] },
+    pain: { sites: [], kinds: [] }, nap: { on: false, h: 0, m: 0, start: "" },
     sleep: null, meds: null, tags: [], warns: [], note: "" };
 }
 function fixDraft(d) {                       // older records, and anything Firebase handed back
@@ -858,6 +893,11 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (!Array.isArray(d.tags))  d.tags  = d.tags  ? [].concat(d.tags)  : [];
   if (!Array.isArray(d.warns)) d.warns = d.warns ? [].concat(d.warns) : [];
   if (typeof d.note !== "string") d.note = d.note == null ? "" : String(d.note);
+  if (!d.nap || typeof d.nap !== "object" || Array.isArray(d.nap)) d.nap = {};
+  d.nap.on = !!d.nap.on;
+  d.nap.h = +d.nap.h || 0;
+  d.nap.m = +d.nap.m || 0;
+  if (typeof d.nap.start !== "string") d.nap.start = d.nap.start == null ? "" : String(d.nap.start);
   if (d.meds != null && typeof d.meds !== "object") d.meds = null;
   if (d.sleep != null && typeof d.sleep !== "object") d.sleep = null;
   if (!d.ts) d.ts = new Date().toISOString();
@@ -1049,18 +1089,19 @@ function bindSliders(root) {
 /* ============================================================
    WHEEL — hours / minutes
    ============================================================ */
-function buildWheel(el, max, step) {
+function buildWheel(el, max, step, onChange) {
   let h = '<div class="wsel"></div><div class="pad"></div>';
   for (let i = 0; i <= max; i += step) h += '<div class="wi" data-v="' + i + '">' + pad(i) + "</div>";
   h += '<div class="pad"></div>';
   el.innerHTML = h;
   el._items = Array.from(el.querySelectorAll(".wi"));
+  el._cb = onChange || function () {};
   el.tabIndex = 0;
 
   el.addEventListener("scroll", () => {
     clearTimeout(el._t);
     markWheel(el);
-    el._t = setTimeout(() => { snapWheel(el); pushSleep(); }, 90);
+    el._t = setTimeout(() => { snapWheel(el); el._cb(); }, 90);
   }, { passive: true });
 
   // one wheel notch = one step, not the ~3 the browser would scroll
@@ -1086,7 +1127,7 @@ function buildWheel(el, max, step) {
     const i = el._items.indexOf(wi);
     if (i > -1) { el.scrollTo({ top: i * 40, behavior: "smooth" });
       markWheel(el); clearTimeout(el._t);
-      el._t = setTimeout(() => { markWheel(el); pushSleep(); }, 200); }
+      el._t = setTimeout(() => { markWheel(el); el._cb(); }, 200); }
   });
 }
 function stepWheel(el, d) {
@@ -1094,7 +1135,7 @@ function stepWheel(el, d) {
   el.scrollTo({ top: i * 40, behavior: "smooth" });
   markWheel(el);
   clearTimeout(el._t);
-  el._t = setTimeout(() => { markWheel(el); pushSleep(); }, 200);
+  el._t = setTimeout(() => { markWheel(el); el._cb(); }, 200);
 }
 function wheelIndex(el) { return Math.max(0, Math.min(el._items.length - 1, Math.round(el.scrollTop / 40))); }
 function markWheel(el) {
@@ -1122,6 +1163,25 @@ function pushSleep() {
     (tot ? '  ·  ' + tot.toFixed(2) + " h" : "") + flag;
 }
 
+function pushNap() {
+  if (!draft) return;
+  const h = wheelVal($("#wNH")), m = wheelVal($("#wNM"));
+  draft.nap = Object.assign(draft.nap || {}, { h, m });
+  const tot = h + m / 60;
+  const flag = tot >= 2 ? '  <span style="color:var(--warn)">long</span>' : "";
+  $("#napTotal").innerHTML = tot ? "nap <b>" + h + "h " + pad(m) + "m</b>  ·  " + tot.toFixed(2) + " h" + flag
+    : '<span style="color:var(--ink-3)">no length set</span>';
+  const st = $("#napStart").value;
+  const hint = $("#napHint");
+  if (!st) hint.textContent = "Roughly when it started is enough.";
+  else {
+    const mins = minsOf(st);
+    hint.innerHTML = mins >= 15 * 60
+      ? '<span style="color:var(--warn)">Late naps often push bedtime back.</span>'
+      : "Early enough that it shouldn't cost you tonight.";
+  }
+}
+
 /* ============================================================
    LOG VIEW
    ============================================================ */
@@ -1137,6 +1197,21 @@ function renderLog() {
     $("#sBed").value = s.bed || ""; $("#sWake").value = s.wake || "";
     pushSleep();
     $("#sleepItems").innerHTML = activeItems("sleep").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+  }
+  // naps
+  const wantNap = CFG.napWin && draft.win === CFG.napWin;
+  $("#napBlock").style.display = wantNap ? "" : "none";
+  if (wantNap) {
+    const on = !!(draft.nap && draft.nap.on);
+    $("#togNapped").setAttribute("aria-pressed", on ? "true" : "false");
+    $("#napDetail").style.display = on ? "" : "none";
+    if (on) {
+      setWheel($("#wNH"), draft.nap.h == null ? 0 : draft.nap.h);
+      setWheel($("#wNM"), draft.nap.m == null ? 0 : draft.nap.m);
+      $("#napStart").value = draft.nap.start || "";
+      $("#napItems").innerHTML = activeItems("nap").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+      pushNap();
+    }
   }
   $("#coreItems").innerHTML  = activeItems("core").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
   $("#extraItems").innerHTML = activeItems("body").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
@@ -1266,13 +1341,16 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [] };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0 };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
     });
     const se = es.find(e => e.sleep && (e.sleep.h != null));
     if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake };
+    const ne = es.find(e => e.nap && e.nap.on);
+    if (ne) row.nap = { hours: (+ne.nap.h || 0) + (+ne.nap.m || 0) / 60, start: ne.nap.start || "" };
+    row.total = (row.sleep ? row.sleep.hours : 0) + (row.nap ? row.nap.hours : 0);
     es.forEach(e => { (e.tags || []).forEach(t => row.tags.indexOf(t) < 0 && row.tags.push(t));
       (e.warns || []).forEach(t => row.warns.indexOf(t) < 0 && row.warns.push(t));
       if (e.note) row.notes.push(e.note);
@@ -1318,8 +1396,11 @@ function pair(rows, ka, kb, lag) {
   const xs = [], ys = [];
   for (let i = 0; i + lag < rows.length; i++) {
     const a = ka === "sleep" ? (rows[i].sleep ? rows[i].sleep.hours : null)
+            : ka === "nap"   ? (rows[i].nap ? rows[i].nap.hours : (rows[i].n ? 0 : null))
+            : ka === "total" ? (rows[i].total || null)
             : ka === "day" ? rows[i].day : rows[i].v[ka];
     const b = kb === "sleep" ? (rows[i + lag].sleep ? rows[i + lag].sleep.hours : null)
+            : kb === "total" ? (rows[i + lag].total || null)
             : rows[i + lag].v[kb];
     if (a != null && b != null) { xs.push(a); ys.push(b); }
   }
@@ -1395,7 +1476,7 @@ function drawMain() {
 function drawSleep() {
   const rows = daily(range), n = rows.length, H = 200, top = 12, bot = 28;
   const svg = $("#sleepCh");
-  const any = rows.some(r => r.sleep);
+  const any = rows.some(r => r.sleep || r.nap);
   if (!any) { svg.innerHTML = '<text x="' + (W / 2) + '" y="' + (H / 2) +
     '" fill="#63707e" font-size="13" text-anchor="middle" font-family="system-ui">' +
     'Log sleep in the morning check-in to fill this in.</text>';
@@ -1414,11 +1495,17 @@ function drawSleep() {
   });
   const bw = Math.max(2.5, Math.min(20, (W - PADL - PADR) / Math.max(n, 1) * .62));
   rows.forEach((r, i) => {
-    if (!r.sleep) return;
-    const h = Math.min(MAXH, r.sleep.hours), x = xAt(i, n), y = yAt(h);
-    const col = h < 6 ? "#c25a4a" : h > 10 ? "#c98b3a" : "#5fa8d4";
-    g += '<rect x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+    if (!r.sleep && !r.nap) return;
+    const nh = r.sleep ? Math.min(MAXH, r.sleep.hours) : 0;
+    const x = xAt(i, n), y = yAt(nh);
+    const col = nh && nh < 6 ? "#c25a4a" : nh > 10 ? "#c98b3a" : "#5fa8d4";
+    if (nh) g += '<rect x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
          '" height="' + (yAt(0) - y).toFixed(1) + '" rx="2" fill="' + col + '" opacity=".8"/>';
+    if (r.nap && r.nap.hours) {                       // naps sit on top, lighter
+      const th = Math.min(MAXH, nh + r.nap.hours), ty = yAt(th);
+      g += '<rect x="' + (x - bw / 2).toFixed(1) + '" y="' + ty.toFixed(1) + '" width="' + bw.toFixed(1) +
+           '" height="' + Math.max(1, y - ty).toFixed(1) + '" rx="2" fill="#9b7fd4" opacity=".75"/>';
+    }
     if (r.sleep.bed) {
       const bm = minsOf(r.sleep.bed), norm = bm > 720 ? bm - 1440 : bm; // shift PM to negative
       const by = top + ((norm + 300) / 600) * (H - top - bot) * .25 + 4;
@@ -1483,6 +1570,8 @@ function readoutFor(i) {
     .map(k => ITEM[k].label.toLowerCase() + " <b>" + r.v[k].toFixed(1) + "</b>");
   if (r.sleep) bits.unshift("slept <b>" + Math.floor(r.sleep.hours) + "h " +
     pad(Math.round((r.sleep.hours % 1) * 60)) + "m</b>");
+  if (r.nap) bits.push('<span style="color:#9b7fd4">napped <b>' + Math.floor(r.nap.hours) + "h " +
+    pad(Math.round((r.nap.hours % 1) * 60)) + "m</b>" + (r.nap.start ? " at " + esc(r.nap.start) : "") + "</span>");
   s += bits.join(" &nbsp;·&nbsp; ");
   if (r.v.pain != null) s += '<br><span style="color:var(--high-2)">pain <b>' + r.v.pain.toFixed(1) + "</b>" +
     (r.sites.length ? " · " + esc(r.sites.join(", ").toLowerCase()) : "") +
@@ -1513,12 +1602,14 @@ function renderPatterns() {
   const rows = daily(0);
   const MIN = 8;
   // same day vs mood
-  const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key).concat(["sleep", "day"]);
+  const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key)
+    .concat(["sleep", "nap", "total", "day"]);
   let list = [];
   cands.forEach(k => {
     const p = pair(rows, k, "mood", 0);
     if (p.r != null && p.n >= MIN) list.push({ k, r: p.r, n: p.n,
-      label: k === "sleep" ? "Hours slept" : k === "day" ? "Daylight hours" : ITEM[k].label });
+      label: k === "sleep" ? "Hours slept at night" : k === "nap" ? "Nap hours"
+        : k === "total" ? "Total sleep, naps included" : k === "day" ? "Daylight hours" : ITEM[k].label });
   });
   list.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
   $("#corrSame").innerHTML = list.length
@@ -1530,6 +1621,8 @@ function renderPatterns() {
   [0, 1, 2, 3].forEach(L => {
     const p = pair(rows, "sleep", "mood", L);
     if (p.r != null && p.n >= MIN) lag.push({ L, r: p.r, n: p.n });
+    const q0 = pair(rows, "total", "mood", L);
+    if (L && q0.r != null && q0.n >= MIN) lag.push({ L, r: q0.r, n: q0.n, k: "_total" });
     ["irrit", "energy", "focus"].forEach(k => {
       if (L === 0 || !isOn(k)) return;
       const q = pair(rows, "sleep", k, L);
@@ -1537,7 +1630,8 @@ function renderPatterns() {
     });
   });
   $("#corrLag").innerHTML = lag.length
-    ? lag.map(x => corrRow("Sleep → " + (x.k ? ITEM[x.k].label.toLowerCase() : "mood") +
+    ? lag.map(x => corrRow((x.k === "_total" ? "Total sleep → mood" : "Sleep → " +
+        (x.k ? ITEM[x.k].label.toLowerCase() : "mood")) +
         (x.L ? ", " + x.L + " day" + (x.L > 1 ? "s" : "") + " later" : ", same day"), x.r, x.n)).join("")
     : '<div class="empty"><b>Needs more nights</b>Log sleep each morning; this fills in after about two weeks.</div>';
   // tags
@@ -1607,6 +1701,22 @@ function renderFlags(rows) {
       (top.length ? "Mostly " + top.join(", ").toLowerCase() + ". " : "") +
       "Sustained pain drags mood down on its own, which can look like a mood episode on these charts."]);
   }
+  // daytime sleep
+  const nap14 = rows.slice(-14).filter(r => r.n);
+  const napped = nap14.filter(r => r.nap);
+  if (napped.length >= 5) {
+    const avgNap = napped.reduce((a, r) => a + r.nap.hours, 0) / napped.length;
+    const shortNights = napped.filter(r => r.sleep && r.sleep.hours < 6).length;
+    out.push(["", "Napping on " + napped.length + " of the last " + nap14.length + " logged days",
+      "Averaging " + avgNap.toFixed(1) + "h. " + (shortNights >= napped.length / 2
+        ? "Mostly after short nights, so it reads as catching up."
+        : "Mostly after normal nights, which is worth mentioning — daytime sleepiness that isn't " +
+          "explained by short nights is its own signal.")]);
+  }
+  const lateNaps = rows.slice(-14).filter(r => r.nap && r.nap.start && minsOf(r.nap.start) >= 15 * 60);
+  if (lateNaps.length >= 3) out.push(["", "Late-afternoon naps on " + lateNaps.length + " days",
+    "Napping after 3pm tends to push bedtime later, which shows up as a short night two days on."]);
+
   // warning signs frequency
   const wn = {}; last(10).forEach(r => r.warns.forEach(w => wn[w] = (wn[w] || 0) + 1));
   const rep = Object.keys(wn).filter(w => wn[w] >= 3);
@@ -1638,14 +1748,18 @@ function buildExport(kind) {
     const rows = daily(0);
     // one value column per item, then a matching note column for anything noted
     const noted = on.filter(i => rows.some(r => r.inotes[i.key]));
-    const head = ["date", "checkins", "sleep_hours", "bedtime", "wake_time", "med_adherence", "daylight_hours"]
+    const head = ["date", "checkins", "sleep_hours", "bedtime", "wake_time",
+      "nap_hours", "nap_start", "total_sleep_hours", "med_adherence", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
       .concat(noted.map(i => i.key + "_note"))
       .concat(["warning_signs", "tags", "notes"]);
     return toCSV(head, rows.map(r => [r.date, r.n,
       r.sleep ? r.sleep.hours.toFixed(2) : "", r.sleep ? r.sleep.bed || "" : "",
-      r.sleep ? r.sleep.wake || "" : "", r.meds == null ? "" : r.meds.toFixed(2), r.day.toFixed(2)]
+      r.sleep ? r.sleep.wake || "" : "",
+      r.nap ? r.nap.hours.toFixed(2) : "", r.nap ? r.nap.start || "" : "",
+      r.total ? r.total.toFixed(2) : "",
+      r.meds == null ? "" : r.meds.toFixed(2), r.day.toFixed(2)]
       .concat(on.map(i => r.v[i.key] == null ? "" : r.v[i.key].toFixed(2)))
       .concat([r.sites.join("; "), r.kinds.join("; ")])
       .concat(noted.map(i => r.inotes[i.key] || ""))
@@ -1700,15 +1814,24 @@ function buildExport(kind) {
     return toCSV(["date", "checkin", "item_key", "item", "value", "note"], out);
   }
   if (kind === "sleep") {
-    const out = [];
-    ENTRIES.filter(e => e.sleep && e.sleep.h != null).sort((a, b) => a.date < b.date ? -1 : 1).forEach(e => {
-      const h = e.sleep.h + (e.sleep.m || 0) / 60;
-      out.push([e.date, e.sleep.h, e.sleep.m || 0, h.toFixed(2), e.sleep.bed || "", e.sleep.wake || "",
-        e.v.sleepq == null ? "" : e.v.sleepq, e.v.wakefeel == null ? "" : e.v.wakefeel,
-        e.v.mood == null ? "" : e.v.mood]);
-    });
-    return toCSV(["date", "hours", "minutes", "total_hours", "bedtime", "wake_time",
-      "sleep_quality", "waking_mood", "morning_mood"], out);
+    // one row per day so night sleep and any nap line up
+    const rows = daily(0).filter(r => r.sleep || r.nap);
+    const napNote = {}, napFeel = {};
+    ENTRIES.forEach(e => { if (e.nap && e.nap.on) {
+      if (e.n && e.n.napfeel) napNote[e.date] = e.n.napfeel;
+      if (e.v.napfeel != null) napFeel[e.date] = e.v.napfeel; } });
+    return toCSV(["date", "night_hours", "bedtime", "wake_time", "sleep_quality", "waking_mood",
+      "napped", "nap_hours", "nap_start", "nap_after", "nap_note", "total_hours", "mood"],
+      rows.map(r => [r.date,
+        r.sleep ? r.sleep.hours.toFixed(2) : "", r.sleep ? r.sleep.bed || "" : "",
+        r.sleep ? r.sleep.wake || "" : "",
+        r.v.sleepq == null ? "" : r.v.sleepq.toFixed(1),
+        r.v.wakefeel == null ? "" : r.v.wakefeel.toFixed(1),
+        r.nap ? "yes" : "no",
+        r.nap ? r.nap.hours.toFixed(2) : "", r.nap ? r.nap.start || "" : "",
+        napFeel[r.date] == null ? "" : napFeel[r.date], napNote[r.date] || "",
+        r.total ? r.total.toFixed(2) : "",
+        r.v.mood == null ? "" : r.v.mood.toFixed(1)]));
   }
   // events
   const out = [];
@@ -1783,6 +1906,9 @@ function renderCfg() {
           (w.timeWe || w.time) + '" style="width:112px">'
         : "") +
     "</div></div>").join("");
+  $("#napWinSel").innerHTML = '<option value="">Don\u2019t ask</option>' +
+    CFG.windows.map(w => '<option value="' + w.id + '"' +
+      (CFG.napWin === w.id ? " selected" : "") + ">" + esc(w.label) + "</option>").join("");
   $("#togWknd").setAttribute("aria-pressed", CFG.weekend ? "true" : "false");
   $("#altWrap").style.display = CFG.weekend ? "" : "none";
   $("#altDays").innerHTML = DAYS.map((d, i) =>
@@ -1808,9 +1934,9 @@ function renderCfg() {
   setDot("#dCloud", cloudBase() ? (CFG.cloud.push ? "ok" : "warn") : "");
   setDot("#dPush", CFG.cloud.push ? "ok" : "");
 
-  const grpName = { core:"Core", body:"Body &amp; behavior", pain:"Pain", sleep:"Sleep" };
+  const grpName = { core:"Core", body:"Body &amp; behavior", pain:"Pain", nap:"Naps", sleep:"Sleep" };
   let h = "";
-  ["core", "body", "pain", "sleep"].forEach(g => {
+  ["core", "body", "pain", "nap", "sleep"].forEach(g => {
     h += '<div class="eyebrow" style="margin-top:16px">' + grpName[g] + "</div>";
     h += ITEMS.filter(i => i.grp === g).map(i =>
       '<div class="sw"><div style="flex:1"><div class="t">' + esc(i.label) + "</div>" +
@@ -2202,15 +2328,29 @@ async function checkBuild() {
 }
 async function checkForNewBuild() {
   try {
-    const r = await fetch("./index.html?cb=" + Date.now(), { cache: "no-store" });
-    if (!r.ok) return;
-    const m = (await r.text()).match(/const BUILD = (\d+)/);
+    const url = "./index.html?cb=" + Date.now();
+    let m = null;
+    // The marker sits in the first few bytes, so ask for those only — a few
+    // hundred bytes instead of the whole file, cheap enough to poll often.
+    try {
+      const r = await fetch(url, { cache: "no-store", headers: { Range: "bytes=0-400" } });
+      if (r.ok || r.status === 206) m = (await r.text()).match(/<!--build:(\d+)-->/);
+    } catch (e) {}
+    if (!m) {                                   // range unsupported — fall back
+      const r2 = await fetch(url, { cache: "no-store" });
+      if (!r2.ok) return;
+      const full = await r2.text();
+      m = full.match(/<!--build:(\d+)-->/) || full.match(/const BUILD = (\d+)/);
+    }
     if (!m) return;
     const remote = +m[1];
     if (remote > BUILD) {
       newBuild = remote;
       $("#updTxt").textContent = "Build " + remote + " is ready — you're on " + BUILD + ".";
       $("#updBar").classList.add("on");
+    } else if (remote === BUILD) {
+      newBuild = 0;
+      $("#updBar").classList.remove("on");
     }
   } catch (e) { /* offline, try again later */ }
 }
@@ -2395,7 +2535,8 @@ function commit(skip, reason) {
     const anySleep = draft.sleep && draft.sleep.h != null && winById(draft.win).sleep;
     const anyNote = Object.keys(draft.n).some(k => draft.n[k] && draft.n[k].trim());
     const anyPain = draft.pain.sites.length || draft.pain.kinds.length;
-    if (!anyVal && !anySleep && !anyNote && !anyPain &&
+    const anyNap = draft.nap && draft.nap.on;
+    if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap &&
         !draft.tags.length && !draft.warns.length && !draft.note) {
       toast("Nothing filled in yet", true); return;
     }
@@ -2403,6 +2544,10 @@ function commit(skip, reason) {
     Object.keys(draft.n).forEach(k => {                   // drop empty note boxes
       if (!draft.n[k] || !draft.n[k].trim()) delete draft.n[k]; else draft.n[k] = draft.n[k].trim();
     });
+    if (CFG.napWin && draft.win === CFG.napWin && draft.nap && draft.nap.on) {
+      draft.nap = { on: true, h: wheelVal($("#wNH")), m: wheelVal($("#wNM")),
+        start: $("#napStart").value || "" };
+    } else if (draft.nap) { draft.nap.on = false; }
     if (winById(draft.win).sleep) {
       draft.sleep = Object.assign(draft.sleep || {}, { h: wheelVal($("#wH")), m: wheelVal($("#wM")),
         bed: $("#sBed").value || "", wake: $("#sWake").value || "" });
@@ -2425,10 +2570,12 @@ function commit(skip, reason) {
 
 function init() {
   fillWinSelect();
-  buildWheel($("#wH"), 14, 1);
-  buildWheel($("#wM"), 55, 5);
+  buildWheel($("#wH"), 14, 1, pushSleep);
+  buildWheel($("#wM"), 55, 5, pushSleep);
+  buildWheel($("#wNH"), 5, 1, pushNap);
+  buildWheel($("#wNM"), 55, 5, pushNap);
   bindSliders($("#coreItems")); bindSliders($("#extraItems"));
-  bindSliders($("#sleepItems")); bindSliders($("#painItems"));
+  bindSliders($("#sleepItems")); bindSliders($("#painItems")); bindSliders($("#napItems"));
 
   const due = dueWindows(todayISO());
   setDraft(todayISO(), due.length ? due[due.length - 1].id : sleepWin().id);
@@ -2439,6 +2586,15 @@ function init() {
 
   $("#eDate").onchange = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
   $("#eWin").onchange  = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
+  $("#togNapped").onclick = () => {
+    draft.nap = draft.nap || { on: false, h: 0, m: 0, start: "" };
+    draft.nap.on = !draft.nap.on;
+    if (draft.nap.on && !draft.nap.h && !draft.nap.m) draft.nap.m = 30;   // a sensible starting point
+    renderLog();
+  };
+  $("#napStart").onchange = () => {
+    draft.nap = Object.assign(draft.nap || {}, { start: $("#napStart").value }); pushNap();
+  };
   $("#sBed").onchange  = () => { draft.sleep = Object.assign(draft.sleep || {}, { bed: $("#sBed").value }); };
   $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value }); };
   $("#eNote").oninput  = () => { draft.note = $("#eNote").value; };
@@ -2553,6 +2709,7 @@ function init() {
     $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false"); saveCfg(); refreshDue(); };
   $("#notifBtn").onclick = () => { if (!("Notification" in window)) return;
     Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
+  $("#napWinSel").onchange = () => { CFG.napWin = $("#napWinSel").value; touchCfg(); renderLog(); };
   $("#medSave").onclick = () => { CFG.meds = $("#medList").value; touchCfg(); renderLog(); toast("Med list saved"); };
   $("#medChange").onclick = () => {
     if (draft.tags.indexOf("Med change") < 0) draft.tags.push("Med change");
@@ -2777,7 +2934,8 @@ function init() {
   checkBuild();
   syncIdle();
   setTimeout(checkForNewBuild, 3000);
-  setInterval(checkForNewBuild, 20 * 60000);
+  setInterval(checkForNewBuild, 4 * 60000);
+  window.addEventListener("focus", checkForNewBuild);   // tabbing back counts too
 }
 
 load().then(init).catch(e => {
