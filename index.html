@@ -714,7 +714,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 10;
+const BUILD = 11;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2622,7 +2622,8 @@ function init() {
     if (!CFG.cloud.push) { toast("Connect push first", true); return; }
     try { const r = await api("/test", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uid: CFG.cloud.uid }) });
-      cloudLog("test push sent, push service returned " + r.status, true);
+      cloudLog("test push " + (r.ok ? "accepted (" + r.status + ") — it should appear on this device within a few seconds"
+                                     : "rejected (" + r.status + ")"), true);
       toast(r.ok ? "Test push sent" : "Push service said " + r.status, !r.ok);
     } catch (e) { cloudLog("test failed: " + e.message, true); toast("Test failed", true); }
   };

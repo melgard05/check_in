@@ -56,23 +56,39 @@ self.addEventListener("fetch", e => {
 self.addEventListener("push", e => {
   e.waitUntil((async () => {
     const cfg = await loadCfg();
-    let due = [], count = 0;
+    let due = [], count = 0, isTest = false;
 
     if (cfg.worker && cfg.uid) {
       try {
         const r = await fetch(cfg.worker.replace(/\/+$/, "") + "/due?uid=" + encodeURIComponent(cfg.uid),
           { cache: "no-store" });
-        if (r.ok) { const j = await r.json(); due = j.due || []; count = j.count || 0; }
+        if (r.ok) { const j = await r.json(); due = j.due || []; count = j.count || 0; isTest = !!j.test; }
       } catch (err) {}
     }
     // if a payload did come through, prefer it
     if (!count && e.data) {
       try { const j = e.data.json(); due = j.due || []; count = j.count || due.length; } catch (err) {}
     }
+
+    if (isTest) {
+      try { if (self.navigator && navigator.setAppBadge) await navigator.setAppBadge(count || 1); } catch (err) {}
+      return self.registration.showNotification("Push is working", {
+        body: count ? count + " check-in" + (count > 1 ? "s" : "") + " open right now."
+                    : "Test notification. Nothing is due at the moment.",
+        tag: "baseline-test", renotify: true, icon: "./icon-192.png", badge: "./icon-badge.png",
+        data: { test: true }
+      });
+    }
+
     if (!count) {
-      // nothing open — don't nag. Clear the badge and bail.
+      // We promised userVisibleOnly, so we must show something or the browser
+      // shows its own "site updated in background" notice and may revoke push.
       try { if (self.navigator && navigator.clearAppBadge) await navigator.clearAppBadge(); } catch (err) {}
-      return;
+      return self.registration.showNotification("All caught up", {
+        body: "Nothing due right now.",
+        tag: "baseline-checkin", renotify: false, requireInteraction: false,
+        silent: true, icon: "./icon-192.png", badge: "./icon-badge.png"
+      });
     }
 
     const names = due.map(w => w.label).join(", ");
