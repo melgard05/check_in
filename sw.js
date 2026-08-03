@@ -43,9 +43,6 @@ async function loadCfg() {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
-  // the build poll is cache-busted and ranged; caching it would grow the shell
-  // cache by one entry every few minutes
-  if (req.headers.get("range") || new URL(req.url).searchParams.has("cb")) return;
   e.respondWith(
     fetch(req).then(res => {
       const copy = res.clone();
