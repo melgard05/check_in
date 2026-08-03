@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:19-->
+<!DOCTYPE html><!--build:20-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -127,6 +127,9 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .daysel{display:flex;gap:5px}
 .daysel button{flex:1;padding:9px 0;border-radius:8px;border:1px solid var(--line-2);background:var(--panel-2);
   color:var(--ink-3);font-family:var(--mono);font-size:12px;cursor:pointer;letter-spacing:.04em}
+.schedrow{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:0 0 12px 2px;
+  margin-top:-4px;border-bottom:1px solid var(--line)}
+.chip.sm{padding:4px 8px;font-size:11.5px;border-radius:6px}
 .daysel button[aria-pressed="true"]{background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
 .sug{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)}
 .sug:last-child{border-bottom:0}
@@ -871,6 +874,8 @@ const ITEMS = [
   { key:"nausea",   label:"Nausea / gut",    low:"Fine",             high:"Awful",           grp:"body", anchor:"low",    note:true },
   { key:"headache", label:"Headache",        low:"None",             high:"Disabling",       grp:"body", anchor:"low",    note:true },
   { key:"tension",  label:"Muscle tension",  low:"Loose",            high:"Locked up",       grp:"body", anchor:"low",    note:true },
+  { key:"calls",    label:"Phone calls",     low:"Fine, made them",  high:"Couldn't face them", grp:"body", anchor:"low", note:true,
+    wins:["mid","pm"], days:[1,2,3,4,5] },
   { key:"social",   label:"Wanting people",  low:"Hiding from everyone", high:"Very social", grp:"body", anchor:"center", note:true },
   { key:"spend",    label:"Spending urge",   low:"None",             high:"Hard to resist",  grp:"body", anchor:"low",    note:true },
   { key:"medeff",   label:"Meds felt right", low:"Did nothing",      high:"Worked well",     grp:"body", anchor:"center", note:true },
@@ -915,7 +920,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 19;
+const BUILD = 20;
 
 const DEFAULT_CFG = {
   windows: [
@@ -927,6 +932,7 @@ const DEFAULT_CFG = {
   napWin: "pm",               // which check-in asks about daytime sleep
   medWin: "pm",               // and about medication wearing off
   cycle: false,               // track cycle day
+  sched: {},                  // per-item overrides: { key: { wins:[], days:[] } }
   plan: { helps: "", avoid: "", contacts: "", note: "", updated: 0 },
   altDays: [0, 6],            // 0 Sun … 6 Sat
   cfgAt: 0,
@@ -949,7 +955,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWin", "medWin", "cycle", "plan", "off", "meds", "lat", "nagMins"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWin", "medWin", "cycle", "plan", "sched", "off", "meds", "lat", "nagMins"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -971,7 +977,7 @@ let draft = null;            // in-progress entry
 let range = 30;
 let showRoll = true;
 let series = { mood:true, irrit:true, energy:true, anxiety:false, focus:false, initiate:false,
-  fog:false, pain:true, sleepq:false };
+  fog:false, pain:true, sleepq:false, calls:false };
 let lastExport = "";
 let gateKey = null;
 
@@ -983,7 +989,36 @@ const todayISO = (d = new Date()) => d.getFullYear() + "-" + pad(d.getMonth() + 
 const minsOf = t => { const p = String(t || "").split(":"); return (+p[0] || 0) * 60 + (+p[1] || 0); };
 const nowMins = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const isOn = k => CFG.off.indexOf(k) === -1;
-const activeItems = grp => ITEMS.filter(i => i.grp === grp && isOn(i.key));
+/* Some items only make sense at certain check-ins, or on certain days.
+   The item ships a default; settings can override it. */
+function itemSched(k) {
+  const d = ITEM[k] || {}, o = (CFG.sched || {})[k] || {};
+  return {
+    wins: Array.isArray(o.wins) ? o.wins : (d.wins || null),
+    days: Array.isArray(o.days) ? o.days : (d.days || null)
+  };
+}
+function itemShows(k, winId, dateISO) {
+  const s = itemSched(k);
+  if (s.wins && s.wins.length && s.wins.indexOf(winId) < 0) return false;
+  if (s.days && s.days.length && s.days.indexOf(dowOf(dateISO)) < 0) return false;
+  return true;
+}
+function schedText(k) {
+  const s = itemSched(k);
+  if (!s.wins && !s.days) return "";
+  const wn = s.wins && s.wins.length
+    ? s.wins.map(id => (CFG.windows.find(w => w.id === id) || {}).label || id).join(", ")
+    : "every check-in";
+  let dn = "every day";
+  if (s.days && s.days.length && s.days.length < 7) {
+    const wk = [1, 2, 3, 4, 5].every(x => s.days.indexOf(x) > -1) && s.days.length === 5;
+    dn = wk ? "weekdays" : s.days.slice().sort().map(i => DAYS[i]).join(", ");
+  }
+  return wn + " · " + dn;
+}
+const activeItems = grp => ITEMS.filter(i => i.grp === grp && isOn(i.key) &&
+  (!draft || itemShows(i.key, draft.win, draft.date)));
 const fmtDate = iso => { const p = iso.split("-");
   return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { month:"short", day:"numeric" }); };
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -1005,7 +1040,8 @@ function vcol(v) {
   return "var(--high-2)";
 }
 const SCOL = { mood:"#7fd4c1", irrit:"#c25a4a", energy:"#c98b3a", anxiety:"#9b7fd4",
-  focus:"#5fa8d4", initiate:"#8fbf6a", pain:"#d4657f", sleepq:"#6f8fd4", fog:"#8a93a8" };
+  focus:"#5fa8d4", initiate:"#8fbf6a", pain:"#d4657f", sleepq:"#6f8fd4", fog:"#8a93a8",
+  calls:"#d49a5f" };
 
 /* daylight hours from latitude + date, no network */
 function dayLength(iso, lat) {
@@ -2223,6 +2259,30 @@ function renderFlags(rows) {
         : "If it's still running, that's the kind of stretch worth a call rather than waiting it out.")]);
   });
 
+  // phone calls — the useful question is whether this is its own thing
+  if (isOn("calls")) {
+    const cd = rows.slice(-21).filter(r => r.n && r.v.calls != null);
+    const hard = cd.filter(r => r.v.calls >= 7);
+    if (cd.length >= 6 && hard.length >= 3) {
+      const bits = [];
+      const withAnx = cd.filter(r => r.v.anxiety != null);
+      if (withAnx.length >= 6) {
+        const rr = spearman(withAnx.map(r => r.v.calls), withAnx.map(r => r.v.anxiety));
+        if (rr != null) bits.push(Math.abs(rr) >= 0.5
+          ? "It moves with your general anxiety, so treating the two together makes sense"
+          : "It moves fairly independently of your general anxiety — calls look like their own thing " +
+            "rather than a symptom of a bad day");
+      }
+      const late = hard.filter(r => r.medoff && r.medoff.mins != null && r.medoff.mins < 15 * 60).length;
+      if (late >= Math.ceil(hard.length / 2))
+        bits.push("the worst days are mostly ones where meds wore off early");
+      out.push(["", "Calls were hard on " + hard.length + " of the last " + cd.length + " days logged",
+        (bits.length ? bits.join(". ") + ". " : "") +
+        "If a pattern shows up in the timing, batching calls into the part of the day that's " +
+        "reliably easier is a smaller change than trying to dread them less."]);
+    }
+  }
+
   // binge eating — report what preceded it, not how much or how often as a verdict
   if (isOn("binge")) {
     const window21 = rows.slice(-21).filter(r => r.n);
@@ -2551,11 +2611,28 @@ function renderCfg() {
   let h = "";
   ["core", "body", "pain", "med", "nap", "sleep"].forEach(g => {
     h += '<div class="eyebrow" style="margin-top:16px">' + grpName[g] + "</div>";
-    h += ITEMS.filter(i => i.grp === g).map(i =>
-      '<div class="sw"><div style="flex:1"><div class="t">' + esc(i.label) + "</div>" +
-      '<div class="d">1 ' + esc(i.low) + " → 10 " + esc(i.high) + "</div></div>" +
-      '<button class="tog" data-item="' + i.key + '" aria-pressed="' + (isOn(i.key) ? "true" : "false") +
-      '"' + (i.key === "mood" ? " disabled style=opacity:.45" : "") + "></button></div>").join("");
+    h += ITEMS.filter(i => i.grp === g).map(i => {
+      const st = schedText(i.key);
+      let row = '<div class="sw"><div style="flex:1"><div class="t">' + esc(i.label) + "</div>" +
+        '<div class="d">1 ' + esc(i.low) + " → 10 " + esc(i.high) +
+        (st ? '<br><span style="color:var(--warn)">' + esc(st) + "</span>" : "") + "</div></div>" +
+        '<button class="tog" data-item="' + i.key + '" aria-pressed="' + (isOn(i.key) ? "true" : "false") +
+        '"' + (i.key === "mood" ? " disabled style=opacity:.45" : "") + "></button></div>";
+      if (st && isOn(i.key)) {
+        const sc = itemSched(i.key);
+        row += '<div class="schedrow">' +
+          '<span class="wklbl">ask at</span>' +
+          CFG.windows.map(w => '<button class="chip sm" data-swin="' + i.key + ":" + w.id +
+            '" aria-pressed="' + (!sc.wins || sc.wins.indexOf(w.id) > -1 ? "true" : "false") + '">' +
+            esc(w.label) + "</button>").join("") +
+          '<span class="wklbl" style="margin-left:6px">on</span>' +
+          DAYS.map((d, x) => '<button class="chip sm" data-sday="' + i.key + ":" + x +
+            '" aria-pressed="' + (!sc.days || sc.days.indexOf(x) > -1 ? "true" : "false") + '">' +
+            d[0] + "</button>").join("") +
+          "</div>";
+      }
+      return row;
+    }).join("");
   });
   $("#itemCfg").innerHTML = h;
   // say where the data actually is, rather than assuming
@@ -3455,6 +3532,24 @@ function init() {
       if (touched) { saveEnt(); saveState(); }
       return;
     }
+    const sw2 = ev.target.closest("[data-swin]");
+    if (sw2) {
+      const p2 = sw2.dataset.swin.split(":"), k = p2[0];
+      const cur = itemSched(k).wins || CFG.windows.map(w => w.id);
+      const nx = cur.indexOf(p2[1]) > -1 ? cur.filter(x => x !== p2[1]) : cur.concat([p2[1]]);
+      CFG.sched[k] = Object.assign({}, CFG.sched[k], { wins: nx });
+      touchCfg().then(() => { renderCfg(); renderLog(); });
+      return;
+    }
+    const sdy = ev.target.closest("[data-sday]");
+    if (sdy) {
+      const p2 = sdy.dataset.sday.split(":"), k = p2[0], dnum = +p2[1];
+      const cur = itemSched(k).days || [0, 1, 2, 3, 4, 5, 6];
+      const nx = cur.indexOf(dnum) > -1 ? cur.filter(x => x !== dnum) : cur.concat([dnum]);
+      CFG.sched[k] = Object.assign({}, CFG.sched[k], { days: nx });
+      touchCfg().then(() => { renderCfg(); renderLog(); });
+      return;
+    }
     const dy = ev.target.closest("[data-day]");
     if (dy) {
       const i = +dy.dataset.day;
@@ -3472,7 +3567,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
