@@ -119,6 +119,10 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
   border-radius:8px;padding:9px 11px;margin-top:10px;max-height:130px;overflow:auto;white-space:pre-wrap;
   line-height:1.55}
 .wklbl{font-family:var(--mono);font-size:10px;color:var(--ink-3);letter-spacing:.06em;flex:0 0 auto}
+.daysel{display:flex;gap:5px}
+.daysel button{flex:1;padding:9px 0;border-radius:8px;border:1px solid var(--line-2);background:var(--panel-2);
+  color:var(--ink-3);font-family:var(--mono);font-size:12px;cursor:pointer;letter-spacing:.04em}
+.daysel button[aria-pressed="true"]{background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
 .sug{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--line)}
 .sug:last-child{border-bottom:0}
 .sug.done .sugtx>div:first-child{text-decoration:line-through;color:var(--ink-3)}
@@ -541,9 +545,14 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
     <div class="card">
       <h2>Check-in times</h2>
       <p class="sub">Sleep is only asked at the first one.</p>
-      <div class="sw"><div><div class="t">Different times on weekends</div>
-        <div class="d">Saturday and Sunday use their own schedule.</div></div>
+      <div class="sw"><div><div class="t">A second schedule for some days</div>
+        <div class="d">Days off, shift days, whatever doesn't follow your usual pattern.</div></div>
         <button class="tog" id="togWknd" aria-pressed="false"></button></div>
+      <div id="altWrap" style="display:none">
+        <div class="eyebrow" style="margin:14px 0 8px">Which days use it</div>
+        <div class="daysel" id="altDays"></div>
+        <div class="mini" id="altSummary" style="margin-top:8px"></div>
+      </div>
       <div id="winCfg"></div>
       <div class="sw"><div><div class="t">Nag until finished</div>
         <div class="d">Keeps a badge and a blocking prompt up until the check-in is saved or skipped.</div></div>
@@ -705,7 +714,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 9;
+const BUILD = 10;
 
 const DEFAULT_CFG = {
   windows: [
@@ -714,21 +723,40 @@ const DEFAULT_CFG = {
     { id:"pm",  label:"Evening", time:"20:00", timeWe:"20:00", sleep:false }
   ],
   weekend: false,
+  altDays: [0, 6],            // 0 Sun … 6 Sat
+  cfgAt: 0,
   off: ITEMS.filter(i => i.off).map(i => i.key),
   nag: true, lat: 46.8, meds: "", nagMins: 20,
   cloud: { url: "", uid: "", account: "", push: false, sync: false },
   fb: { url: "", apiKey: "", email: "", uid: "", on: false }
 };
 
-/* Sat/Sun get their own time when weekend mode is on. */
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const dowOf = d => { const p = String(d).split("-");
+  return new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1).getDay(); };
+const isAltDay = d => CFG.weekend && (CFG.altDays || []).indexOf(dowOf(d)) > -1;
+
+/* Chosen days get their own time when the second schedule is on. */
 function winTime(w, dateISO) {
-  if (!CFG.weekend || !w.timeWe) return w.time;
-  const p = String(dateISO).split("-");
-  const dow = new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1).getDay();
-  return (dow === 0 || dow === 6) ? w.timeWe : w.time;
+  if (!isAltDay(dateISO) || !w.timeWe) return w.time;
+  return w.timeWe;
 }
-const isWeekend = d => { const p = String(d).split("-");
-  const g = new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1).getDay(); return g === 0 || g === 6; };
+
+/* Settings that describe the schedule belong to the person and follow them
+   between devices. Credentials and device ids deliberately do not. */
+const SHARED_CFG = ["windows", "weekend", "altDays", "off", "meds", "lat", "nagMins"];
+function sharedCfg() {
+  const o = { cfgAt: CFG.cfgAt || 0 };
+  SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
+  return o;
+}
+function adoptCfg(remote) {
+  if (!remote || !((remote.cfgAt || 0) > (CFG.cfgAt || 0))) return false;
+  SHARED_CFG.forEach(k => { if (remote[k] !== undefined) CFG[k] = remote[k]; });
+  CFG.cfgAt = remote.cfgAt;
+  return true;
+}
+function touchCfg() { CFG.cfgAt = Date.now(); return saveCfg(); }
 
 /* ---------- state ---------- */
 let CFG = JSON.parse(JSON.stringify(DEFAULT_CFG));
@@ -1748,14 +1776,24 @@ function renderCfg() {
     '<div class="sw"><div style="flex:1 1 120px"><div class="t">' + esc(w.label) + "</div>" +
     '<div class="d">' + (w.sleep ? "asks about sleep" : "mood and body only") + "</div></div>" +
     '<div style="display:flex;gap:6px;align-items:center">' +
-      (CFG.weekend ? '<span class="wklbl">M&ndash;F</span>' : "") +
+      (CFG.weekend ? '<span class="wklbl">usual</span>' : "") +
       '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="width:112px">' +
       (CFG.weekend
-        ? '<span class="wklbl">S&ndash;S</span><input type="time" data-we="' + i + '" value="' +
+        ? '<span class="wklbl">other</span><input type="time" data-we="' + i + '" value="' +
           (w.timeWe || w.time) + '" style="width:112px">'
         : "") +
     "</div></div>").join("");
   $("#togWknd").setAttribute("aria-pressed", CFG.weekend ? "true" : "false");
+  $("#altWrap").style.display = CFG.weekend ? "" : "none";
+  $("#altDays").innerHTML = DAYS.map((d, i) =>
+    '<button type="button" data-day="' + i + '" aria-pressed="' +
+    ((CFG.altDays || []).indexOf(i) > -1 ? "true" : "false") + '">' + d[0] +
+    '<span style="display:none">' + d + "</span></button>").join("");
+  const alt = (CFG.altDays || []).slice().sort((a, b) => a - b);
+  $("#altSummary").innerHTML = !CFG.weekend ? "" :
+    alt.length === 0 ? '<span style="color:var(--warn)">No days selected — every day uses the M&ndash;F times.</span>'
+    : alt.length === 7 ? '<span style="color:var(--warn)">Every day selected — the M&ndash;F times are never used.</span>'
+    : "Second schedule on " + alt.map(i => DAYS[i]).join(", ") + ". Everything else uses the first.";
   $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false");
   $("#buildTag").textContent = "b" + BUILD;
   renderSug();
@@ -1933,6 +1971,7 @@ async function pushEnable() {
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time,
         timeWe: CFG.weekend ? (w.timeWe || w.time) : "" })),
+      altDays: CFG.weekend ? (CFG.altDays || []) : [],
       nagMins: CFG.nagMins
     })
   });
@@ -2027,7 +2066,7 @@ async function cloudSync(quiet) {
   const acct = acctId();
   if (!cloudBase() || !acct) { if (!quiet) toast("Add your Worker URL first", true); return; }
   syncBusy();
-  let pulled = { added: 0, updated: 0 };
+  let pulled = { added: 0, updated: 0 }, cfgChanged = false;
   try {
     const o = await api("/backup?uid=" + encodeURIComponent(acct));
     if (o && Array.isArray(o.entries)) {
@@ -2048,7 +2087,7 @@ async function cloudSync(quiet) {
   } catch (e) { /* no snapshot yet is fine — we'll create one below */ }
 
   try {
-    const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: CFG,
+    const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: sharedCfg(),
       entries: ENTRIES, state: STATE });
     const r = await api("/backup?uid=" + encodeURIComponent(acct),
       { method: "POST", headers: { "Content-Type": "application/json" }, body });
@@ -2058,7 +2097,9 @@ async function cloudSync(quiet) {
         ENTRIES.length + " total"
       : "in step — " + ENTRIES.length + " entries, " + (r.bytes / 1024).toFixed(1) + " KB";
     cloudLog(note, true);
-    if (pulled.added || pulled.updated) {
+    if (cfgChanged) { fillWinSelect(); renderCfg(); scheduleNotifs();
+      cloudLog("adopted a newer schedule from your other device", true); }
+    if (pulled.added || pulled.updated || cfgChanged) {
       fillWinSelect(); setDraft($("#eDate").value || todayISO(), $("#eWin").value || draft.win);
       renderEntries();
       if (!quiet) toast("Pulled " + (pulled.added + pulled.updated) + " from your other device");
@@ -2075,7 +2116,7 @@ async function cloudUpload(quiet) {
   if (!cloudBase() || !acctId()) { if (!quiet) toast("Add your Worker URL first", true); return; }
   try {
     syncBusy();
-    const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: CFG, entries: ENTRIES, state: STATE });
+    const body = JSON.stringify({ v: 1, at: new Date().toISOString(), cfg: sharedCfg(), entries: ENTRIES, state: STATE });
     const r = await api("/backup?uid=" + encodeURIComponent(acctId()),
       { method: "POST", headers: { "Content-Type": "application/json" }, body });
     setDot("#dCloud", "ok");
@@ -2263,6 +2304,11 @@ async function fbSync(quiet) {
     const res = mergeEntries(Object.keys(remote).map(k => remote[k]));
     added = res.added; updated = res.updated;
 
+    const rc = await fetch(fbPath(tok, "/settings"), { cache: "no-store" });
+    if (rc.ok && adoptCfg(await rc.json())) {
+      await saveCfg(); fillWinSelect(); renderCfg(); scheduleNotifs();
+      fbLog("adopted a newer schedule from your other device", true);
+    }
     const rs = await fetch(fbPath(tok, "/state"), { cache: "no-store" });
     if (rs.ok) {
       const st = (await rs.json()) || {};
@@ -2298,6 +2344,10 @@ async function fbSync(quiet) {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skipped: skipOut, suggestions: sugOut,
         meta: { at: new Date().toISOString(), build: BUILD, device: CFG.cloud.uid || "?" } })
+    });
+    await fetch(fbPath(tok, "/settings"), {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sharedCfg())
     });
 
     STATE.dirty = {}; await saveState();
@@ -2424,6 +2474,16 @@ function init() {
     const sx = ev.target.closest("[data-sugdel]");
     if (sx) { STATE.suggestions = (STATE.suggestions || []).filter(x => x.id !== sx.dataset.sugdel);
       saveState(); renderSug(); return; }
+    const dy = ev.target.closest("[data-day]");
+    if (dy) {
+      const i = +dy.dataset.day;
+      CFG.altDays = CFG.altDays || [];
+      const at = CFG.altDays.indexOf(i);
+      at > -1 ? CFG.altDays.splice(at, 1) : CFG.altDays.push(i);
+      touchCfg().then(() => { renderCfg(); refreshDue(); scheduleNotifs();
+        if (CFG.cloud.push) pushEnable(); });
+      return;
+    }
     const ws = ev.target.closest("[data-wstep]");
     if (ws) {
       const p = ws.dataset.wstep.split(":");
@@ -2460,7 +2520,7 @@ function init() {
       return; }
     if (t.dataset.item) { const k = t.dataset.item;
       const i = CFG.off.indexOf(k); i > -1 ? CFG.off.splice(i, 1) : CFG.off.push(k);
-      t.setAttribute("aria-pressed", i > -1 ? "true" : "false"); saveCfg(); renderLog(); return; }
+      t.setAttribute("aria-pressed", i > -1 ? "true" : "false"); touchCfg(); renderLog(); return; }
     if (t.dataset.edit) { const p = t.dataset.edit.split("|"); setDraft(p[0], p[1]); show("log"); return; }
   });
 
@@ -2493,12 +2553,12 @@ function init() {
     $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false"); saveCfg(); refreshDue(); };
   $("#notifBtn").onclick = () => { if (!("Notification" in window)) return;
     Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
-  $("#medSave").onclick = () => { CFG.meds = $("#medList").value; saveCfg(); renderLog(); toast("Med list saved"); };
+  $("#medSave").onclick = () => { CFG.meds = $("#medList").value; touchCfg(); renderLog(); toast("Med list saved"); };
   $("#medChange").onclick = () => {
     if (draft.tags.indexOf("Med change") < 0) draft.tags.push("Med change");
     renderLog(); show("log"); toast("Tagged — save the check-in to record it"); };
   $("#cfgLat").onchange = () => { const v = parseFloat($("#cfgLat").value);
-    if (!isNaN(v) && v > -67 && v < 67) { CFG.lat = v; saveCfg(); renderCfg(); } };
+    if (!isNaN(v) && v > -67 && v < 67) { CFG.lat = v; touchCfg(); renderCfg(); } };
 
   $("#showTxt").onclick = () => { const b = $("#expBox");
     if (!lastExport) lastExport = buildExport("wide");
@@ -2581,7 +2641,7 @@ function init() {
   };
   $("#nagSel").onchange = async () => {
     CFG.nagMins = +$("#nagSel").value; $("#nagLbl").textContent = CFG.nagMins;
-    await saveCfg();
+    await touchCfg();
     if (CFG.cloud.push) { await pushEnable(); cloudLog("nag interval now " + CFG.nagMins + " min", true); }
   };
   $("#cfPush").onclick = () => cloudSync(false);
@@ -2630,7 +2690,7 @@ function init() {
   $("#togWknd").onclick = async () => {
     CFG.weekend = !CFG.weekend;
     if (CFG.weekend) CFG.windows.forEach(w => { if (!w.timeWe) w.timeWe = w.time; });
-    await saveCfg(); renderCfg(); refreshDue();
+    await touchCfg(); renderCfg(); refreshDue();
     if (CFG.cloud.push) { await pushEnable(); cloudLog("weekend schedule pushed to the worker", true); }
   };
   $("#winCfg").addEventListener("change", ev => {
@@ -2638,7 +2698,7 @@ function init() {
     if (i != null) CFG.windows[+i].time = ev.target.value;
     else if (j != null) CFG.windows[+j].timeWe = ev.target.value;
     else return;
-    saveCfg(); fillWinSelect(); $("#eWin").value = draft.win; refreshDue(); scheduleNotifs();
+    touchCfg(); fillWinSelect(); $("#eWin").value = draft.win; refreshDue(); scheduleNotifs();
     if (CFG.cloud.push) pushEnable();          // the worker needs the new schedule
   });
 
