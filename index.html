@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:20-->
+<!DOCTYPE html><!--build:21-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -920,7 +920,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 20;
+const BUILD = 21;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2693,29 +2693,60 @@ function renderEntries() {
    NOTIFICATIONS (in-session only — see note in Data tab)
    ============================================================ */
 let notifTimers = [];
+/* True once this device has a live push subscription — the worker then owns
+   reminders and this in-page scheduler must stay quiet, or every prompt arrives
+   twice and the local copy can fire from stale knowledge. */
+let workerHandlesPush = false;
+
+async function verifyPush() {
+  workerHandlesPush = false;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  try {
+    const reg = swReg || await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    workerHandlesPush = !!(sub && cloudBase() && CFG.cloud.uid);
+    // the stored flag can drift from reality — e.g. after clearing site data
+    if (CFG.cloud.push !== workerHandlesPush) {
+      CFG.cloud.push = workerHandlesPush;
+      await saveCfg();
+      cloudLog(workerHandlesPush ? "push subscription confirmed"
+        : "push subscription is gone on this device — press Save and connect to restore it", true);
+      setDot("#dPush", workerHandlesPush ? "ok" : "bad");
+      syncIdle();
+    }
+  } catch (e) {}
+}
+
 function scheduleNotifs() {
-  notifTimers.forEach(clearTimeout); notifTimers = [];
+  notifTimers.forEach(t => { clearTimeout(t); clearInterval(t); });
+  notifTimers = [];
+  if (dashOn) return;                                   // read-only view never nags
+  if (workerHandlesPush) return;                        // the worker has this covered
   if (!("Notification" in window) || Notification.permission !== "granted") return;
+
+  const fire = async (w) => {
+    await pullDue();                                    // has another device closed it?
+    if (!dueWindows(todayISO()).some(x => x.id === w.id)) return;
+    try { new Notification(w.label + " check-in", {
+      body: "Still open. It'll keep asking until you log or skip it.",
+      tag: "baseline-checkin", renotify: true, requireInteraction: true }); } catch (e) {}
+  };
+
   const now = nowMins();
   CFG.windows.forEach(w => {
-    let delta = minsOf(w.time) - now; if (delta < 0) delta += 1440;
-    notifTimers.push(setTimeout(() => {
-      if (dueWindows(todayISO()).some(x => x.id === w.id)) {
-        try { new Notification(w.label + " check-in", {
-          body: "Still open. It'll keep asking until you log or skip it.",
-          tag: "baseline-" + w.id, requireInteraction: true }); } catch (e) {}
-      }
-      scheduleNotifs();
-    }, delta * 60000 + 1000));
+    let delta = minsOf(winTime(w, todayISO())) - now; if (delta < 0) delta += 1440;
+    notifTimers.push(setTimeout(() => { fire(w); scheduleNotifs(); }, delta * 60000 + 1000));
   });
-  // re-nag every 20 min while something is open
-  notifTimers.push(setInterval(() => {
+  notifTimers.push(setInterval(async () => {
+    if (!CFG.nag || workerHandlesPush) return;
+    await pullDue();
     const due = dueWindows(todayISO());
-    if (!due.length || !CFG.nag) return;
+    if (!due.length) return;
     const w = due[due.length - 1];
     try { new Notification(w.label + " check-in still open", {
-      body: "Two minutes. Or skip it and note why.", tag: "baseline-nag", renotify: true }); } catch (e) {}
-  }, 20 * 60000));
+      body: "Two minutes. Or skip it and note why.",
+      tag: "baseline-checkin", renotify: true }); } catch (e) {}
+  }, Math.max(5, CFG.nagMins || 20) * 60000));
 }
 
 /* ============================================================
@@ -2799,6 +2830,7 @@ async function pushEnable() {
   // give the service worker what it needs to answer /due after being killed
   if (reg.active) reg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
   CFG.cloud.push = true; await saveCfg();
+  workerHandlesPush = true; scheduleNotifs();
   setDot("#dPush", "ok"); setDot("#dCloud", "ok");
   cloudLog("subscribed — reminders will fire with the app closed", true);
   await reportState();
@@ -2819,6 +2851,7 @@ async function pushDisable() {
   try { await api("/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ uid: CFG.cloud.uid }) }); } catch (e) {}
   CFG.cloud.push = false; await saveCfg();
+  workerHandlesPush = false; scheduleNotifs();
   setDot("#dPush", ""); cloudLog("unsubscribed", true);
 }
 
@@ -3758,6 +3791,8 @@ function init() {
     if (due.length) setDraft(todayISO(), due[due.length - 1].id);
   }
   reportState();
+  // settle who owns reminders before any local timer is armed
+  verifyPush().then(() => scheduleNotifs());
 
   $("#digestCopy").onclick = async () => {
     const t = digestText().lines.join("\n");
@@ -3880,6 +3915,7 @@ function init() {
     refreshDue(); checkForNewBuild();
     await syncAll(true);        // pull entries first
     await reportState();        // then report what we actually have
+    await verifyPush();
     refreshDue();
     if (changed && !CFG.cloud.sync && !CFG.fb.on) toast("Already logged on your other device");
   });
