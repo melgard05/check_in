@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:13-->
+<!DOCTYPE html><!--build:14-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -259,6 +259,30 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.warn{background:var(--warn)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- dashboard: read-only, wide, self-refreshing ---------- */
+body.dash nav{display:none}
+body.dash{padding-bottom:24px}
+body.dash #v-log,body.dash #v-data{display:none!important}
+body.dash #v-chart,body.dash #v-pat{display:block!important}
+body.dash main{max-width:1500px;padding:16px 20px 28px}
+body.dash .dashonly{display:flex}
+.dashonly{display:none}
+body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:start}
+@media (min-width:1080px){
+  body.dash .grid{grid-template-columns:1.35fr 1fr}
+  body.dash #v-chart{grid-column:1;margin:0}
+  body.dash #v-pat{grid-column:2;margin:0}
+}
+.dashbar{align-items:center;gap:12px;margin-bottom:14px;padding:10px 14px;background:var(--panel);
+  border:1px solid var(--line);border-radius:var(--r);flex-wrap:wrap}
+.dashbar .ttl{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2)}
+.dashbar .ago{font-family:var(--mono);font-size:12px;color:var(--ink-3);margin-left:auto}
+.dashbar .ago b{color:var(--accent);font-weight:600}
+.chtools{display:flex;gap:6px;justify-content:flex-end;padding:0 6px;margin-top:4px}
+.chtools button{background:none;border:1px solid var(--line-2);border-radius:6px;padding:4px 9px;
+  font-family:var(--mono);font-size:10.5px;color:var(--ink-3);cursor:pointer;letter-spacing:.08em}
+.chtools button:hover{color:var(--ink);border-color:var(--ink-3)}
 </style>
 </head>
 <body>
@@ -278,6 +302,14 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 </header>
 
 <main>
+  <div class="dashbar dashonly">
+    <span class="ttl">Baseline &mdash; dashboard</span>
+    <button class="btn sm" id="dashRange">Last 30 days</button>
+    <button class="btn sm" id="dashRefresh">Refresh now</button>
+    <button class="btn sm gho" id="dashExit">Open the full app</button>
+    <span class="ago" id="dashAgo">&mdash;</span>
+  </div>
+  <div class="grid" id="mainGrid">
   <!-- ============ LOG ============ -->
   <section class="view on" id="v-log">
     <div class="card">
@@ -420,6 +452,8 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
       <p class="sub">The center line is 5. Above is elevated, below is low. Tap the chart for one day.</p>
       <svg class="ch" id="mainCh" viewBox="0 0 700 300" preserveAspectRatio="none" role="img"
            aria-label="Mood and related ratings over time relative to a baseline of 5"></svg>
+      <div class="chtools"><button data-png="mainCh" data-nm="mood">PNG</button>
+        <button data-svg="mainCh" data-nm="mood">SVG</button></div>
       <div class="legend" id="legend"></div>
       <div class="readout" id="readout">Tap a point on the chart to see that day.</div>
     </div>
@@ -428,6 +462,8 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
       <p class="sub">Blue is night sleep, purple stacked on top is naps. The band is 7&ndash;9h. Small dots are bedtime drift.</p>
       <svg class="ch" id="sleepCh" viewBox="0 0 700 200" preserveAspectRatio="none" role="img"
            aria-label="Hours slept per night"></svg>
+      <div class="chtools"><button data-png="sleepCh" data-nm="sleep">PNG</button>
+        <button data-svg="sleepCh" data-nm="sleep">SVG</button></div>
     </div>
     <div class="card chartcard" id="dayCard">
       <h2>Daylight</h2>
@@ -475,6 +511,18 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 
   <!-- ============ DATA ============ -->
   <section class="view" id="v-data">
+    <div class="card">
+      <h2>Dashboard</h2>
+      <p class="sub">A wide, read-only view of the charts and patterns that refreshes itself.
+        Leave it open in a pinned tab on your computer and it follows what you log on your phone.</p>
+      <div class="row" style="gap:8px">
+        <button class="btn sm pri" id="openDash">Open dashboard</button>
+        <button class="btn sm" id="copyDash">Copy its link</button>
+      </div>
+      <div class="mini" style="margin-top:9px">Charts can also be saved as PNG or SVG from the
+        buttons under each one.</div>
+    </div>
+
     <div class="card">
       <h2>Export</h2>
       <p class="sub">CSV downloads. If your network blocks the download, use Show text and copy it.</p>
@@ -649,6 +697,7 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
       <div class="scroll"><table class="tbl" id="entTbl"></table></div>
     </div>
   </section>
+  </div>
 </main>
 
 <nav>
@@ -765,7 +814,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 13;
+const BUILD = 14;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1334,7 +1383,7 @@ function refreshDue() {
   try { if (navigator.setAppBadge) due.length ? navigator.setAppBadge(due.length) : navigator.clearAppBadge(); }
   catch (e) {}
   // blocking gate for the most overdue window
-  if (CFG.nag && due.length) {
+  if (CFG.nag && due.length && !dashOn) {
     const w = due[due.length - 1], key = today + "|" + w.id;
     if (key !== gateKey) {
       gateKey = key;
@@ -2610,6 +2659,101 @@ async function syncAll(quiet) {
 }
 
 /* ============================================================
+   CHART EXPORT — the SVG is already on screen, so serialise it
+   ============================================================ */
+function chartSVG(id) {
+  const src = document.getElementById(id);
+  if (!src) return null;
+  const svg = src.cloneNode(true);
+  const vb = (svg.getAttribute("viewBox") || "0 0 700 300").split(/\s+/).map(Number);
+  const w = vb[2] || 700, h = vb[3] || 300;
+  svg.setAttribute("width", w); svg.setAttribute("height", h);
+  svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  svg.removeAttribute("class"); svg.removeAttribute("style");
+  // opaque background, or it reads as a black-on-transparent mess anywhere else
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("x", 0); bg.setAttribute("y", 0);
+  bg.setAttribute("width", w); bg.setAttribute("height", h);
+  bg.setAttribute("fill", "#0b0d10");
+  svg.insertBefore(bg, svg.firstChild);
+  return { markup: '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svg),
+    w: w, h: h };
+}
+function downloadSVG(id, nm) {
+  const o = chartSVG(id); if (!o) return;
+  download("baseline-" + nm + "-" + todayISO() + ".svg", o.markup, "image/svg+xml")
+    ? toast("Saved SVG") : toast("Download blocked", true);
+}
+function downloadPNG(id, nm) {
+  const o = chartSVG(id); if (!o) return;
+  const scale = 2;                                  // legible when zoomed or printed
+  const img = new Image();
+  const blob = new Blob([o.markup], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  img.onload = () => {
+    try {
+      const c = document.createElement("canvas");
+      c.width = o.w * scale; c.height = o.h * scale;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#0b0d10"; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(bl => {
+        if (!bl) { toast("Could not render the image", true); return; }
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(bl);
+        a.download = "baseline-" + nm + "-" + todayISO() + ".png";
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 400);
+        toast("Saved PNG");
+      }, "image/png");
+    } catch (e) { toast("Could not render the image", true); }
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast("Could not render the image", true); };
+  img.src = url;
+}
+
+/* ============================================================
+   DASHBOARD — read-only, refreshes itself
+   ============================================================ */
+let dashOn = false, dashLast = 0, dashTimer = null;
+function dashDraw() {
+  drawMain(); drawSleep(); drawDay(); drawCoverage(); renderPatterns();
+}
+function dashAgo() {
+  if (!dashLast) return;
+  const s = Math.round((Date.now() - dashLast) / 1000);
+  const t = s < 10 ? "just now" : s < 60 ? s + "s ago"
+    : s < 3600 ? Math.round(s / 60) + " min ago" : Math.round(s / 3600) + " h ago";
+  $("#dashAgo").innerHTML = ENTRIES.length + " entries &nbsp;·&nbsp; updated <b>" + t + "</b>";
+}
+async function dashPull(quiet) {
+  if (!quiet) setSync("busy", "syncing");
+  try { await pullDue(); } catch (e) {}
+  try { await syncAll(true); } catch (e) {}
+  dashLast = Date.now();
+  dashDraw(); dashAgo();
+}
+function dashInit() {
+  document.body.classList.add("dash");
+  const labels = { 7:"Last 7 days", 14:"Last 14 days", 30:"Last 30 days", 90:"Last 90 days", 0:"Everything" };
+  const setLabel = () => { $("#dashRange").textContent = labels[range] || ("Last " + range + " days"); };
+  setLabel();
+  $("#dashRange").onclick = () => {
+    const order = [7, 14, 30, 90, 0];
+    range = order[(order.indexOf(range) + 1) % order.length];
+    $$("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.d === range ? "true" : "false"));
+    setLabel(); dashDraw();
+  };
+  $("#dashRefresh").onclick = () => dashPull(false);
+  $("#dashExit").onclick = () => { location.search = ""; };
+  dashPull(true);
+  dashTimer = setInterval(() => { if (!document.hidden) dashPull(true); }, 90000);
+  setInterval(dashAgo, 15000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) dashPull(true); });
+}
+
+/* ============================================================
    WIRING
    ============================================================ */
 function show(v) {
@@ -2667,6 +2811,7 @@ function commit(skip, reason) {
 }
 
 function init() {
+  dashOn = /[?&]dash=1/.test(location.search);
   fillWinSelect();
   buildWheel($("#wH"), 14, 1, pushSleep);
   buildWheel($("#wM"), 55, 5, pushSleep);
@@ -2728,6 +2873,10 @@ function init() {
     const sx = ev.target.closest("[data-sugdel]");
     if (sx) { STATE.suggestions = (STATE.suggestions || []).filter(x => x.id !== sx.dataset.sugdel);
       saveState(); renderSug(); return; }
+    const pg = ev.target.closest("[data-png]");
+    if (pg) { downloadPNG(pg.dataset.png, pg.dataset.nm); return; }
+    const sv = ev.target.closest("[data-svg]");
+    if (sv) { downloadSVG(sv.dataset.svg, sv.dataset.nm); return; }
     const cx = ev.target.closest("[data-ctx]");
     if (cx) {
       draft.ctx = draft.ctx === cx.dataset.ctx ? "" : cx.dataset.ctx;
@@ -2822,6 +2971,12 @@ function init() {
   $("#cfgLat").onchange = () => { const v = parseFloat($("#cfgLat").value);
     if (!isNaN(v) && v > -67 && v < 67) { CFG.lat = v; touchCfg(); renderCfg(); } };
 
+  const dashURL = () => location.origin + location.pathname + "?dash=1";
+  $("#openDash").onclick = () => window.open(dashURL(), "_blank");
+  $("#copyDash").onclick = async () => {
+    try { await navigator.clipboard.writeText(dashURL()); toast("Link copied"); }
+    catch (e) { prompt("Dashboard link:", dashURL()); }
+  };
   $("#showTxt").onclick = () => { const b = $("#expBox");
     if (!lastExport) lastExport = buildExport("wide");
     b.style.display = b.style.display === "none" ? "" : "none"; b.value = lastExport; };
@@ -3038,6 +3193,7 @@ function init() {
   $("#buildTag").textContent = "b" + BUILD;
   checkBuild();
   syncIdle();
+  if (dashOn) dashInit();          // read-only view, but still tracks builds and sync
   setTimeout(checkForNewBuild, 3000);
   setInterval(checkForNewBuild, 4 * 60000);
   window.addEventListener("focus", checkForNewBuild);   // tabbing back counts too
