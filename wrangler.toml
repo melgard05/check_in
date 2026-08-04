@@ -1,0 +1,11 @@
+name = "baseline-push"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# every 5 minutes; the worker itself enforces your nag interval
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[kv_namespaces]]
+binding = "BASELINE"
+id = "PASTE_YOUR_KV_NAMESPACE_ID_HERE"
