@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:22-->
+<!DOCTYPE html><!--build:23-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -920,7 +920,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 22;
+const BUILD = 23;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1593,6 +1593,35 @@ function dueWindows(date) {
   });
   return out;
 }
+/* Close anything still on screen for check-ins that are no longer open.
+   A shown notification does not remove itself, and ours are sticky by design,
+   so completing on another device has to actively take them down. */
+async function clearNotifs(onlyIds) {
+  try {
+    const reg = swReg || (navigator.serviceWorker && await navigator.serviceWorker.getRegistration());
+    if (reg && reg.getNotifications) {
+      const ns = await reg.getNotifications();
+      ns.forEach(n => {
+        if (!n.tag || n.tag.indexOf("baseline") !== 0) return;
+        if (n.tag === "baseline-digest") return;          // that one is informational
+        if (onlyIds && n.data && n.data.win && onlyIds.indexOf(n.data.win) < 0) return;
+        n.close();
+      });
+    }
+  } catch (e) {}
+  // non-persistent ones raised by this page
+  livePageNotifs.forEach(n => { try { n.close(); } catch (e) {} });
+  livePageNotifs = [];
+  // and ask the worker directly, which also clears the app badge
+  try {
+    const reg = swReg || (navigator.serviceWorker && await navigator.serviceWorker.getRegistration());
+    const target = (reg && (reg.active || reg.waiting)) ||
+      (navigator.serviceWorker && navigator.serviceWorker.controller);
+    if (target) target.postMessage({ type: "clear-notifs" });
+  } catch (e) {}
+}
+let livePageNotifs = [];
+
 function refreshDue() {
   const today = todayISO();
   const due = dueWindows(today);
@@ -1601,6 +1630,7 @@ function refreshDue() {
   else { b.className = "badge"; b.textContent = "all clear"; }
   try { if (navigator.setAppBadge) due.length ? navigator.setAppBadge(due.length) : navigator.clearAppBadge(); }
   catch (e) {}
+  if (!due.length) clearNotifs();                  // nothing open: take the prompts down
   // blocking gate for the most overdue window
   if (CFG.nag && due.length && !dashOn) {
     const w = due[due.length - 1], key = today + "|" + w.id;
@@ -2724,12 +2754,20 @@ function scheduleNotifs() {
   if (workerHandlesPush) return;                        // the worker has this covered
   if (!("Notification" in window) || Notification.permission !== "granted") return;
 
+  const raise = async (title, body) => {
+    const opts = { body, tag: "baseline-checkin", renotify: true, requireInteraction: true,
+      icon: "./icon-192.png", badge: "./icon-badge.png", data: { local: true } };
+    try {
+      const reg = swReg || (navigator.serviceWorker && await navigator.serviceWorker.getRegistration());
+      if (reg && reg.showNotification) { await reg.showNotification(title, opts); return; }
+    } catch (e) {}
+    try { livePageNotifs.push(new Notification(title, opts)); } catch (e) {}
+  };
+
   const fire = async (w) => {
     await pullDue();                                    // has another device closed it?
-    if (!dueWindows(todayISO()).some(x => x.id === w.id)) return;
-    try { new Notification(w.label + " check-in", {
-      body: "Still open. It'll keep asking until you log or skip it.",
-      tag: "baseline-checkin", renotify: true, requireInteraction: true }); } catch (e) {}
+    if (!dueWindows(todayISO()).some(x => x.id === w.id)) { clearNotifs(); return; }
+    raise(w.label + " check-in", "Still open. It'll keep asking until you log or skip it.");
   };
 
   const now = nowMins();
@@ -2741,11 +2779,9 @@ function scheduleNotifs() {
     if (!CFG.nag || workerHandlesPush) return;
     await pullDue();
     const due = dueWindows(todayISO());
-    if (!due.length) return;
+    if (!due.length) { clearNotifs(); return; }
     const w = due[due.length - 1];
-    try { new Notification(w.label + " check-in still open", {
-      body: "Two minutes. Or skip it and note why.",
-      tag: "baseline-checkin", renotify: true }); } catch (e) {}
+    raise(w.label + " check-in still open", "Two minutes. Or skip it and note why.");
   }, Math.max(5, CFG.nagMins || 20) * 60000));
 }
 
@@ -3465,6 +3501,7 @@ function commit(skip, reason) {
   }
   gateKey = null;
   refreshDue();
+  clearNotifs();
   maybeOfferPlan();
   reportState();                              // stop the nagging straight away
   syncAll(true).then(() => reportState());     // then report the merged picture
