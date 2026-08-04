@@ -1,173 +1,51 @@
-/* Baseline service worker — sticky check-in notifications + offline shell */
+/* Tonnage Log service worker.
+   Purpose: let the app open with no connection, and satisfy the browser's
+   requirement for an installable app.
 
-const CACHE = "baseline-v2";
-const SHELL = ["./", "./index.html", "./manifest.json"];
+   Strategy is network-first for the page itself, so a newly deployed build is
+   picked up as soon as there is a connection, with the cached copy used only
+   when the network fails. Firebase traffic is never cached — stale tonnage
+   numbers would be worse than none. */
 
-/* WORKER_URL and UID are written in by the app on first subscribe. */
-let CFG = { worker: "", uid: "" };
+const CACHE = "tonnage-shell-v1";
+const SHELL = ["./", "./index.html"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
-});
-
-self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys()
-    .then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
-    .then(() => self.clients.claim()));
-});
-
-/* the page hands us the worker URL + uid so the push handler can call /due */
-self.addEventListener("message", e => {
-  const d = e.data || {};
-  if (d.type === "skip-waiting") { self.skipWaiting(); return; }
-  if (d.type === "config") {
-    CFG.worker = d.worker || "";
-    CFG.uid = d.uid || "";
-    // stash it so it survives the SW being killed between pushes
-    caches.open(CACHE).then(c =>
-      c.put("__cfg", new Response(JSON.stringify(CFG), { headers: { "Content-Type": "application/json" } })));
-  }
-});
-
-async function loadCfg() {
-  if (CFG.worker && CFG.uid) return CFG;
-  try {
-    const c = await caches.open(CACHE);
-    const r = await c.match("__cfg");
-    if (r) CFG = await r.json();
-  } catch (e) {}
-  return CFG;
-}
-
-/* offline shell: network first for the html so updates land, cache as fallback */
-self.addEventListener("fetch", e => {
-  const req = e.request;
-  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
-  e.respondWith(
-    fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match(req).then(r => r || new Response("Offline", { status: 503 })))
+  self.skipWaiting();
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(SHELL).catch(() => {}))
   );
 });
 
-/* ---------- push: no payload, so ask the worker what's open ---------- */
-self.addEventListener("push", e => {
-  e.waitUntil((async () => {
-    const cfg = await loadCfg();
-    let due = [], count = 0, isTest = false;
-
-    if (cfg.worker && cfg.uid) {
-      try {
-        const r = await fetch(cfg.worker.replace(/\/+$/, "") + "/due?uid=" + encodeURIComponent(cfg.uid),
-          { cache: "no-store" });
-        if (r.ok) { const j = await r.json(); due = j.due || []; count = j.count || 0; isTest = !!j.test; }
-      } catch (err) {}
-    }
-    // if a payload did come through, prefer it
-    if (!count && e.data) {
-      try { const j = e.data.json(); due = j.due || []; count = j.count || due.length; } catch (err) {}
-    }
-
-    if (isTest) {
-      try { if (self.navigator && navigator.setAppBadge) await navigator.setAppBadge(count || 1); } catch (err) {}
-      return self.registration.showNotification("Push is working", {
-        body: count ? count + " check-in" + (count > 1 ? "s" : "") + " open right now."
-                    : "Test notification. Nothing is due at the moment.",
-        tag: "baseline-test", renotify: true, icon: "./icon-192.png", badge: "./icon-badge.png",
-        data: { test: true }
-      });
-    }
-
-    if (!count) {
-      // We promised userVisibleOnly, so we must show something or the browser
-      // shows its own "site updated in background" notice and may revoke push.
-      try { if (self.navigator && navigator.clearAppBadge) await navigator.clearAppBadge(); } catch (err) {}
-      return self.registration.showNotification("All caught up", {
-        body: "Nothing due right now.",
-        tag: "baseline-checkin", renotify: false, requireInteraction: false,
-        silent: true, icon: "./icon-192.png", badge: "./icon-badge.png"
-      });
-    }
-
-    const names = due.map(w => w.label).join(", ");
-    const title = count === 1 ? names + " check-in" : count + " check-ins open";
-    const body = count === 1
-      ? "Still open. This keeps coming back until you log it or skip it."
-      : names + " — all still open.";
-
-    try { if (self.navigator && navigator.setAppBadge) await navigator.setAppBadge(count); } catch (err) {}
-
-    return self.registration.showNotification(title, {
-      body,
-      tag: "baseline-checkin",     // one notification, replaced not stacked
-      renotify: true,              // but re-alert each time it's re-sent
-      requireInteraction: true,    // desktop: stays until touched
-      silent: false,
-      badge: "./icon-badge.png",
-      icon: "./icon-192.png",
-      data: { count, due, at: Date.now() },
-      actions: [
-        { action: "log", title: "Log it" },
-        { action: "snooze", title: "Snooze 15m" }
-      ]
-    });
-  })());
+self.addEventListener("activate", e => {
+  e.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
 });
 
-self.addEventListener("notificationclick", e => {
-  const act = e.action, data = e.notification.data || {};
-  e.notification.close();
+self.addEventListener("fetch", e => {
+  const req = e.request;
+  if (req.method !== "GET") return;
 
-  e.waitUntil((async () => {
-    const cfg = await loadCfg();
+  const url = new URL(req.url);
 
-    if (act === "snooze") {
-      if (cfg.worker && cfg.uid) {
-        try {
-          await fetch(cfg.worker.replace(/\/+$/, "") + "/snooze", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: cfg.uid, mins: 15 })
-          });
-        } catch (err) {}
-      }
-      return;
-    }
+  // Never cache the database or any cross-origin call.
+  if (url.origin !== self.location.origin) return;
+  if (/firebaseio|firebasedatabase|googleapis/.test(url.hostname)) return;
 
-    // open or focus THIS app, and tell it to jump straight to the open check-in.
-    // Match on the registration scope — matching on origin alone would focus
-    // whatever other app on this domain happened to have a tab open.
-    const scope = self.registration.scope;
-    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const c of all) {
-      if (c.url.indexOf(scope) === 0) {
-        await c.focus();
-        c.postMessage({ type: "open-checkin", due: data.due || [] });
-        return;
-      }
-    }
-    await self.clients.openWindow(scope);
-  })());
-});
-
-self.addEventListener("notificationclose", e => {
-  // dismissing does not count as done — the cron will bring it back
-});
-
-/* let the page force a re-check */
-self.addEventListener("pushsubscriptionchange", e => {
-  e.waitUntil((async () => {
-    const cfg = await loadCfg();
-    if (!cfg.worker || !cfg.uid) return;
-    try {
-      const sub = await self.registration.pushManager.getSubscription();
-      if (!sub) return;
-      await fetch(cfg.worker.replace(/\/+$/, "") + "/subscribe", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: cfg.uid, sub: sub.toJSON(),
-          tz: Intl.DateTimeFormat().resolvedOptions().timeZone })
-      });
-    } catch (err) {}
-  })());
+  e.respondWith(
+    fetch(req)
+      .then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(req).then(hit => hit || caches.match("./index.html") || caches.match("./"))
+      )
+  );
 });
