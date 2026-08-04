@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:21-->
+<!DOCTYPE html><!--build:22-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -920,7 +920,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 21;
+const BUILD = 22;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2857,7 +2857,7 @@ async function pushDisable() {
 
 /* tell the worker which check-ins are closed so it stops nagging */
 async function reportState() {
-  if (!cloudBase() || !CFG.cloud.uid || !CFG.cloud.push) { syncIdle(); return; }
+  if (!cloudBase() || !acctId()) { syncIdle(); return; }
   const d = todayISO();
   const done = ENTRIES.filter(e => e.date === d).map(e => e.win);
   const skipped = Object.keys(STATE.skipped)
@@ -2879,9 +2879,12 @@ const acctId = () => CFG.cloud.account || CFG.cloud.uid || "";
 /* Ask the worker what's already been closed today on any device. Cheap, and it
    carries no ratings — safe to run even with snapshots turned off. */
 async function pullDue() {
-  if (!cloudBase() || !CFG.cloud.uid || !CFG.cloud.push) return false;
+  // Reading what other devices have closed has nothing to do with whether this
+  // device can receive push, so don't gate it on that.
+  if (!cloudBase() || !acctId()) return false;
   try {
-    const j = await api("/due?uid=" + encodeURIComponent(CFG.cloud.uid));
+    const j = await api("/due?uid=" + encodeURIComponent(CFG.cloud.uid || "") +
+      "&account=" + encodeURIComponent(acctId()));
     const today = todayISO();
     if (j && (j.date === today || !j.date)) {
       const was = remoteClosed.ids.join(",");
