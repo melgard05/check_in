@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:23-->
+<!DOCTYPE html><!--build:24-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -175,6 +175,8 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .chip.ev[aria-pressed="true"]{background:#2b2119;border-color:var(--warn);color:var(--warn)}
 .chip.ctx[aria-pressed="true"]{background:#1b2733;border-color:#5fa8d4;color:#7fbde4}
 .chip.ctx.w[aria-pressed="true"]{background:#2a2333;border-color:#9b7fd4;color:#b6a0e4}
+.chip.ctx.out[aria-pressed="true"]{background:#1a2620;border-color:#5f9e7a;color:#84c2a1}
+.chip.ctx.ap[aria-pressed="true"]{background:#2b2119;border-color:var(--warn);color:var(--warn)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>*{min-width:0}
 label.fld{display:block;flex:1 1 130px}
@@ -506,7 +508,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     </div>
     <div class="card chartcard">
       <h2>Deviation from baseline</h2>
-      <p class="sub">The center line is 5. Above is elevated, below is low. Tap the chart for one day.</p>
+      <p class="sub">The center line is 5. Above is elevated, below is low. Tap the chart for one day. Dashed marks show appointments and medication changes.</p>
       <svg class="ch" id="mainCh" viewBox="0 0 700 300" preserveAspectRatio="none" role="img"
            aria-label="Mood and related ratings over time relative to a baseline of 5"></svg>
       <div class="chtools"><button data-png="mainCh" data-nm="mood">PNG</button>
@@ -561,6 +563,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <h2>Work days vs time off</h2>
       <p class="sub">Averages on days you worked against days you didn't. Needs 3+ of each.</p>
       <div id="workSplit"></div>
+      <div id="ctxSplit" style="margin-top:18px"></div>
     </div>
     <div class="card" id="cycleCard" style="display:none">
       <h2>By cycle phase</h2>
@@ -906,10 +909,14 @@ const PAIN_KINDS = ["Aching","Sharp / stabbing","Burning","Throbbing","Shooting 
   "Stiff","Cramping","Numb / tingling","Deep pressure","Sore to touch"];
 
 const CTX = [
-  { id:"work",   label:"At work",   work:true  },
+  { id:"work",   label:"At work",           work:true  },
   { id:"back",   label:"Back from time off", work:true, reentry:true },
-  { id:"off",    label:"Day off",   work:false },
-  { id:"away",   label:"Away",      work:false }
+  { id:"home",   label:"Home",              work:false },
+  { id:"land",   label:"Land",              work:false, outdoors:true },
+  { id:"woods",  label:"Woods",             work:false, outdoors:true },
+  { id:"appt",   label:"Dr appointment",    work:false, appt:true },
+  { id:"off",    label:"Day off",           work:false },
+  { id:"away",   label:"Away",              work:false }
 ];
 const CTXBY = {}; CTX.forEach(c => CTXBY[c.id] = c);
 
@@ -920,7 +927,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 23;
+const BUILD = 24;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1459,7 +1466,8 @@ function renderLog() {
   }
   $("#togRecall").setAttribute("aria-pressed", draft.recall ? "true" : "false");
   $("#ctxChips").innerHTML = CTX.map(c =>
-    '<button class="chip ctx' + (c.work ? " w" : "") + '" data-ctx="' + c.id + '" aria-pressed="' +
+    '<button class="chip ctx' + (c.work ? " w" : c.outdoors ? " out" : c.appt ? " ap" : "") +
+    '" data-ctx="' + c.id + '" aria-pressed="' +
     (draft.ctx === c.id ? "true" : "false") + '">' + esc(c.label) + "</button>").join("");
 
   // cycle
@@ -1664,7 +1672,7 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, medoff: null, recall: false };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -1682,6 +1690,8 @@ function daily(days) {
         cx.filter(v => v === b).length - cx.filter(v => v === a).length)[0];
       row.worked = cx.some(c => CTXBY[c] && CTXBY[c].work);
       row.reentry = cx.some(c => CTXBY[c] && CTXBY[c].reentry);
+      row.outdoors = cx.some(c => CTXBY[c] && CTXBY[c].outdoors);
+      row.appt = cx.some(c => CTXBY[c] && CTXBY[c].appt);
     }
     const ne = es.find(e => e.nap && e.nap.on);
     if (ne) row.nap = { hours: (+ne.nap.h || 0) + (+ne.nap.m || 0) / 60, start: ne.nap.start || "" };
@@ -1856,6 +1866,15 @@ function drawMain() {
          '" height="' + (H - bot - top) + '" fill="#5fa8d4" opacity="0.055"/>';
   });
 
+  // appointments — useful anchors when reading a stretch of chart
+  rows.forEach((r, i) => { if (r.appt) {
+    const x = xAt(i, n);
+    g += '<line x1="' + x + '" x2="' + x + '" y1="' + top + '" y2="' + (H - bot) +
+         '" stroke="#5fa8d4" stroke-width="1" stroke-dasharray="2 4" opacity=".7"/>' +
+         '<text x="' + x + '" y="' + (H - bot + 11) + '" fill="#5fa8d4" font-size="8.5" ' +
+         'font-family="ui-monospace,monospace" text-anchor="middle">appt</text>';
+  } });
+
   // med-change markers
   rows.forEach((r, i) => { if (r.tags.indexOf("Med change") > -1) {
     const x = xAt(i, n);
@@ -1998,7 +2017,9 @@ function readoutFor(i) {
   if (!r.n) { s += "no check-ins"; $("#readout").innerHTML = s; return; }
   s += r.n + " check-in" + (r.n > 1 ? "s" : "");
   if (r.ctx && CTXBY[r.ctx]) s += ' · <span style="color:' +
-    (CTXBY[r.ctx].work ? "#b6a0e4" : "#7fbde4") + '">' + esc(CTXBY[r.ctx].label) + "</span>";
+    (CTXBY[r.ctx].work ? "#b6a0e4" : CTXBY[r.ctx].outdoors ? "#84c2a1"
+      : CTXBY[r.ctx].appt ? "#d9a03c" : "#7fbde4") +
+    '">' + esc(CTXBY[r.ctx].label) + "</span>";
   s += "<br>";
   const bits = Object.keys(SCOL).filter(k => r.v[k] != null && isOn(k))
     .map(k => ITEM[k].label.toLowerCase() + " <b>" + r.v[k].toFixed(1) + "</b>");
@@ -2115,6 +2136,7 @@ function renderPatterns() {
   renderDigest(rows);
   renderCycle(rows);
   renderWorkSplit(rows);
+  renderCtxSplit(rows);
   renderFlags(rows);
 }
 
@@ -2196,6 +2218,42 @@ function renderCycle(rows) {
       cells.map(c => '<td style="color:var(--ink-3)">' + c.set.length + "</td>").join("") + "</tr>" +
     "</table></div>" +
     '<div class="mini">' + cells.map(c => c.ph.n).join(" &nbsp;·&nbsp; ") + "</div>";
+}
+
+/* Once several contexts are in use, the two-way split is too coarse —
+   "not working" covers sitting at home and being out on the land. */
+function renderCtxSplit(rows) {
+  const el = $("#ctxSplit"); if (!el) return;
+  const used = CTX.map(c => ({ c, set: rows.filter(r => r.ctx === c.id && r.v.mood != null) }))
+    .filter(x => x.set.length >= 3);
+  if (used.length < 3) { el.innerHTML = ""; return; }
+  const keys = ITEMS.filter(i => (i.grp === "core" || i.key === "pain") && isOn(i.key)).map(i => i.key);
+  const mean = (set, k) => { const v = set.map(r => k === "sleep" ? (r.sleep ? r.sleep.hours : null) : r.v[k])
+    .filter(x => x != null);
+    return v.length ? v.reduce((a, c2) => a + c2, 0) / v.length : null; };
+  const best = k => {
+    const badHigh = { irrit:1, anxiety:1, pain:1, spend:1, fog:1, calls:1, binge:1 };
+    const vals = used.map(u => mean(u.set, k)).filter(v => v != null);
+    if (vals.length < 2) return null;
+    return badHigh[k] ? Math.min.apply(null, vals) : Math.max.apply(null, vals);
+  };
+  el.innerHTML = '<div class="eyebrow" style="margin:0 0 8px">By where you were</div>' +
+    '<div class="scroll"><table class="tbl"><tr><th></th>' +
+    used.map(u => "<th>" + esc(u.c.label.replace("Back from time off", "Back")) + "</th>").join("") +
+    "</tr>" +
+    keys.concat(["sleep"]).map(k => {
+      const bv = best(k);
+      return "<tr><td>" + esc(k === "sleep" ? "Hours slept" : ITEM[k].label) + "</td>" +
+        used.map(u => { const m = mean(u.set, k);
+          const hi = m != null && bv != null && Math.abs(m - bv) < 0.05;
+          return '<td' + (hi ? ' style="color:var(--base);font-weight:600"' : "") + ">" +
+            (m == null ? "\u2014" : m.toFixed(1)) + "</td>"; }).join("") + "</tr>";
+    }).join("") +
+    '<tr><td style="color:var(--ink-3)">days</td>' +
+    used.map(u => '<td style="color:var(--ink-3)">' + u.set.length + "</td>").join("") +
+    "</tr></table></div>" +
+    '<div class="mini">Green marks the best column for each row. Only contexts used on 3+ days appear, ' +
+    'and small samples move around a lot &mdash; treat this as a hint, not a finding.</div>';
 }
 
 function renderWorkSplit(rows) {
@@ -2358,6 +2416,31 @@ function renderFlags(rows) {
   if (reb.length >= 3) out.push(["", "Rough crash on " + reb.length + " of the last 10 days",
     "Rebound as a dose wears off is treatable — timing, dose shape, or a small afternoon top-up " +
     "are all things to raise rather than ride out."]);
+
+  // time on the land or in the woods
+  const outD = rows.filter(r => r.outdoors && r.v.mood != null);
+  const inD = rows.filter(r => r.n && !r.outdoors && r.v.mood != null);
+  if (outD.length >= 4 && inD.length >= 6) {
+    const m = (set, k) => { const v = set.map(r => r.v[k]).filter(x => x != null);
+      return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
+    const dMood = m(outD, "mood") - m(inD, "mood");
+    const parts = [];
+    ["anxiety", "fog", "irrit"].forEach(k => {
+      if (!isOn(k)) return;
+      const a = m(outD, k), c = m(inD, k);
+      if (a == null || c == null) return;
+      if (Math.abs(a - c) >= 0.8) parts.push(ITEM[k].label.toLowerCase() + " " +
+        (a < c ? "lower" : "higher") + " by " + Math.abs(a - c).toFixed(1));
+    });
+    if (Math.abs(dMood) >= 0.6 || parts.length) {
+      out.push(["", "Days on the land or in the woods look different",
+        "Mood " + (dMood > 0 ? "up " : "down ") + Math.abs(dMood).toFixed(1) +
+        (parts.length ? ", " + parts.join(", ") : "") +
+        " across " + outD.length + " such days against " + inD.length + " others. " +
+        (dMood > 0 ? "Worth treating as something to schedule rather than something that just happens."
+                   : "Worth a look at what those days have in common beyond the location.")]);
+    }
+  }
 
   // coming back from time off
   const re = rows.filter(r => r.reentry && r.v.mood != null);
