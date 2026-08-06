@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:26-->
+<!DOCTYPE html><!--build:27-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -707,6 +707,16 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm" id="cfPush">Sync now</button>
         <button class="btn sm" id="cfPull">Restore from Cloudflare</button>
       </div>
+      <label class="fld" style="margin-top:9px"><span>Access key &mdash; optional, must match the worker</span>
+        <input type="text" id="cfKey" placeholder="leave blank if you haven't set one"
+               autocapitalize="off" spellcheck="false"></label>
+      <div class="row" style="margin-top:11px;gap:8px">
+        <button class="btn sm" id="mkLink">Copy reconnect link</button>
+        <button class="btn sm" id="mkLinkFb">Include Firebase</button>
+      </div>
+      <div class="mini" style="margin-top:7px">Bookmark it. If this machine ever loses its browser
+        data, opening that bookmark puts everything back in one tap. <b>Treat it like a password</b>
+        &mdash; anyone who opens it can reach your entries.</div>
       <div class="row" style="margin-top:12px;gap:14px">
         <span class="cstat"><i class="dot" id="dSw"></i>service worker</span>
         <span class="cstat"><i class="dot" id="dPush"></i>push</span>
@@ -963,7 +973,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 26;
+const BUILD = 27;
 
 const DEFAULT_CFG = {
   windows: [
@@ -983,7 +993,7 @@ const DEFAULT_CFG = {
   cfgAt: 0,
   off: ITEMS.filter(i => i.off).map(i => i.key),
   nag: true, lat: 46.8, meds: "", nagMins: 20,
-  cloud: { url: "", uid: "", account: "", push: false, sync: false },
+  cloud: { url: "", uid: "", account: "", key: "", push: false, sync: false },
   fb: { url: "", apiKey: "", email: "", uid: "", on: false }
 };
 
@@ -3038,6 +3048,7 @@ function renderCfg() {
   $("#cfUrl").value = CFG.cloud.url || "";
   $("#cfUid").value = CFG.cloud.uid || "";
   $("#cfAcct").value = CFG.cloud.account || "";
+  $("#cfKey").value = CFG.cloud.key || "";
   $("#togPush").setAttribute("aria-pressed", CFG.cloud.push ? "true" : "false");
   $("#togSync").setAttribute("aria-pressed", CFG.cloud.sync ? "true" : "false");
   $("#nagSel").value = String(CFG.nagMins || 20);
@@ -3215,6 +3226,7 @@ function b64ToU8(s) {
 async function api(path, opts) {
   const base = cloudBase();
   if (!base) throw new Error("no worker url");
+  if (CFG.cloud.key) path += (path.indexOf("?") > -1 ? "&" : "?") + "key=" + encodeURIComponent(CFG.cloud.key);
   const r = await fetch(base + path, Object.assign({ cache: "no-store" }, opts || {}));
   if (!r.ok) throw new Error("HTTP " + r.status);
   const ct = r.headers.get("content-type") || "";
@@ -3264,7 +3276,8 @@ async function pushEnable() {
   await api("/subscribe", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      uid: CFG.cloud.uid, account: CFG.cloud.account || CFG.cloud.uid, sub: sub.toJSON(),
+      uid: CFG.cloud.uid, account: CFG.cloud.account || CFG.cloud.uid,
+      key: CFG.cloud.key || undefined, sub: sub.toJSON(),
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time,
         timeWe: CFG.weekend ? (w.timeWe || w.time) : "" })),
@@ -3637,6 +3650,38 @@ function watchForUpdate(reg) {
   offer(reg.installing);
   reg.addEventListener("updatefound", () => offer(reg.installing));
   setInterval(() => { try { reg.update(); } catch (e) {} }, 30 * 60000);
+}
+
+/* ---------- one-tap reconnect ----------
+   A corporate profile can wipe browser storage at logoff, taking the worker URL,
+   account and push subscription with it. A bookmark survives that, because
+   bookmarks roam with the profile even when Chrome's site data does not. */
+function b64urlEnc(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlDec(str) {
+  const pad2 = "=".repeat((4 - str.length % 4) % 4);
+  return decodeURIComponent(escape(atob(str.replace(/-/g, "+").replace(/_/g, "/") + pad2)));
+}
+function setupLink(includeFb) {
+  const o = { u: CFG.cloud.url, a: CFG.cloud.account || CFG.cloud.uid, d: CFG.cloud.uid };
+  if (CFG.cloud.key) o.k = CFG.cloud.key;
+  if (includeFb && CFG.fb.url) { o.fu = CFG.fb.url; o.fk = CFG.fb.apiKey; o.fe = CFG.fb.email; }
+  return location.origin + location.pathname + "?setup=" + b64urlEnc(JSON.stringify(o));
+}
+async function applySetup(enc) {
+  let o;
+  try { o = JSON.parse(b64urlDec(enc)); } catch (e) { toast("That setup link isn't readable", true); return false; }
+  if (!o || !o.u) { toast("That setup link is missing the worker address", true); return false; }
+  CFG.cloud.url = String(o.u).replace(/\/+$/, "");
+  CFG.cloud.account = String(o.a || "").replace(/[^A-Za-z0-9_-]/g, "");
+  CFG.cloud.uid = String(o.d || o.a || "device1").replace(/[^A-Za-z0-9_-]/g, "");
+  CFG.cloud.key = String(o.k || "");
+  if (o.fu) { CFG.fb.url = String(o.fu).replace(/\/+$/, ""); CFG.fb.apiKey = String(o.fk || "");
+    CFG.fb.email = String(o.fe || ""); }
+  await saveCfg();
+  return true;
 }
 
 /* ============================================================
@@ -4199,6 +4244,15 @@ function init() {
   $("#cfgLat").onchange = () => { const v = parseFloat($("#cfgLat").value);
     if (!isNaN(v) && v > -67 && v < 67) { CFG.lat = v; touchCfg(); renderCfg(); } };
 
+  const copyLink = async (withFb) => {
+    if (!cloudBase() || !acctId()) { toast("Connect to your worker first", true); return; }
+    const url = setupLink(withFb);
+    try { await navigator.clipboard.writeText(url); toast("Link copied — bookmark it"); }
+    catch (e) { prompt("Bookmark this — treat it like a password:", url); }
+  };
+  $("#mkLink").onclick = () => copyLink(false);
+  $("#mkLinkFb").onclick = () => copyLink(true);
+
   const dashURL = () => location.origin + location.pathname + "?dash=1";
   $("#openDash").onclick = () => window.open(dashURL(), "_blank");
   $("#copyDash").onclick = async () => {
@@ -4249,6 +4303,7 @@ function init() {
     CFG.cloud.url = u.replace(/\/+$/, "");
     CFG.cloud.uid = ($("#cfUid").value.trim() || "").replace(/[^A-Za-z0-9_-]/g, "") || "device1";
     CFG.cloud.account = ($("#cfAcct").value.trim() || "").replace(/[^A-Za-z0-9_-]/g, "") || CFG.cloud.uid;
+    CFG.cloud.key = $("#cfKey").value.trim();
     $("#cfUrl").value = CFG.cloud.url; $("#cfUid").value = CFG.cloud.uid;
     $("#cfAcct").value = CFG.cloud.account;
     await saveCfg();
@@ -4312,6 +4367,24 @@ function init() {
     const due = dueWindows(todayISO());
     setDraft(todayISO(), bestWindow(todayISO()));
   }
+  const setupParam = (location.search.match(/[?&]setup=([^&]+)/) || [])[1];
+  if (setupParam) {
+    applySetup(setupParam).then(async (okSetup) => {
+      // don't leave credentials sitting in the address bar or in history
+      try { history.replaceState(null, "", location.pathname); } catch (e) {}
+      if (!okSetup) return;
+      fillWinSelect(); renderCfg();
+      cloudLog("settings restored from a reconnect link", true);
+      const gotPush = await pushEnable();
+      $("#togPush").setAttribute("aria-pressed", gotPush ? "true" : "false");
+      CFG.cloud.sync = true; await saveCfg();
+      await cloudSync(false);
+      refreshDue(); refreshConn(); renderCfg();
+      toast(CFG.fb.url && !CFG.fb.uid ? "Reconnected — sign in to Firebase to finish"
+        : "Reconnected");
+    });
+  }
+
   reportState();
   // settle who owns reminders before any local timer is armed
   verifyPush().then(() => scheduleNotifs());

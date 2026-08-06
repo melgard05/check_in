@@ -135,13 +135,40 @@ async function dueFor(uid, rec, env) {
   return { due, state: st, now, acct };
 }
 
+/* Optional shared secret. Without it, anyone who learns the worker address and
+   an account name can read that account's entries — set ACCESS_KEY and the
+   endpoints that touch personal data start requiring it. */
+function keyOk(req, url, env, body) {
+  if (!env.ACCESS_KEY) return true;                   // not configured: behave as before
+  const given = url.searchParams.get("key") ||
+    req.headers.get("x-baseline-key") || (body && body.key) || "";
+  if (given.length !== env.ACCESS_KEY.length) return false;
+  let diff = 0;                                        // constant-time-ish compare
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ env.ACCESS_KEY.charCodeAt(i);
+  return diff === 0;
+}
+const GUARDED = ["/backup", "/backupmeta", "/state", "/subscribe", "/unsubscribe",
+  "/snooze", "/test", "/devices"];
+
 /* ---------- HTTP ---------- */
 async function handle(req, env) {
   const url = new URL(req.url), p = url.pathname.replace(/\/+$/, "") || "/";
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(env) });
 
+  if (env.ACCESS_KEY && (GUARDED.indexOf(p) > -1 ||
+      (p === "/due" && url.searchParams.get("account")))) {
+    let body = null;
+    if (req.method === "POST") {
+      const raw = await req.clone().text();
+      try { body = JSON.parse(raw); } catch (e) { body = null; }
+    }
+    if (!keyOk(req, url, env, body))
+      return json({ error: "access key required or incorrect" }, env, 401);
+  }
+
   if (p === "/" || p === "/health")
-    return json({ ok: true, service: "baseline-push", vapidPublic: env.VAPID_PUBLIC || null }, env);
+    return json({ ok: true, service: "baseline-push", vapidPublic: env.VAPID_PUBLIC || null,
+      keyRequired: !!env.ACCESS_KEY }, env);
 
   if (p === "/vapid") return json({ publicKey: env.VAPID_PUBLIC || null }, env);
 
