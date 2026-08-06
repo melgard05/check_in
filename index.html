@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:25-->
+<!DOCTYPE html><!--build:26-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -54,6 +54,11 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .planbar{display:none;align-items:center;gap:8px;margin-top:9px;padding:9px 11px;border-radius:8px;
   background:#151d24;border:1px solid #35505f;font-size:13px;line-height:1.45}
 .planbar.on{display:flex}
+.connbar{display:none;align-items:center;gap:8px;margin-top:9px;padding:9px 11px;border-radius:8px;
+  background:#2b1f14;border:1px solid var(--warn);font-size:13px;line-height:1.45}
+.connbar.on{display:flex}
+.connbar span{flex:1;color:var(--ink)}
+.connbar .btn{padding:5px 11px;font-size:12.5px}
 .planbar span{flex:1;color:var(--ink)}
 .planbar .btn{padding:5px 11px;font-size:12.5px}
 .updbar span{flex:1;color:var(--ink)}
@@ -312,6 +317,11 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     <div class="spacer"></div>
     <button class="synclight" id="syncLight" title="Sync status"><i class="dot" id="syncDot"></i><span id="syncTxt">local</span></button>
     <div class="badge" id="dueBadge">—</div>
+  </div>
+  <div class="connbar" id="connBar">
+    <span id="connTxt"></span>
+    <button class="btn sm pri" id="connGo">Fix it</button>
+    <button class="btn sm gho" id="connHide">Later</button>
   </div>
   <div class="planbar" id="planBar">
     <span id="planBarTxt">It's been a rough stretch. You wrote some things down for a moment like this.</span>
@@ -953,7 +963,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 25;
+const BUILD = 26;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1685,6 +1695,21 @@ async function clearNotifs(onlyIds) {
   } catch (e) {}
 }
 let livePageNotifs = [];
+
+/* Which check-in should the form be showing?
+   Previously this took the last due window, which meant an untouched morning
+   kept the form on Morning all evening. Prefer the window you're actually in,
+   fall back to the earliest one still open. */
+function bestWindow(date) {
+  const today = todayISO();
+  const past = CFG.windows.filter(w =>
+    date !== today || minsOf(winTime(w, date)) <= nowMins());
+  const current = past.length ? past[past.length - 1] : CFG.windows[0];
+  const due = dueWindows(date);
+  if (!due.length) return (current || CFG.windows[0] || {}).id;
+  if (due.some(w => w.id === current.id)) return current.id;   // the one you're in
+  return due[0].id;                                            // else the oldest still open
+}
 
 function refreshDue() {
   const today = todayISO();
@@ -3127,7 +3152,8 @@ async function verifyPush() {
       setDot("#dPush", workerHandlesPush ? "ok" : "bad");
       syncIdle();
     }
-  } catch (e) {}
+    refreshConn();
+  } catch (e) { refreshConn(); }
 }
 
 function scheduleNotifs() {
@@ -3487,6 +3513,29 @@ function syncIdle() {
   setSync(CFG.cloud.push ? "ok" : "warn", CFG.cloud.push ? "synced" : "no push");
 }
 
+/* ---------- say plainly when the app has quietly gone local ----------
+   Losing site data wipes the worker URL and account, after which everything
+   still appears to work while nothing syncs and nothing reminds you. */
+function connState() {
+  if (!cloudBase() || !acctId()) return { level: "setup",
+    msg: "Not connected to your worker. Check-ins are saving on this device only \u2014 " +
+         "no reminders, and nothing shared with your other device." };
+  if (!("Notification" in window)) return { level: "ok" };
+  if (Notification.permission === "denied") return { level: "perm",
+    msg: "Notifications are blocked for this site, so reminders can't reach you here." };
+  if (!workerHandlesPush) return { level: "push",
+    msg: "Reminders aren't set up on this device. They'll only appear while the app is open." };
+  return { level: "ok" };
+}
+function refreshConn() {
+  const bar = $("#connBar"); if (!bar) return;
+  if (dashOn) { bar.classList.remove("on"); return; }   // read-only view stays clean
+  const st = connState();
+  if (st.level === "ok" || STATE.connHidden === todayISO()) { bar.classList.remove("on"); return; }
+  $("#connTxt").textContent = st.msg;
+  bar.classList.add("on");
+}
+
 /* ---------- the plan ----------
    Surfaced when readings have been low for a while, or warning signs keep firing.
    Deliberately quiet: a dismissible line, never a modal, never a diagnosis. */
@@ -3496,7 +3545,8 @@ function planFilled() {
             (p.contacts || "").trim() || (p.note || "").trim());
 }
 function maybeOfferPlan() {
-  const bar = $("#planBar"); if (!bar || dashOn) return;
+  const bar = $("#planBar"); if (!bar) return;
+  if (dashOn) { bar.classList.remove("on"); return; }
   if (STATE.planHidden === todayISO()) { bar.classList.remove("on"); return; }
   const rows = daily(14).filter(r => r.n);
   const recent = rows.slice(-7);
@@ -3884,12 +3934,13 @@ function commit(skip, reason) {
   }
   gateKey = null;
   refreshDue();
+  refreshConn();
   clearNotifs();
   maybeOfferPlan();
   reportState();                              // stop the nagging straight away
   syncAll(true).then(() => reportState());     // then report the merged picture
   const due = dueWindows(todayISO());
-  setDraft(todayISO(), due.length ? due[due.length - 1].id : draft.win);
+  setDraft(todayISO(), bestWindow(todayISO()));
 }
 
 function init() {
@@ -3903,7 +3954,7 @@ function init() {
   bindSliders($("#sleepItems")); bindSliders($("#painItems")); bindSliders($("#napItems"));
 
   const due = dueWindows(todayISO());
-  setDraft(todayISO(), due.length ? due[due.length - 1].id : sleepWin().id);
+  setDraft(todayISO(), bestWindow(todayISO()));
   refreshDue();
   scheduleNotifs();
 
@@ -4089,7 +4140,7 @@ function init() {
 
   $("#gateGo").onclick = () => { $("#gate").classList.remove("on");
     const due = dueWindows(todayISO());
-    if (due.length) setDraft(todayISO(), due[due.length - 1].id);
+    setDraft(todayISO(), bestWindow(todayISO()));
     show("log"); };
   $("#gateSkip").onclick = () => { const due = dueWindows(todayISO());
     if (!due.length) { $("#gate").classList.remove("on"); return; }
@@ -4247,7 +4298,7 @@ function init() {
     navigator.serviceWorker.addEventListener("message", ev => {
       if (ev.data && ev.data.type === "open-checkin") {
         const due = dueWindows(todayISO());
-        if (due.length) setDraft(todayISO(), due[due.length - 1].id);
+        setDraft(todayISO(), bestWindow(todayISO()));
         show("log"); refreshDue();
       }
     });
@@ -4259,7 +4310,7 @@ function init() {
   }
   if (/[?&]due=1/.test(location.search)) {
     const due = dueWindows(todayISO());
-    if (due.length) setDraft(todayISO(), due[due.length - 1].id);
+    setDraft(todayISO(), bestWindow(todayISO()));
   }
   reportState();
   // settle who owns reminders before any local timer is armed
@@ -4279,6 +4330,17 @@ function init() {
     CFG.plan.updated = Date.now();
     await touchCfg(); renderCfg(); toast("Plan saved");
   };
+  $("#connGo").onclick = () => {
+    if (Notification.permission === "denied") {
+      alert("Chrome is blocking notifications for this site.\n\nClick the padlock in the address bar " +
+        "\u2192 Site settings \u2192 Notifications \u2192 Allow, then reload.");
+      return;
+    }
+    show("data");
+    setTimeout(() => { const c = $("#cfUrl"); if (c) { c.scrollIntoView({ block: "center" }); c.focus(); } }, 80);
+  };
+  $("#connHide").onclick = () => { $("#connBar").classList.remove("on");
+    STATE.connHidden = todayISO(); saveState(); };
   $("#planBarGo").onclick = () => { show("data");
     setTimeout(() => { const c = $("#planCard"); if (c) c.scrollIntoView({ block: "start", behavior: "smooth" }); }, 60); };
   $("#planBarHide").onclick = () => {
@@ -4392,6 +4454,8 @@ function init() {
   });
   setInterval(refreshDue, 60000);
   maybeOfferPlan();
+  refreshConn();
+  setInterval(refreshConn, 120000);
   $("#buildTag").textContent = "b" + BUILD;
   checkBuild();
   syncIdle();
