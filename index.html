@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:24-->
+<!DOCTYPE html><!--build:25-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -436,10 +436,10 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
-    <div class="eyebrow">Core — every check-in</div>
+    <div class="eyebrow" id="ebCore">Core</div>
     <div class="card" id="coreItems"></div>
 
-    <div class="eyebrow">Body &amp; behavior</div>
+    <div class="eyebrow" id="ebBody">Body &amp; behavior</div>
     <div class="card" id="extraItems"></div>
 
     <div id="painBlock">
@@ -469,7 +469,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
-    <div class="eyebrow">What happened</div>
+    <div id="moreWrap" style="display:none">
+      <button class="btn full" id="moreBtn" style="margin-top:4px">Add detail</button>
+      <div class="mini" style="text-align:center;margin-top:7px" id="moreHint"></div>
+    </div>
+
+    <div class="eyebrow" id="ebHappened">What happened</div>
     <div class="card">
       <p class="sub" style="margin-bottom:11px">Context that might explain the numbers.</p>
       <div class="chips" id="tagChips"></div>
@@ -549,9 +554,19 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="row" style="margin-top:11px"><button class="btn sm" id="digestCopy">Copy this</button></div>
     </div>
     <div class="card">
+      <h2>How complete is this picture</h2>
+      <p class="sub">Everything below is only as good as what got logged.</p>
+      <div id="coverAudit"></div>
+    </div>
+    <div class="card">
       <h2>What moves with mood</h2>
       <p class="sub">Rank correlation against mood on the same day. Needs 8+ shared days to appear.
         Correlation is not cause — treat these as leads, not answers.</p>
+      <div class="seg" id="ctlSeg" style="margin-bottom:12px">
+        <button data-ctl="" aria-pressed="true">As measured</button>
+        <button data-ctl="sleep" aria-pressed="false">Allow for sleep</button>
+        <button data-ctl="worked" aria-pressed="false">Allow for work days</button>
+      </div>
       <div id="corrSame"></div>
     </div>
     <div class="card">
@@ -575,6 +590,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <h2>Tag impact</h2>
       <p class="sub">Average mood on days with a tag vs. days without.</p>
       <div id="tagImpact"></div>
+    </div>
+    <div class="card">
+      <h2>Items earning their keep</h2>
+      <p class="sub">Anything that never moves costs you time three times a day and tells you nothing.
+        Turn it off here and the entries you've already logged are kept.</p>
+      <div id="itemAudit"></div>
     </div>
     <div class="card">
       <h2>Worth raising</h2>
@@ -746,6 +767,11 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="sw"><div style="flex:1"><div class="t">Ask when meds wore off at</div>
         <div class="d">Only appears once you've listed medications.</div></div>
         <select id="medWinSel" style="flex:0 0 132px"></select></div>
+      <div class="sw"><div style="flex:1"><div class="t">Short check-in</div>
+        <div class="d">Ask a handful of items by default; everything else sits behind one tap.
+          Fewer honest answers beat many rushed ones.</div></div>
+        <button class="tog" id="togQuick" aria-pressed="true"></button></div>
+      <div id="quickPick" style="display:none"></div>
       <div class="sw"><div><div class="t">Track cycle day</div>
         <div class="d">Adds a "period started today" marker and groups patterns by cycle phase.</div></div>
         <button class="tog" id="togCycle" aria-pressed="false"></button></div>
@@ -927,7 +953,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 24;
+const BUILD = 25;
 
 const DEFAULT_CFG = {
   windows: [
@@ -940,6 +966,8 @@ const DEFAULT_CFG = {
   medWin: "pm",               // and about medication wearing off
   cycle: false,               // track cycle day
   sched: {},                  // per-item overrides: { key: { wins:[], days:[] } }
+  quick: true,                // short check-in by default, everything else behind a tap
+  quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", updated: 0 },
   altDays: [0, 6],            // 0 Sun … 6 Sat
   cfgAt: 0,
@@ -962,7 +990,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWin", "medWin", "cycle", "plan", "sched", "off", "meds", "lat", "nagMins"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWin", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "off", "meds", "lat", "nagMins"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -983,6 +1011,7 @@ let STATE = { skipped: {} }; // "date|win" -> reason
 let draft = null;            // in-progress entry
 let range = 30;
 let showRoll = true;
+let corrCtl = "";   // "", "sleep" or "worked"
 let series = { mood:true, irrit:true, energy:true, anxiety:false, focus:false, initiate:false,
   fog:false, pain:true, sleepq:false, calls:false };
 let lastExport = "";
@@ -1024,8 +1053,10 @@ function schedText(k) {
   }
   return wn + " · " + dn;
 }
+const inQuick = k => (CFG.quickItems || []).indexOf(k) > -1;
 const activeItems = grp => ITEMS.filter(i => i.grp === grp && isOn(i.key) &&
-  (!draft || itemShows(i.key, draft.win, draft.date)));
+  (!draft || itemShows(i.key, draft.win, draft.date)) &&
+  (!CFG.quick || showAll || grp === "sleep" || inQuick(i.key)));
 const fmtDate = iso => { const p = iso.split("-");
   return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { month:"short", day:"numeric" }); };
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -1132,6 +1163,7 @@ function fixDraft(d) {                       // older records, and anything Fire
   return d;
 }
 function setDraft(date, winId) {
+  showAll = false;                          // start short again on each check-in
   try { draft = fixDraft(newDraft(date, winId)); }
   catch (e) { draft = newDraft(date, winId); }
   // a fresh entry for a past day is being written from memory by definition
@@ -1150,6 +1182,7 @@ function setDraft(date, winId) {
    ============================================================ */
 const BASEPCT = ((5 - 1) / 9) * 100;
 const noteOpen = {};                       // which note boxes are expanded
+let showAll = false;                       // "add detail" expansion, per draft
 
 /* colour for a low-anchored scale: 1 is fine, 10 is not */
 function lcol(v) {
@@ -1471,7 +1504,7 @@ function renderLog() {
     (draft.ctx === c.id ? "true" : "false") + '">' + esc(c.label) + "</button>").join("");
 
   // cycle
-  $("#cycleBlock").style.display = CFG.cycle ? "" : "none";
+  $("#cycleBlock").style.display = CFG.cycle && (!CFG.quick || showAll) ? "" : "none";
   if (CFG.cycle) {
     $("#togPeriod").setAttribute("aria-pressed", draft.period ? "true" : "false");
     const cd = cycleDayOf(draft.date);
@@ -1483,7 +1516,7 @@ function renderLog() {
   // medication wearing off — only meaningful if meds are listed
   const medsListed = (CFG.meds || "").split("\n").filter(x => x.trim()).length > 0;
   const wantMedOff = medsListed && CFG.medWin && draft.win === CFG.medWin;
-  $("#medOffBlock").style.display = wantMedOff ? "" : "none";
+  $("#medOffBlock").style.display = wantMedOff && (!CFG.quick || showAll) ? "" : "none";
   if (wantMedOff) {
     const st = draft.medoff.st;
     $("#medOffChips").innerHTML = [
@@ -1501,7 +1534,7 @@ function renderLog() {
 
   // naps
   const wantNap = CFG.napWin && draft.win === CFG.napWin;
-  $("#napBlock").style.display = wantNap ? "" : "none";
+  $("#napBlock").style.display = wantNap && (!CFG.quick || showAll) ? "" : "none";
   if (wantNap) {
     const on = !!(draft.nap && draft.nap.on);
     $("#togNapped").setAttribute("aria-pressed", on ? "true" : "false");
@@ -1515,11 +1548,34 @@ function renderLog() {
     }
   }
   $("#coreItems").innerHTML  = activeItems("core").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+  const short = CFG.quick && !showAll;
+  // sections with nothing to show shouldn't leave a stray heading behind
+  const hideIfEmpty = (elId, ebId) => {
+    const el = $("#" + elId);
+    const empty = !el || !el.innerHTML.trim();
+    if (el) el.style.display = empty ? "none" : "";
+    const eb = $("#" + ebId); if (eb) eb.style.display = empty ? "none" : "";
+  };
+  hideIfEmpty("extraItems", "ebBody");
+  hideIfEmpty("coreItems", "ebCore");
+  // context, tags and notes stay out of the way in short mode
+  ["ebHappened"].forEach(id => { const e = $("#" + id); if (e) e.style.display = short ? "none" : ""; });
+  const tagCard = $("#tagChips") && $("#tagChips").closest(".card");
+  if (tagCard) tagCard.style.display = short ? "none" : "";
+  if ($("#warnBlock")) $("#warnBlock").style.display = short ? "none" : "";
+  $("#moreWrap").style.display = CFG.quick && !showAll ? "" : "none";
+  if (CFG.quick && !showAll) {
+    const hidden = ITEMS.filter(i => isOn(i.key) && i.grp !== "sleep" && !inQuick(i.key) &&
+      itemShows(i.key, draft.win, draft.date)).length;
+    $("#moreHint").textContent = hidden
+      ? hidden + " more item" + (hidden === 1 ? "" : "s") + ", plus tags and notes"
+      : "tags, warning signs and notes";
+  }
   $("#extraItems").innerHTML = activeItems("body").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
 
   // pain
   const pain = activeItems("pain");
-  $("#painBlock").style.display = pain.length ? "" : "none";
+  $("#painBlock").style.display = pain.length && (!CFG.quick || showAll) ? "" : "none";
   if (pain.length) {
     $("#painItems").innerHTML = pain.map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
     $("#painSites").innerHTML = PAIN_SITES.map(t =>
@@ -1533,7 +1589,7 @@ function renderLog() {
 
   // meds
   const meds = (CFG.meds || "").split("\n").map(s => s.trim()).filter(Boolean);
-  $("#medBlock").style.display = meds.length ? "" : "none";
+  $("#medBlock").style.display = meds.length && (!CFG.quick || showAll) ? "" : "none";
   if (meds.length) {
     draft.meds = draft.meds || {};
     $("#medCard").innerHTML = '<p class="sub" style="margin-bottom:11px">Tap each one you\'ve taken today.</p>' +
@@ -1724,7 +1780,10 @@ function normCdf(x) {
 }
 /* Two-tailed p for a rank correlation, via Fisher's z. Reliable from about n=10. */
 function corrP(r, n) {
-  if (r == null || n < 8 || Math.abs(r) >= 0.9999) return null;
+  if (r == null || n < 8) return null;
+  // A perfect rank correlation has infinite z. It is the strongest result
+  // possible, so treat it as decisively small rather than dropping the row.
+  if (Math.abs(r) >= 0.9999) return 1e-12;
   const z = Math.atanh(r) * Math.sqrt(n - 3);
   return Math.max(0, Math.min(1, 2 * (1 - normCdf(Math.abs(z)))));
 }
@@ -1737,6 +1796,19 @@ function bhThreshold(ps, q) {
   let cut = 0;
   for (let i = 0; i < m; i++) if (v[i] <= ((i + 1) / m) * q) cut = v[i];
   return cut;
+}
+
+/* Partial rank correlation: how much of x~y survives once z is allowed for.
+   Work days carry shorter sleep, higher anxiety and earlier wear-off all at once,
+   so without this the same underlying thing shows up as three separate findings. */
+function partial(rxy, rxz, ryz) {
+  if (rxy == null || rxz == null || ryz == null) return null;
+  const den = Math.sqrt((1 - rxz * rxz) * (1 - ryz * ryz));
+  // Near-perfect overlap with the control means the control accounts for
+  // essentially all of it. That is a finding, not a reason to hide the row.
+  if (!isFinite(den) || den < 1e-6) return { collinear: true, r: 0 };
+  const v = (rxy - rxz * ryz) / den;
+  return Math.max(-1, Math.min(1, v));
 }
 
 /* Spearman rank correlation */
@@ -1761,6 +1833,31 @@ function spearman(xs, ys) {
   if (!dx || !dy) return null;
   return num / Math.sqrt(dx * dy);
 }
+function seriesVal(r, k) {
+  if (k === "sleep") return r.sleep ? r.sleep.hours : null;
+  if (k === "nap") return r.nap ? r.nap.hours : (r.n ? 0 : null);
+  if (k === "total") return r.total || null;
+  if (k === "medoff") return r.medoff ? r.medoff.mins : null;
+  if (k === "day") return r.day;
+  if (k === "worked") return r.worked == null ? null : (r.worked ? 1 : 0);
+  return r.v[k];
+}
+
+/* x~y with a third series held constant */
+function pairPartial(rows, ka, kb, kz) {
+  const xs = [], ys = [], zs = [];
+  rows.forEach(r => {
+    const a = seriesVal(r, ka), c = seriesVal(r, kb), z = seriesVal(r, kz);
+    if (a != null && c != null && z != null) { xs.push(a); ys.push(c); zs.push(z); }
+  });
+  if (xs.length < 8) return { r: null, n: xs.length };
+  const rxy = spearman(xs, ys), rxz = spearman(xs, zs), ryz = spearman(ys, zs);
+  const pr = partial(rxy, rxz, ryz);
+  if (pr && typeof pr === "object" && pr.collinear)
+    return { r: 0, n: xs.length, raw: rxy, collinear: true };
+  return { r: pr, n: xs.length, raw: rxy };
+}
+
 function pair(rows, ka, kb, lag) {
   lag = lag || 0;
   const xs = [], ys = [];
@@ -1776,6 +1873,56 @@ function pair(rows, ka, kb, lag) {
     if (a != null && b != null) { xs.push(a); ys.push(b); }
   }
   return { xs, ys, n: xs.length, r: spearman(xs, ys) };
+}
+
+/* ---------- is each item earning its place? ---------- */
+function itemAudit(rows) {
+  const logged = rows.filter(r => r.n);
+  const moodDays = logged.filter(r => r.v.mood != null);
+  return ITEMS.filter(i => isOn(i.key) && i.key !== "mood").map(i => {
+    const vals = logged.map(r => r.v[i.key]).filter(v => v != null);
+    const n = vals.length;
+    let sd = null, uniq = 0;
+    if (n) {
+      const m = vals.reduce((a, c) => a + c, 0) / n;
+      sd = Math.sqrt(vals.reduce((a, c) => a + (c - m) * (c - m), 0) / n);
+      uniq = new Set(vals.map(v => Math.round(v))).size;
+    }
+    const p = pair(logged, i.key, "mood", 0);
+    const best = p.r == null ? 0 : Math.abs(p.r);
+    let verdict = "keep", why = "";
+    if (n < 5) { verdict = "new"; why = "too few entries to judge yet"; }
+    else if (uniq <= 1) { verdict = "drop"; why = "never changed in " + n + " entries"; }
+    else if (sd != null && sd < 0.6) { verdict = "drop"; why = "barely moves (spread " + sd.toFixed(2) + ")"; }
+    else if (best < 0.15 && n >= 20) { verdict = "quiet"; why = "moves, but not with anything else"; }
+    else why = "spread " + (sd == null ? "?" : sd.toFixed(2)) +
+      (p.r != null ? ", strongest link " + (p.r > 0 ? "+" : "") + p.r.toFixed(2) : "");
+    return { key: i.key, label: i.label, n, sd, uniq, r: p.r, verdict, why };
+  }).sort((a, c) => {
+    const rank = { drop: 0, quiet: 1, keep: 2, new: 3 };
+    if (rank[a.verdict] !== rank[c.verdict]) return rank[a.verdict] - rank[c.verdict];
+    return (c.r == null ? 0 : Math.abs(c.r)) - (a.r == null ? 0 : Math.abs(a.r));
+  });
+}
+
+/* ---------- how trustworthy is the picture? ----------
+   The days you feel worst are the days least likely to get logged, which quietly
+   tilts every average upward. This measures that rather than assuming it away. */
+function coverageAudit(days) {
+  const rows = daily(days), wins = CFG.windows.length || 1;
+  const expected = rows.length * wins;
+  const got = rows.reduce((a, r) => a + r.n, 0);
+  const pct = expected ? got / expected : 0;
+  const full = rows.filter(r => r.n >= wins && r.v.mood != null);
+  const partialD = rows.filter(r => r.n > 0 && r.n < wins && r.v.mood != null);
+  const mean = set => set.length ? set.reduce((a, r) => a + r.v.mood, 0) / set.length : null;
+  const mFull = mean(full), mPart = mean(partialD);
+  let bias = null;
+  if (mFull != null && mPart != null && full.length >= 5 && partialD.length >= 5) bias = mPart - mFull;
+  const skipCount = Object.keys(STATE.skipped)
+    .filter(k => rows.some(r => k.indexOf(r.date + "|") === 0)).length;
+  return { rows: rows.length, expected, got, pct, full: full.length, partial: partialD.length,
+    mFull, mPart, bias, skipCount };
 }
 
 /* ============================================================
@@ -2075,6 +2222,13 @@ function renderPatterns() {
       label: k === "medoff" ? "When meds wore off" : k === "sleep" ? "Hours slept at night" : k === "nap" ? "Nap hours"
         : k === "total" ? "Total sleep, naps included" : k === "day" ? "Daylight hours" : ITEM[k].label });
   });
+  if (corrCtl) {
+    list = list.filter(x => x.k !== corrCtl).map(x => {
+      const pp = pairPartial(rows, x.k, "mood", corrCtl);
+      return pp.r == null ? null
+        : Object.assign({}, x, { r: pp.r, n: pp.n, raw: pp.raw, collinear: pp.collinear });
+    }).filter(Boolean);
+  }
   list.forEach(x => { x.p = corrP(x.r, x.n); });
   const cut = bhThreshold(list.map(x => x.p), 0.10);
   const kept = list.filter(x => x.p != null && cut > 0 && x.p <= cut).length;
@@ -2083,13 +2237,23 @@ function renderPatterns() {
     if (ah !== bh) return ah ? -1 : 1;
     return Math.abs(b.r) - Math.abs(a.r);
   });
+  const ctlName = corrCtl === "sleep" ? "hours slept" : corrCtl === "worked" ? "whether it was a work day" : "";
   $("#corrSame").innerHTML = list.length
-    ? '<div class="statnote">Tested <b>' + list.length + '</b> things against mood. ' +
+    ? '<div class="statnote">' + (corrCtl
+        ? "Holding <b>" + ctlName + "</b> constant, so anything that was only riding along with it " +
+          "drops away. Compare against &ldquo;as measured&rdquo; \u2014 a number that falls a long way " +
+          "was mostly explained by " + ctlName + ".<br><br>"
+        : "") +
+      'Tested <b>' + list.length + '</b> things against mood. ' +
         'Across that many comparisons two or three will look convincing purely by luck, so each one ' +
         'is checked against a false-discovery correction. <b>' + kept + '</b> ' +
         (kept === 1 ? "held up" : "held up") + '. The greyed ones may well be noise \u2014 ' +
         'interesting to notice, not worth acting on yet.</div>' +
-      list.map(x => corrRow(x.label, x.r, x.n, "", x.p, cut)).join("")
+      list.map(x => corrRow(x.label, x.r, x.n,
+        x.collinear ? "moves almost exactly with " + ctlName + ", so nothing is left once it's allowed for"
+          : (corrCtl && x.raw != null && Math.abs(x.raw - x.r) >= 0.15)
+          ? "was " + (x.raw > 0 ? "+" : "") + x.raw.toFixed(2) + " before allowing for " + ctlName
+          : "", x.p, cut)).join("")
     : '<div class="empty"><b>Not enough overlap yet</b>Needs 8 days where both are logged. ' +
       'Two or three weeks of check-ins is usually enough to start.</div>';
   // lagged sleep
@@ -2133,6 +2297,8 @@ function renderPatterns() {
       '<div class="mini">Only tags used on 3+ days appear. Small samples swing wildly.</div>'
     : '<div class="empty"><b>No tags used enough yet</b>Tag what happened on each check-in — ' +
       'this table is where the trigger hunting actually pays off.</div>';
+  renderCoverAudit();
+  renderItemAudit(rows);
   renderDigest(rows);
   renderCycle(rows);
   renderWorkSplit(rows);
@@ -2174,6 +2340,64 @@ function digestText() {
   if (topW.length) lines.push("Warning signs: " + topW.map(t => t.toLowerCase() + " ×" + wn[t]).join(", ") + ".");
   return { lines, nThis, logged: logged.length };
 }
+function renderCoverAudit() {
+  const el = $("#coverAudit"); if (!el) return;
+  const a = coverageAudit(30);
+  if (!a.got) { el.innerHTML = '<div class="empty"><b>Nothing logged yet</b></div>'; return; }
+  const pct = Math.round(a.pct * 100);
+  const tone = pct >= 70 ? "var(--base)" : pct >= 45 ? "var(--warn)" : "var(--bad)";
+  let msg;
+  if (pct >= 70) msg = "Good coverage. The averages below are reasonably solid.";
+  else if (pct >= 45) msg = "Patchy. Directions are probably right, exact numbers less so.";
+  else msg = "Thin. Treat everything below as a rough sketch rather than a measurement.";
+  let biasLine = "";
+  if (a.bias != null) {
+    biasLine = Math.abs(a.bias) < 0.4
+      ? '<br>Days you logged partially look about the same as days you logged fully, ' +
+        "which suggests the gaps aren't hiding much."
+      : '<br><span style="color:var(--warn)">Days you only partly logged average ' +
+        Math.abs(a.bias).toFixed(1) + " point" + (Math.abs(a.bias) >= 1.95 ? "s" : "") +
+        (a.bias < 0 ? " lower" : " higher") + " on mood than fully logged days. " +
+        (a.bias < 0
+          ? "So the harder days are the ones getting missed, and every average here is " +
+            "flattering by some amount."
+          : "So the gaps skew toward better days.") + "</span>";
+  } else {
+    biasLine = "<br>Not enough of both kinds of day yet to tell whether the gaps are random.";
+  }
+  el.innerHTML = '<div class="readout" style="margin:0">' +
+    '<b style="color:' + tone + '">' + pct + "% of the last 30 days' check-ins</b> — " +
+    a.got + " of " + a.expected + "." +
+    (a.skipCount ? " " + a.skipCount + " deliberately skipped." : "") +
+    "<br>" + esc(msg) + biasLine + "</div>";
+}
+
+function renderItemAudit(rows) {
+  const el = $("#itemAudit"); if (!el) return;
+  const list = itemAudit(rows);
+  if (!list.length || rows.filter(r => r.n).length < 5) {
+    el.innerHTML = '<div class="empty"><b>Not enough yet</b>This starts being useful after a week or two.</div>';
+    return;
+  }
+  const badge = { drop: ["drop it", "var(--bad)"], quiet: ["quiet", "var(--warn)"],
+    keep: ["earning it", "var(--base)"], new: ["too new", "var(--ink-3)"] };
+  const rowsOut = list.filter(x => x.verdict !== "keep").concat(list.filter(x => x.verdict === "keep"));
+  el.innerHTML = rowsOut.map(x => {
+    const bd = badge[x.verdict];
+    return '<div class="corr"><div class="corrhead"><span class="n">' + esc(x.label) +
+      ' <span class="tagmeh" style="color:' + bd[1] + ";border-color:" + bd[1] + '">' + bd[0] + "</span></span>" +
+      (x.verdict === "drop" || x.verdict === "quiet"
+        ? '<button class="btn sm gho" style="margin-left:auto" data-drop="' + x.key + '">Turn off</button>'
+        : '<span class="r" style="color:var(--ink-3)">' + x.n + "</span>") +
+      "</div>" +
+      '<div class="corrnote">' + esc(x.why) + " · " + x.n + " entries</div></div>";
+  }).join("") +
+  '<div class="mini" style="margin-top:10px">' +
+    list.filter(x => x.verdict === "drop").length + " could go, " +
+    list.filter(x => x.verdict === "quiet").length + " are quiet, " +
+    list.filter(x => x.verdict === "keep").length + " are pulling their weight.</div>";
+}
+
 function renderDigest(rows) {
   const el = $("#digest"); if (!el) return;
   if (!rows.filter(r => r.n).length) {
@@ -2643,34 +2867,100 @@ function download(name, text, mime) {
 function printSummary() {
   const rows = daily(90).filter(r => r.n);
   const w = window.open("", "_blank");
-  if (!w) { toast("Popup blocked — use Show text instead", true); return; }
+  if (!w) { toast("Popup blocked \u2014 use Show text instead", true); return; }
   const on = ITEMS.filter(i => isOn(i.key) && (i.grp === "core" || i.key === "pain"));
   const avg = k => { const v = rows.map(r => r.v[k]).filter(x => x != null);
-    return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : "—"; };
+    return v.length ? (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1) : "\u2014"; };
   const sl = rows.filter(r => r.sleep);
-  const slAvg = sl.length ? (sl.reduce((a, r) => a + r.sleep.hours, 0) / sl.length).toFixed(1) : "—";
+  const slAvg = sl.length ? (sl.reduce((a, r) => a + r.sleep.hours, 0) / sl.length).toFixed(1) : "\u2014";
+  const cov = coverageAudit(90);
+  const esc2 = x => esc(x);
+
+  // findings, in the order a clinician would want them
+  const flagsHTML = (function () {
+    const holder = document.createElement("div");
+    renderFlags(daily(0));
+    const src = $("#flags");
+    return src ? src.innerHTML.replace(/<button[\s\S]*?<\/button>/g, "") : "";
+  })();
+
+  const eps = episodes(rows).slice(-4).map(e =>
+    "<li>" + e.len + " days " + (e.kind === "high" ? "elevated" : "low") +
+    (rows[e.start] ? ", " + fmtDate(rows[e.start].date) + " to " + fmtDate(rows[e.end].date) : "") + "</li>").join("");
+
+  const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key)
+    .concat(["sleep", "nap", "total", "medoff", "day"]);
+  let cor = cands.map(k => { const p = pair(rows, k, "mood", 0);
+    return p.r == null || p.n < 8 ? null : { k, r: p.r, n: p.n, p: corrP(p.r, p.n),
+      label: k === "sleep" ? "Hours slept" : k === "nap" ? "Nap hours" : k === "total" ? "Total sleep"
+        : k === "medoff" ? "Medication wear-off time" : k === "day" ? "Daylight hours" : ITEM[k].label };
+  }).filter(Boolean);
+  const cut = bhThreshold(cor.map(x => x.p), 0.10);
+  const kept = cor.filter(x => x.p != null && cut > 0 && x.p <= cut)
+    .sort((a, b) => Math.abs(b.r) - Math.abs(a.r)).slice(0, 8);
+
+  const mo = rows.filter(r => r.medoff && r.medoff.mins != null);
+  let moLine = "";
+  if (mo.length >= 6) {
+    const hhmm = m => pad(Math.floor(m / 60)) + ":" + pad(Math.round(m % 60));
+    const rec = mo.slice(-7), old = mo.slice(-14, -7);
+    const mean = set => set.reduce((a, r) => a + r.medoff.mins, 0) / set.length;
+    moLine = "Medication typically wearing off around <b>" + hhmm(mean(rec)) + "</b>" +
+      (old.length >= 4 ? ", against " + hhmm(mean(old)) + " the previous week" : "") + ".";
+  }
+
   w.document.write('<!doctype html><meta charset="utf-8"><title>Baseline summary</title><style>' +
-    'body{font:13px/1.5 -apple-system,system-ui,sans-serif;margin:32px;color:#111;max-width:720px}' +
-    'h1{font-size:19px;margin:0 0 3px}h2{font-size:14px;margin:22px 0 7px;border-bottom:1px solid #ccc;padding-bottom:3px}' +
+    'body{font:13px/1.55 -apple-system,system-ui,sans-serif;margin:28px;color:#111;max-width:760px}' +
+    'h1{font-size:19px;margin:0 0 3px}h2{font-size:13.5px;margin:20px 0 6px;border-bottom:1px solid #bbb;' +
+    'padding-bottom:3px;text-transform:uppercase;letter-spacing:.06em}' +
     'table{border-collapse:collapse;width:100%;font-size:11.5px}th,td{text-align:left;padding:4px 7px 4px 0;' +
-    'border-bottom:1px solid #eee}th{border-bottom:1px solid #999;font-size:10px;text-transform:uppercase;letter-spacing:.08em}' +
-    '.m{font-family:ui-monospace,monospace}.sm{color:#666;font-size:11px}</style>' +
-    "<h1>Baseline &mdash; tracking summary</h1>" +
-    '<div class="sm">Generated ' + new Date().toLocaleString() + " &middot; last 90 days &middot; " +
-    rows.length + " days with entries</div>" +
-    "<h2>Averages</h2><table><tr>" + on.map(i => "<th>" + i.label + "</th>").join("") +
+    'border-bottom:1px solid #eee}th{border-bottom:1px solid #999;font-size:10px;text-transform:uppercase;' +
+    'letter-spacing:.08em}.m{font-family:ui-monospace,monospace}.sm{color:#555;font-size:11px}' +
+    'ul{margin:4px 0 0 18px;padding:0}li{margin:2px 0}.box{border:1px solid #ddd;border-left:3px solid #888;' +
+    'padding:7px 10px;margin:0 0 7px;font-size:12px}.box b{display:block}' +
+    '@media print{body{margin:12mm}}</style>' +
+    "<h1>Baseline \u2014 tracking summary</h1>" +
+    '<div class="sm">' + new Date().toLocaleDateString() + " \u00b7 last 90 days \u00b7 " +
+      rows.length + " days with entries \u00b7 " + Math.round(cov.pct * 100) + "% of check-ins completed</div>" +
+    (cov.pct < 0.45 ? '<div class="box" style="border-left-color:#c60">Coverage is low, so these ' +
+      "figures are indicative rather than precise.</div>" : "") +
+    (cov.bias != null && cov.bias < -0.4 ? '<div class="box" style="border-left-color:#c60">' +
+      "Partially logged days average " + Math.abs(cov.bias).toFixed(1) +
+      " lower on mood than fully logged ones, so averages here likely understate the harder days.</div>" : "") +
+
+    "<h2>Averages</h2><table><tr>" + on.map(i => "<th>" + esc2(i.label) + "</th>").join("") +
     "<th>Sleep</th></tr><tr>" + on.map(i => '<td class="m">' + avg(i.key) + "</td>").join("") +
     '<td class="m">' + slAvg + "h</td></tr></table>" +
-    "<h2>Daily detail</h2><table><tr><th>Date</th><th>Sleep</th>" +
-    on.map(i => "<th>" + i.label.slice(0, 6) + "</th>").join("") + "<th>Warning signs / tags</th></tr>" +
-    rows.slice().reverse().map(r => "<tr><td>" + r.date + '</td><td class="m">' +
-      (r.sleep ? r.sleep.hours.toFixed(1) : "—") + "</td>" +
-      on.map(i => '<td class="m">' + (r.v[i.key] == null ? "—" : r.v[i.key].toFixed(1)) + "</td>").join("") +
-      '<td class="sm">' + esc(r.warns.concat(r.tags).join(", ")) + "</td></tr>").join("") + "</table>" +
-    '<div class="sm" style="margin-top:20px">Self-reported ratings, 1&ndash;10, where 5 is this person\'s ' +
-    'stated baseline. Not a clinical instrument.</div>');
+    (moLine ? '<div class="sm" style="margin-top:7px">' + moLine + "</div>" : "") +
+
+    (eps ? "<h2>Sustained runs</h2><ul>" + eps + "</ul>" +
+      '<div class="sm">Based on a 5-day rolling average of self-rated mood.</div>' : "") +
+
+    (kept.length ? "<h2>Associations that survived correction</h2><table>" +
+      "<tr><th>Against mood</th><th>r</th><th>days</th></tr>" +
+      kept.map(x => "<tr><td>" + esc2(x.label) + '</td><td class="m">' +
+        (x.r > 0 ? "+" : "") + x.r.toFixed(2) + '</td><td class="m">' + x.n + "</td></tr>").join("") +
+      "</table>" + '<div class="sm">Rank correlations, false-discovery corrected across ' + cor.length +
+      " comparisons. Association only \u2014 direction and cause are not established.</div>"
+      : "") +
+
+    (flagsHTML ? "<h2>Flagged</h2>" + flagsHTML.replace(/class="flag[^"]*"/g, 'class="box"')
+      .replace(/<div class="mini"[\s\S]*?<\/div>/g, "") : "") +
+
+    "<h2>Daily detail</h2><table><tr><th>Date</th><th>Ctx</th><th>Sleep</th>" +
+    on.map(i => "<th>" + esc2(i.label.slice(0, 6)) + "</th>").join("") +
+    "<th>Notes</th></tr>" +
+    rows.slice().reverse().slice(0, 60).map(r => "<tr><td>" + r.date + "</td><td>" +
+      (r.ctx && CTXBY[r.ctx] ? esc2(CTXBY[r.ctx].label.slice(0, 8)) : "") + '</td><td class="m">' +
+      (r.sleep ? r.sleep.hours.toFixed(1) : "\u2014") + "</td>" +
+      on.map(i => '<td class="m">' + (r.v[i.key] == null ? "\u2014" : r.v[i.key].toFixed(1)) + "</td>").join("") +
+      '<td class="sm">' + esc2(r.warns.concat(r.tags).join(", ")) + "</td></tr>").join("") + "</table>" +
+
+    '<div class="sm" style="margin-top:18px">Self-reported ratings, 1\u201310, where 5 is this ' +
+    "person's stated baseline for mood-type items and 1 is none for pain and symptom items. " +
+    "Not a clinical instrument.</div>");
   w.document.close();
-  setTimeout(() => { try { w.print(); } catch (e) {} }, 350);
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
 }
 
 /* ============================================================
@@ -2705,6 +2995,16 @@ function renderCfg() {
     alt.length === 0 ? '<span style="color:var(--warn)">No days selected — every day uses the M&ndash;F times.</span>'
     : alt.length === 7 ? '<span style="color:var(--warn)">Every day selected — the M&ndash;F times are never used.</span>'
     : "Second schedule on " + alt.map(i => DAYS[i]).join(", ") + ". Everything else uses the first.";
+  $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
+  $("#quickPick").style.display = CFG.quick ? "" : "none";
+  if (CFG.quick) $("#quickPick").innerHTML =
+    '<div class="schedrow" style="padding-top:2px">' +
+    '<span class="wklbl">always ask</span>' +
+    ITEMS.filter(i => isOn(i.key) && i.grp !== "sleep").map(i =>
+      '<button class="chip sm" data-quick="' + i.key + '" aria-pressed="' +
+      (inQuick(i.key) ? "true" : "false") + '"' +
+      (i.key === "mood" ? " disabled style=opacity:.5" : "") + ">" + esc(i.label) + "</button>").join("") +
+    "</div>";
   $("#togCycle").setAttribute("aria-pressed", CFG.cycle ? "true" : "false");
   $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false");
   $("#buildTag").textContent = "b" + BUILD;
@@ -3612,6 +3912,9 @@ function init() {
   $("#eDate").onchange = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
   $("#eWin").onchange  = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
   $("#togPeriod").onclick = () => { draft.period = !draft.period; renderLog(); };
+  $("#moreBtn").onclick = () => { showAll = true; renderLog();
+    setTimeout(() => { const e = $("#ebBody") || $("#tagChips");
+      if (e && e.scrollIntoView) e.scrollIntoView({ block: "start", behavior: "smooth" }); }, 40); };
   $("#togRecall").onclick = () => { draft.recall = !draft.recall;
     $("#togRecall").setAttribute("aria-pressed", draft.recall ? "true" : "false"); };
   $("#togNapped").onclick = () => {
@@ -3688,6 +3991,23 @@ function init() {
       if (touched) { saveEnt(); saveState(); }
       return;
     }
+    const dp = ev.target.closest("[data-drop]");
+    if (dp) {
+      const k = dp.dataset.drop;
+      if (CFG.off.indexOf(k) < 0) CFG.off.push(k);
+      CFG.quickItems = (CFG.quickItems || []).filter(x => x !== k);
+      touchCfg().then(() => { renderPatterns(); renderLog(); toast("Turned off"); });
+      return;
+    }
+    const qk = ev.target.closest("[data-quick]");
+    if (qk) {
+      const k = qk.dataset.quick;
+      if (k === "mood") return;                       // mood is always asked
+      CFG.quickItems = inQuick(k) ? CFG.quickItems.filter(x => x !== k)
+        : CFG.quickItems.concat([k]);
+      touchCfg().then(() => { renderCfg(); renderLog(); });
+      return;
+    }
     const sw2 = ev.target.closest("[data-swin]");
     if (sw2) {
       const p2 = sw2.dataset.swin.split(":"), k = p2[0];
@@ -3723,7 +4043,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
@@ -3740,6 +4060,11 @@ function init() {
     if (t.dataset.med) { const i = t.dataset.med; draft.meds = draft.meds || {};
       draft.meds[i] = !draft.meds[i]; t.setAttribute("aria-pressed", draft.meds[i] ? "true" : "false"); return; }
     if (t.dataset.s) { series[t.dataset.s] = !series[t.dataset.s]; drawMain(); return; }
+    if (t.dataset.ctl != null && t.closest("#ctlSeg")) {
+      corrCtl = t.dataset.ctl;
+      $$("#ctlSeg button").forEach(x => x.setAttribute("aria-pressed", x === t ? "true" : "false"));
+      renderPatterns(); return;
+    }
     if (t.id === "rollTog") { showRoll = !showRoll;
       t.setAttribute("aria-pressed", showRoll ? "true" : "false"); drawMain(); return; }
     if (t.dataset.d != null && t.closest("#rangeSeg")) {
@@ -3783,11 +4108,34 @@ function init() {
     readoutFor(best);
   });
 
+  $("#togQuick").onclick = () => { CFG.quick = !CFG.quick; showAll = false;
+    $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
+    touchCfg(); renderCfg(); renderLog(); };
   $("#togCycle").onclick = () => { CFG.cycle = !CFG.cycle;
-    $("#togCycle").setAttribute("aria-pressed", CFG.cycle ? "true" : "false");
+    $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
+  $("#quickPick").style.display = CFG.quick ? "" : "none";
+  if (CFG.quick) $("#quickPick").innerHTML =
+    '<div class="schedrow" style="padding-top:2px">' +
+    '<span class="wklbl">always ask</span>' +
+    ITEMS.filter(i => isOn(i.key) && i.grp !== "sleep").map(i =>
+      '<button class="chip sm" data-quick="' + i.key + '" aria-pressed="' +
+      (inQuick(i.key) ? "true" : "false") + '"' +
+      (i.key === "mood" ? " disabled style=opacity:.5" : "") + ">" + esc(i.label) + "</button>").join("") +
+    "</div>";
+  $("#togCycle").setAttribute("aria-pressed", CFG.cycle ? "true" : "false");
     touchCfg(); renderLog(); renderPatterns(); };
   $("#togNag").onclick = () => { CFG.nag = !CFG.nag;
-    $("#togCycle").setAttribute("aria-pressed", CFG.cycle ? "true" : "false");
+    $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
+  $("#quickPick").style.display = CFG.quick ? "" : "none";
+  if (CFG.quick) $("#quickPick").innerHTML =
+    '<div class="schedrow" style="padding-top:2px">' +
+    '<span class="wklbl">always ask</span>' +
+    ITEMS.filter(i => isOn(i.key) && i.grp !== "sleep").map(i =>
+      '<button class="chip sm" data-quick="' + i.key + '" aria-pressed="' +
+      (inQuick(i.key) ? "true" : "false") + '"' +
+      (i.key === "mood" ? " disabled style=opacity:.5" : "") + ">" + esc(i.label) + "</button>").join("") +
+    "</div>";
+  $("#togCycle").setAttribute("aria-pressed", CFG.cycle ? "true" : "false");
   $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false"); saveCfg(); refreshDue(); };
   $("#notifBtn").onclick = () => { if (!("Notification" in window)) return;
     Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
