@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:27-->
+<!DOCTYPE html><!--build:28-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -685,6 +685,10 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <input type="text" id="cfAcct" placeholder="kelly" autocapitalize="off" spellcheck="false"></label>
       <div class="mini" style="margin-top:6px">Device id identifies this phone or computer. Account is
         shared, so logging a check-in anywhere stops the reminder everywhere.</div>
+      <label class="fld" style="margin-top:9px"><span>Access key &mdash; optional, must match the worker</span>
+        <input type="text" id="cfKey" placeholder="leave blank if you haven't set one"
+               autocapitalize="off" spellcheck="false"></label>
+
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm" id="cfSave">Save and connect</button>
         <button class="btn sm" id="cfTest">Send a test push</button>
@@ -707,9 +711,6 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm" id="cfPush">Sync now</button>
         <button class="btn sm" id="cfPull">Restore from Cloudflare</button>
       </div>
-      <label class="fld" style="margin-top:9px"><span>Access key &mdash; optional, must match the worker</span>
-        <input type="text" id="cfKey" placeholder="leave blank if you haven't set one"
-               autocapitalize="off" spellcheck="false"></label>
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm" id="mkLink">Copy reconnect link</button>
         <button class="btn sm" id="mkLinkFb">Include Firebase</button>
@@ -973,7 +974,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 27;
+const BUILD = 28;
 
 const DEFAULT_CFG = {
   windows: [
