@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:31-->
+<!DOCTYPE html><!--build:32-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -152,11 +152,19 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .wcol{flex:1;position:relative}
 .wcap{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-3);
   text-align:center;margin-bottom:5px}
-.wheel{height:150px;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;
+.wheel{height:150px;overflow-y:hidden;scroll-snap-type:y mandatory;scrollbar-width:none;
   background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;position:relative;
   -webkit-overflow-scrolling:touch;mask-image:linear-gradient(180deg,transparent,#000 28%,#000 72%,transparent);
   -webkit-mask-image:linear-gradient(180deg,transparent,#000 28%,#000 72%,transparent)}
 .wheel::-webkit-scrollbar{display:none}
+/* A wheel and the page scroll on the same axis, so a wheel that is always live
+   steals every downward swipe that happens to start on it. Tap to wake it. */
+.wheel.live{overflow-y:scroll;box-shadow:0 0 0 1px var(--accent)}
+.wheel.live .wsel{opacity:.75}
+.wtap{position:absolute;left:0;right:0;bottom:6px;text-align:center;font-family:var(--mono);
+  font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);
+  pointer-events:none;transition:opacity .15s}
+.wheel.live ~ .wtap{opacity:0}
 .wheel .pad{height:55px}
 .wheel .wi{height:40px;line-height:40px;text-align:center;scroll-snap-align:center;
   font-family:var(--mono);font-size:19px;color:var(--ink-3);font-variant-numeric:tabular-nums;transition:color .1s}
@@ -975,7 +983,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 31;
+const BUILD = 32;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1185,7 +1193,8 @@ function fixDraft(d) {                       // older records, and anything Fire
   return d;
 }
 function setDraft(date, winId) {
-  showAll = false;                          // start short again on each check-in
+  showAll = false;
+  if (typeof sleepWheels === "function") sleepWheels();                          // start short again on each check-in
   try { draft = fixDraft(newDraft(date, winId)); }
   catch (e) { draft = newDraft(date, winId); }
   // a fresh entry for a past day is being written from memory by definition
@@ -1385,6 +1394,11 @@ function buildWheel(el, max, step, onChange) {
   for (let i = 0; i <= max; i += step) h += '<div class="wi" data-v="' + i + '">' + pad(i) + "</div>";
   h += '<div class="pad"></div>';
   el.innerHTML = h;
+  if (el.parentNode && !el.parentNode.querySelector(".wtap")) {
+    const tip = document.createElement("div");
+    tip.className = "wtap"; tip.textContent = "tap to change";
+    el.parentNode.appendChild(tip);
+  }
   el._items = Array.from(el.querySelectorAll(".wi"));
   el._cb = onChange || function () {};
   el.tabIndex = 0;
@@ -1412,18 +1426,40 @@ function buildWheel(el, max, step, onChange) {
     e.preventDefault(); stepWheel(el, d);
   });
 
+  // first touch wakes it; the same touch still picks a number
+  el.addEventListener("pointerdown", () => wakeWheel(el));
+  el.addEventListener("focus", () => wakeWheel(el));
+
   // tap a number to jump straight to it
   el.addEventListener("click", e => {
     const wi = e.target.closest(".wi"); if (!wi) return;
     const i = el._items.indexOf(wi);
-    if (i > -1) { el.scrollTo({ top: i * 40, behavior: "smooth" });
+    if (i > -1) { wheelScroll(el, i * 40);
       markWheel(el); clearTimeout(el._t);
       el._t = setTimeout(() => { markWheel(el); el._cb(); }, 200); }
   });
 }
+/* not every environment implements Element.scrollTo */
+function wheelScroll(el, top) {
+  if (typeof el.scrollTo === "function") { try { el.scrollTo({ top, behavior: "smooth" }); return; } catch (e) {} }
+  el.scrollTop = top;
+}
+let liveWheel = null;
+function wakeWheel(el) {
+  if (liveWheel === el) return;
+  sleepWheels();
+  liveWheel = el;
+  el.classList.add("live");
+}
+function sleepWheels() {
+  if (liveWheel) liveWheel.classList.remove("live");
+  liveWheel = null;
+}
+
 function stepWheel(el, d) {
+  wakeWheel(el);
   const i = Math.max(0, Math.min(el._items.length - 1, wheelIndex(el) + d));
-  el.scrollTo({ top: i * 40, behavior: "smooth" });
+  wheelScroll(el, i * 40);
   markWheel(el);
   clearTimeout(el._t);
   el._t = setTimeout(() => { markWheel(el); el._cb(); }, 200);
@@ -1435,7 +1471,7 @@ function markWheel(el) {
 }
 function snapWheel(el) {
   const i = wheelIndex(el);
-  if (Math.abs(el.scrollTop - i * 40) > 2) el.scrollTo({ top: i * 40, behavior: "smooth" });
+  if (Math.abs(el.scrollTop - i * 40) > 2) wheelScroll(el, i * 40);
   markWheel(el);
 }
 function wheelVal(el) { const i = wheelIndex(el); return +el._items[i].dataset.v; }
@@ -4616,6 +4652,11 @@ function init() {
     }
     renderCfg();
   };
+
+  document.addEventListener("pointerdown", ev => {
+    if (liveWheel && !ev.target.closest(".wheel") && !ev.target.closest(".wstep")) sleepWheels();
+  }, true);
+  window.addEventListener("scroll", () => { if (liveWheel) sleepWheels(); }, { passive: true });
 
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden) return;
