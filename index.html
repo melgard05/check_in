@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:29-->
+<!DOCTYPE html><!--build:30-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -421,8 +421,8 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="card">
         <div class="sw" style="border-bottom:0;padding-top:0">
           <div><div class="t">Napped today</div>
-            <div class="d">Naps change tonight's sleep, and how often you need them says
-              something on its own.</div></div>
+            <div class="d" id="napWhen">Naps change tonight's sleep, and how often you need them
+              says something on its own.</div></div>
           <button class="tog" id="togNapped" aria-pressed="false"></button>
         </div>
         <div id="napDetail" style="display:none">
@@ -783,8 +783,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
       <div id="winCfg"></div>
       <div class="sw"><div style="flex:1"><div class="t">Ask about naps at</div>
-        <div class="d">Daytime sleep, logged once a day.</div></div>
-        <select id="napWinSel" style="flex:0 0 132px"></select></div>
+        <div class="d">A nap at the last check-in of the day counts toward the next morning's
+          total, since it comes out of the night ahead.</div></div></div>
+      <div class="schedrow" id="napWinPick"></div>
       <div class="sw"><div style="flex:1"><div class="t">Ask when meds wore off at</div>
         <div class="d">Only appears once you've listed medications.</div></div>
         <select id="medWinSel" style="flex:0 0 132px"></select></div>
@@ -974,7 +975,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 29;
+const BUILD = 30;
 
 const DEFAULT_CFG = {
   windows: [
@@ -983,7 +984,7 @@ const DEFAULT_CFG = {
     { id:"pm",  label:"Evening", time:"20:00", timeWe:"20:00", sleep:false }
   ],
   weekend: false,
-  napWin: "pm",               // which check-in asks about daytime sleep
+  napWins: ["mid", "pm"],     // which check-ins ask about daytime sleep
   medWin: "pm",               // and about medication wearing off
   cycle: false,               // track cycle day
   sched: {},                  // per-item overrides: { key: { wins:[], days:[] } }
@@ -1011,7 +1012,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWin", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "off", "meds", "lat", "nagMins"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "off", "meds", "lat", "nagMins"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1453,6 +1454,36 @@ function pushSleep() {
     (tot ? '  ·  ' + tot.toFixed(2) + " h" : "") + flag;
 }
 
+/* Which night does a nap belong to?
+   A nap at midday shortens the sleep debt from the night just gone, so it counts
+   toward that day. A nap in the evening comes out of the night ahead, so it
+   counts toward tomorrow — the morning when that night gets logged. */
+const lastWinId = () => (CFG.windows.length ? CFG.windows[CFG.windows.length - 1].id : null);
+const napRollsForward = winId => winId === lastWinId();
+function addDays(dateISO, n) {
+  const p = String(dateISO).split("-");
+  const d = new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1);
+  d.setDate(d.getDate() + n);
+  return todayISO(d);
+}
+const napTargetDate = e => napRollsForward(e.win) ? addDays(e.date, 1) : e.date;
+
+/* every nap, grouped by the night it belongs to */
+function napsByNight() {
+  const map = {};
+  ENTRIES.forEach(e => {
+    if (!e.nap || !e.nap.on) return;
+    const hrs = (+e.nap.h || 0) + (+e.nap.m || 0) / 60;
+    if (!hrs) return;
+    const t = napTargetDate(e);
+    if (!map[t]) map[t] = { hours: 0, parts: [] };
+    map[t].hours += hrs;
+    map[t].parts.push({ from: e.date, win: e.win, hours: hrs, start: e.nap.start || "",
+      forward: napRollsForward(e.win) });
+  });
+  return map;
+}
+
 /* days since the most recent logged period start, on or before this date */
 function cycleDayOf(dateISO) {
   const starts = ENTRIES.filter(e => e.period && e.date <= dateISO).map(e => e.date).sort();
@@ -1489,19 +1520,36 @@ function pushNap() {
   draft.nap = Object.assign(draft.nap || {}, { h, m });
   const tot = h + m / 60;
   const flag = tot >= 2 ? '  <span style="color:var(--warn)">long</span>' : "";
-  // pair it with last night so the total is right there rather than inferred
-  const night = (function () {
-    const e = ENTRIES.find(x => x.date === draft.date && x.sleep && x.sleep.h != null);
-    return e ? e.sleep.h + (e.sleep.m || 0) / 60 : null;
-  })();
-  $("#napTotal").innerHTML = tot
-    ? "nap <b>" + h + "h " + pad(m) + "m</b>" + flag +
-      (night != null
-        ? '<br><span style="color:var(--ink-3)">with ' + night.toFixed(1) +
-          "h last night, that's </span><b>" + (night + tot).toFixed(1) + "h</b>" +
-          '<span style="color:var(--ink-3)"> total today</span>'
-        : "")
-    : '<span style="color:var(--ink-3)">no length set</span>';
+  const forward = napRollsForward(draft.win);
+  const target = forward ? addDays(draft.date, 1) : draft.date;
+  // any other nap already counting toward the same night
+  let others = 0;
+  ENTRIES.forEach(e => {
+    if (!e.nap || !e.nap.on) return;
+    if (e.date === draft.date && e.win === draft.win) return;
+    if (napTargetDate(e) !== target) return;
+    others += (+e.nap.h || 0) + (+e.nap.m || 0) / 60;
+  });
+  const nightE = ENTRIES.find(x => x.date === target && x.sleep && x.sleep.h != null);
+  const night = nightE ? nightE.sleep.h + (nightE.sleep.m || 0) / 60 : null;
+  const napSum = tot + others;
+
+  let line = "";
+  if (tot) {
+    line = "nap <b>" + h + "h " + pad(m) + "m</b>" + flag;
+    if (others) line += '<span style="color:var(--ink-3)"> · ' + napSum.toFixed(2) +
+      "h of naps for this night</span>";
+    if (forward) {
+      line += '<br><span style="color:var(--ink-3)">counts toward tomorrow morning\u2019s total' +
+        (night != null ? ", currently " : "") + "</span>" +
+        (night != null ? "<b>" + (night + napSum).toFixed(1) + "h</b>" : "");
+    } else if (night != null) {
+      line += '<br><span style="color:var(--ink-3)">with ' + night.toFixed(1) +
+        "h last night, that\u2019s </span><b>" + (night + napSum).toFixed(1) + "h</b>" +
+        '<span style="color:var(--ink-3)"> total for that night</span>';
+    }
+  } else line = '<span style="color:var(--ink-3)">no length set</span>';
+  $("#napTotal").innerHTML = line;
   const st = $("#napStart").value;
   const hint = $("#napHint");
   if (!st) hint.textContent = "Roughly when it started is enough.";
@@ -1565,9 +1613,13 @@ function renderLog() {
   }
 
   // naps
-  const wantNap = CFG.napWin && draft.win === CFG.napWin;
+  const wantNap = (CFG.napWins || []).indexOf(draft.win) > -1;
   $("#napBlock").style.display = wantNap ? "" : "none";
   if (wantNap) {
+    const wn = $("#napWhen");
+    if (wn) wn.textContent = napRollsForward(draft.win)
+      ? "An evening nap comes out of the night ahead, so it counts toward tomorrow morning's total."
+      : "A midday nap offsets last night, so it counts toward that night's total.";
     const on = !!(draft.nap && draft.nap.on);
     $("#togNapped").setAttribute("aria-pressed", on ? "true" : "false");
     $("#napDetail").style.display = on ? "" : "none";
@@ -1773,6 +1825,7 @@ function dayList(days) {
 }
 function daily(days) {
   const dates = dayList(days);
+  const naps = napsByNight();
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
@@ -1797,8 +1850,10 @@ function daily(days) {
       row.outdoors = cx.some(c => CTXBY[c] && CTXBY[c].outdoors);
       row.appt = cx.some(c => CTXBY[c] && CTXBY[c].appt);
     }
-    const ne = es.find(e => e.nap && e.nap.on);
-    if (ne) row.nap = { hours: (+ne.nap.h || 0) + (+ne.nap.m || 0) / 60, start: ne.nap.start || "" };
+    const nb = naps[date];
+    if (nb) row.nap = { hours: nb.hours, start: (nb.parts[0] || {}).start || "",
+      parts: nb.parts, count: nb.parts.length,
+      carried: nb.parts.some(x => x.forward) };
     row.total = (row.sleep ? row.sleep.hours : 0) + (row.nap ? row.nap.hours : 0);
     es.forEach(e => { (e.tags || []).forEach(t => row.tags.indexOf(t) < 0 && row.tags.push(t));
       (e.warns || []).forEach(t => row.warns.indexOf(t) < 0 && row.warns.push(t));
@@ -2797,7 +2852,7 @@ function buildExport(kind) {
     // one value column per item, then a matching note column for anything noted
     const noted = on.filter(i => rows.some(r => r.inotes[i.key]));
     const head = ["date", "checkins", "context", "worked", "sleep_hours", "bedtime", "wake_time",
-      "nap_hours", "nap_start", "total_sleep_hours",
+      "nap_hours", "nap_start", "nap_carried_from_prev_evening", "total_sleep_hours",
       "med_wore_off", "med_wore_off_time", "from_memory", "med_adherence", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
@@ -2809,6 +2864,7 @@ function buildExport(kind) {
       r.sleep ? r.sleep.hours.toFixed(2) : "", r.sleep ? r.sleep.bed || "" : "",
       r.sleep ? r.sleep.wake || "" : "",
       r.nap ? r.nap.hours.toFixed(2) : "", r.nap ? r.nap.start || "" : "",
+      r.nap ? (r.nap.carried ? "yes" : "no") : "",
       r.total ? r.total.toFixed(2) : "",
       r.medoff ? r.medoff.st : "", r.medoff ? r.medoff.at || "" : "",
       r.recall ? "yes" : "no",
@@ -3026,9 +3082,10 @@ function renderCfg() {
           (w.timeWe || w.time) + '" style="width:112px">'
         : "") +
     "</div></div>").join("");
-  $("#napWinSel").innerHTML = '<option value="">Don\u2019t ask</option>' +
-    CFG.windows.map(w => '<option value="' + w.id + '"' +
-      (CFG.napWin === w.id ? " selected" : "") + ">" + esc(w.label) + "</option>").join("");
+  $("#napWinPick").innerHTML = CFG.windows.map(w =>
+    '<button class="chip sm" data-napwin="' + w.id + '" aria-pressed="' +
+    ((CFG.napWins || []).indexOf(w.id) > -1 ? "true" : "false") + '">' + esc(w.label) +
+    (napRollsForward(w.id) ? " \u2192 next day" : "") + "</button>").join("");
   $("#medWinSel").innerHTML = '<option value="">Don\u2019t ask</option>' +
     CFG.windows.map(w => '<option value="' + w.id + '"' +
       (CFG.medWin === w.id ? " selected" : "") + ">" + esc(w.label) + "</option>").join("");
@@ -3974,7 +4031,7 @@ function commit(skip, reason) {
     });
     if (!(CFG.medWin && draft.win === CFG.medWin)) draft.medoff = { st: "", at: "" };
     else if (draft.medoff.st === "time") draft.medoff.at = $("#medOffAt").value || "";
-    if (CFG.napWin && draft.win === CFG.napWin && draft.nap && draft.nap.on) {
+    if ((CFG.napWins || []).indexOf(draft.win) > -1 && draft.nap && draft.nap.on) {
       draft.nap = { on: true, h: wheelVal($("#wNH")), m: wheelVal($("#wNM")),
         start: $("#napStart").value || "" };
     } else if (draft.nap) { draft.nap.on = false; }
@@ -4108,6 +4165,14 @@ function init() {
       touchCfg().then(() => { renderPatterns(); renderLog(); toast("Turned off"); });
       return;
     }
+    const nw = ev.target.closest("[data-napwin]");
+    if (nw) {
+      const id = nw.dataset.napwin;
+      CFG.napWins = (CFG.napWins || []).indexOf(id) > -1
+        ? CFG.napWins.filter(x => x !== id) : (CFG.napWins || []).concat([id]);
+      touchCfg().then(() => { renderCfg(); renderLog(); });
+      return;
+    }
     const qk = ev.target.closest("[data-quick]");
     if (qk) {
       const k = qk.dataset.quick;
@@ -4152,7 +4217,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
@@ -4248,7 +4313,7 @@ function init() {
   $("#togNag").setAttribute("aria-pressed", CFG.nag ? "true" : "false"); saveCfg(); refreshDue(); };
   $("#notifBtn").onclick = () => { if (!("Notification" in window)) return;
     Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
-  $("#napWinSel").onchange = () => { CFG.napWin = $("#napWinSel").value; touchCfg(); renderLog(); };
+
   $("#medWinSel").onchange = () => { CFG.medWin = $("#medWinSel").value; touchCfg(); renderLog(); };
   $("#medSave").onclick = () => { CFG.meds = $("#medList").value; touchCfg(); renderLog(); toast("Med list saved"); };
   $("#medChange").onclick = () => {
