@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:28-->
+<!DOCTYPE html><!--build:29-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -974,7 +974,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 28;
+const BUILD = 29;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1489,7 +1489,18 @@ function pushNap() {
   draft.nap = Object.assign(draft.nap || {}, { h, m });
   const tot = h + m / 60;
   const flag = tot >= 2 ? '  <span style="color:var(--warn)">long</span>' : "";
-  $("#napTotal").innerHTML = tot ? "nap <b>" + h + "h " + pad(m) + "m</b>  ·  " + tot.toFixed(2) + " h" + flag
+  // pair it with last night so the total is right there rather than inferred
+  const night = (function () {
+    const e = ENTRIES.find(x => x.date === draft.date && x.sleep && x.sleep.h != null);
+    return e ? e.sleep.h + (e.sleep.m || 0) / 60 : null;
+  })();
+  $("#napTotal").innerHTML = tot
+    ? "nap <b>" + h + "h " + pad(m) + "m</b>" + flag +
+      (night != null
+        ? '<br><span style="color:var(--ink-3)">with ' + night.toFixed(1) +
+          "h last night, that's </span><b>" + (night + tot).toFixed(1) + "h</b>" +
+          '<span style="color:var(--ink-3)"> total today</span>'
+        : "")
     : '<span style="color:var(--ink-3)">no length set</span>';
   const st = $("#napStart").value;
   const hint = $("#napHint");
@@ -1555,7 +1566,7 @@ function renderLog() {
 
   // naps
   const wantNap = CFG.napWin && draft.win === CFG.napWin;
-  $("#napBlock").style.display = wantNap && (!CFG.quick || showAll) ? "" : "none";
+  $("#napBlock").style.display = wantNap ? "" : "none";
   if (wantNap) {
     const on = !!(draft.nap && draft.nap.on);
     $("#togNapped").setAttribute("aria-pressed", on ? "true" : "false");
@@ -1564,7 +1575,8 @@ function renderLog() {
       setWheel($("#wNH"), draft.nap.h == null ? 0 : draft.nap.h);
       setWheel($("#wNM"), draft.nap.m == null ? 0 : draft.nap.m);
       $("#napStart").value = draft.nap.start || "";
-      $("#napItems").innerHTML = activeItems("nap").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+      $("#napItems").innerHTML = (CFG.quick && !showAll) ? ""
+        : activeItems("nap").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
       pushNap();
     }
   }
@@ -1586,8 +1598,8 @@ function renderLog() {
   if ($("#warnBlock")) $("#warnBlock").style.display = short ? "none" : "";
   $("#moreWrap").style.display = CFG.quick && !showAll ? "" : "none";
   if (CFG.quick && !showAll) {
-    const hidden = ITEMS.filter(i => isOn(i.key) && i.grp !== "sleep" && !inQuick(i.key) &&
-      itemShows(i.key, draft.win, draft.date)).length;
+    const hidden = ITEMS.filter(i => isOn(i.key) && i.grp !== "sleep" && i.grp !== "nap" &&
+      !inQuick(i.key) && itemShows(i.key, draft.win, draft.date)).length;
     $("#moreHint").textContent = hidden
       ? hidden + " more item" + (hidden === 1 ? "" : "s") + ", plus tags and notes"
       : "tags, warning signs and notes";
