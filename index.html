@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:30-->
+<!DOCTYPE html><!--build:31-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -975,7 +975,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 30;
+const BUILD = 31;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1447,11 +1447,34 @@ function pushSleep() {
   if (!draft) return;
   const h = wheelVal($("#wH")), m = wheelVal($("#wM"));
   draft.sleep = Object.assign(draft.sleep || {}, { h, m });
-  const tot = h + m / 60;
+  const night = h + m / 60;
+
+  // naps that belong to this night — a midday nap from today, or an evening
+  // nap from yesterday. Without this the morning only shows the night portion.
+  let napHrs = 0, carried = 0;
+  ENTRIES.forEach(e => {
+    if (!e.nap || !e.nap.on) return;
+    if (e.date === draft.date && e.win === draft.win) return;
+    if (napTargetDate(e) !== draft.date) return;
+    const x = (+e.nap.h || 0) + (+e.nap.m || 0) / 60;
+    napHrs += x;
+    if (napRollsForward(e.win)) carried += x;
+  });
+  const tot = night + napHrs;
+
+  // judge the flag on everything slept, not just the night stretch
   const flag = tot > 0 && tot < 6 ? '  <span style="color:var(--warn)">short</span>' :
                tot > 10 ? '  <span style="color:var(--warn)">long</span>' : "";
-  $("#wTotal").innerHTML = "total <b>" + h + "h " + pad(m) + "m</b>" +
-    (tot ? '  ·  ' + tot.toFixed(2) + " h" : "") + flag;
+
+  let out = (napHrs ? "night " : "total ") + "<b>" + h + "h " + pad(m) + "m</b>" +
+    (night && !napHrs ? '  ·  ' + night.toFixed(2) + " h" : "") + (napHrs ? "" : flag);
+  if (napHrs) {
+    const nh = Math.floor(napHrs), nm = Math.round((napHrs % 1) * 60);
+    out += '<br><span style="color:#9b7fd4">plus ' + nh + "h " + pad(nm) + "m napped" +
+      (carried ? " (carried from last evening)" : "") + "</span>" +
+      '<br><span style="color:var(--ink-3)">total slept </span><b>' + tot.toFixed(2) + " h</b>" + flag;
+  }
+  $("#wTotal").innerHTML = out;
 }
 
 /* Which night does a nap belong to?
@@ -1574,7 +1597,7 @@ function renderLog() {
     setWheel($("#wH"), s.h == null ? 7 : s.h);
     setWheel($("#wM"), s.m == null ? 0 : s.m);
     $("#sBed").value = s.bed || ""; $("#sWake").value = s.wake || "";
-    pushSleep();
+    pushSleep();   // also folds in any nap that belongs to this night
     $("#sleepItems").innerHTML = activeItems("sleep").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
   }
   $("#togRecall").setAttribute("aria-pressed", draft.recall ? "true" : "false");
@@ -2273,8 +2296,9 @@ function readoutFor(i) {
   s += "<br>";
   const bits = Object.keys(SCOL).filter(k => r.v[k] != null && isOn(k))
     .map(k => ITEM[k].label.toLowerCase() + " <b>" + r.v[k].toFixed(1) + "</b>");
-  if (r.sleep) bits.unshift("slept <b>" + Math.floor(r.sleep.hours) + "h " +
-    pad(Math.round((r.sleep.hours % 1) * 60)) + "m</b>");
+  if (r.sleep) bits.unshift("night <b>" + Math.floor(r.sleep.hours) + "h " +
+    pad(Math.round((r.sleep.hours % 1) * 60)) + "m</b>" +
+    (r.nap ? ", total <b>" + r.total.toFixed(1) + "h</b>" : ""));
   if (r.medoff && r.medoff.st) bits.push("meds " + (r.medoff.st === "still" ? "<b>lasted all day</b>"
     : r.medoff.st === "none" ? "<b>unclear</b>" : "off at <b>" + esc(r.medoff.at) + "</b>"));
   if (r.nap) bits.push('<span style="color:#9b7fd4">napped <b>' + Math.floor(r.nap.hours) + "h " +
