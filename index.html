@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:33-->
+<!DOCTYPE html><!--build:34-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="./icon-192.png">
 <style>
 :root{
+  color-scheme:dark;   /* native pickers, spinners and scrollbars follow the app */
   /* diverging scale: low end cool, baseline steady, high end warm */
   --low-2:#2b6f8f; --low-1:#3f95a8; --base:#5f9e7a; --high-1:#c98b3a; --high-2:#c25a4a;
   --bg:#0b0d10; --panel:#12161b; --panel-2:#171c23; --line:#232a33; --line-2:#2e3742;
@@ -199,13 +200,13 @@ input[type=text],input[type=password],input[type=time],input[type=date],input[ty
   width:100%;background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;
   font-size:15px;color:var(--ink);appearance:none}
 input[type=password]{letter-spacing:.18em;font-family:var(--mono);-webkit-text-security:disc}
-/* the browser's own clock and calendar glyphs render dark, which is invisible here */
+/* Tell the browser this is a dark UI and it draws its own clock, calendar and
+   spinner glyphs light. Inverting on top of that would only flip them black
+   again, so this is the whole fix. */
 input[type=time]::-webkit-calendar-picker-indicator,
-input[type=date]::-webkit-calendar-picker-indicator{
-  filter:invert(1) brightness(1.6);opacity:.85;cursor:pointer}
+input[type=date]::-webkit-calendar-picker-indicator{opacity:.9;cursor:pointer}
 input[type=time]::-webkit-calendar-picker-indicator:hover,
 input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:1}
-input[type=time],input[type=date]{color-scheme:dark}
 textarea{min-height:74px;resize:vertical;line-height:1.4}
 input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visible,.chip:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
@@ -990,7 +991,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 33;
+const BUILD = 34;
 
 const DEFAULT_CFG = {
   windows: [
