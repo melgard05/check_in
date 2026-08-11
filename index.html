@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:32-->
+<!DOCTYPE html><!--build:33-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -199,6 +199,13 @@ input[type=text],input[type=password],input[type=time],input[type=date],input[ty
   width:100%;background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;
   font-size:15px;color:var(--ink);appearance:none}
 input[type=password]{letter-spacing:.18em;font-family:var(--mono);-webkit-text-security:disc}
+/* the browser's own clock and calendar glyphs render dark, which is invisible here */
+input[type=time]::-webkit-calendar-picker-indicator,
+input[type=date]::-webkit-calendar-picker-indicator{
+  filter:invert(1) brightness(1.6);opacity:.85;cursor:pointer}
+input[type=time]::-webkit-calendar-picker-indicator:hover,
+input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:1}
+input[type=time],input[type=date]{color-scheme:dark}
 textarea{min-height:74px;resize:vertical;line-height:1.4}
 input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visible,.chip:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
@@ -983,7 +990,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 32;
+const BUILD = 33;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1479,11 +1486,37 @@ function setWheel(el, v) {
   const i = el._items.findIndex(n => +n.dataset.v === v);
   el.scrollTop = (i < 0 ? 0 : i) * 40; markWheel(el);
 }
+/* Minutes between bedtime and waking, allowing for the crossing of midnight. */
+function spanMins(bed, wake) {
+  if (!bed || !wake) return null;
+  let d = minsOf(wake) - minsOf(bed);
+  if (d <= 0) d += 1440;                       // went to bed before midnight
+  return d > 20 * 60 ? null : d;               // implausible, probably a typo
+}
+
+/* Fill the wheels from the two times so the duration doesn't have to be worked
+   out in your head. It's time in bed, so it can only ever be an upper bound. */
+function fillFromTimes() {
+  if (!draft) return;
+  const bed = $("#sBed").value, wake = $("#sWake").value;
+  const mins = spanMins(bed, wake);
+  if (mins == null) { pushSleep(); return; }
+  let h = Math.floor(mins / 60);
+  let m = Math.round((mins % 60) / 5) * 5;      // the wheel steps in fives
+  if (m === 60) { m = 0; h += 1; }
+  if (h > 14) { h = 14; m = 55; }
+  setWheel($("#wH"), h);
+  setWheel($("#wM"), m);
+  draft.sleep = Object.assign(draft.sleep || {}, { h, m, bed, wake, fromTimes: true });
+  pushSleep();
+}
+
 function pushSleep() {
   if (!draft) return;
   const h = wheelVal($("#wH")), m = wheelVal($("#wM"));
   draft.sleep = Object.assign(draft.sleep || {}, { h, m });
   const night = h + m / 60;
+  const inBed = spanMins($("#sBed").value, $("#sWake").value);
 
   // naps that belong to this night — a midday nap from today, or an evening
   // nap from yesterday. Without this the morning only shows the night portion.
@@ -1504,6 +1537,13 @@ function pushSleep() {
 
   let out = (napHrs ? "night " : "total ") + "<b>" + h + "h " + pad(m) + "m</b>" +
     (night && !napHrs ? '  ·  ' + night.toFixed(2) + " h" : "") + (napHrs ? "" : flag);
+  if (inBed != null) {
+    const diff = inBed - Math.round(night * 60);
+    out += '<br><span style="color:var(--ink-3)">' +
+      Math.floor(inBed / 60) + "h " + pad(inBed % 60) + "m in bed" +
+      (diff > 4 ? " · " + (diff >= 60 ? Math.floor(diff / 60) + "h " + pad(diff % 60) : diff % 60) + "m awake"
+        : diff < -4 ? " · more sleep than time in bed?" : "") + "</span>";
+  }
   if (napHrs) {
     const nh = Math.floor(napHrs), nm = Math.round((napHrs % 1) * 60);
     out += '<br><span style="color:#9b7fd4">plus ' + nh + "h " + pad(nm) + "m napped" +
@@ -4153,8 +4193,10 @@ function init() {
   $("#napStart").onchange = () => {
     draft.nap = Object.assign(draft.nap || {}, { start: $("#napStart").value }); pushNap();
   };
-  $("#sBed").onchange  = () => { draft.sleep = Object.assign(draft.sleep || {}, { bed: $("#sBed").value }); };
-  $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value }); };
+  $("#sBed").onchange  = () => { draft.sleep = Object.assign(draft.sleep || {}, { bed: $("#sBed").value });
+    fillFromTimes(); };
+  $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value });
+    fillFromTimes(); };
   $("#eNote").oninput  = () => { draft.note = $("#eNote").value; };
 
   // typing in any per-item note box
