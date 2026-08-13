@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:36-->
+<!DOCTYPE html><!--build:37-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1010,7 +1010,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 36;
+const BUILD = 37;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1344,7 +1344,7 @@ function applyVal(item, v) {
   else { fill.style.left = g.left + "%"; fill.style.width = g.width + "%"; }
   fill.style.background = col;
 
-  if (key === "rebound") { renderLog(); return; }
+  if (key === "rebound") syncCrashBlock();   // show/hide only, no re-render
   if (it.grp === "pain") {
     let pw = item.querySelector(".pw");
     if (!pw) { pw = document.createElement("span"); pw.className = "pw";
@@ -1767,16 +1767,8 @@ function renderLog() {
       ? ITEMS.filter(i => i.grp === "med" && isOn(i.key))
           .map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("") : "";
     // only ask about the crash once there's a crash to describe
-    const showCrash = st && st !== "none" && draft.v.rebound != null && draft.v.rebound >= 3;
-    $("#crashWrap").style.display = showCrash ? "" : "none";
-    if (showCrash) {
-      $("#crashAt").value = draft.medoff.crashAt || "";
-      $("#crashEnd").value = draft.medoff.crashEnd || "";
-      $("#crashFx").innerHTML = CRASH.map(t =>
-        '<button class="chip" data-fx="' + esc(t) + '" aria-pressed="' +
-        (draft.medoff.fx.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
-      crashHint();
-    }
+    $("#crashFx").innerHTML = "";        // rebuild from the draft
+    syncCrashBlock();
     medOffHint();
   }
 
@@ -1868,6 +1860,23 @@ function renderLog() {
     : sk ? '<span style="color:var(--warn)">Marked skipped' + (sk === true ? "" : ": " + esc(sk)) + '.</span>'
     : "Not logged yet.";
   $("#saveBtn").textContent = existing ? "Update check-in" : "Save check-in";
+}
+
+/* Reveal or hide the crash detail without rebuilding the form. */
+function syncCrashBlock() {
+  const wrap = $("#crashWrap"); if (!wrap || !draft) return;
+  const st = draft.medoff && draft.medoff.st;
+  const show = st && st !== "none" && draft.v.rebound != null && draft.v.rebound >= 3;
+  wrap.style.display = show ? "" : "none";
+  if (!show) return;
+  if (!$("#crashFx").innerHTML) {
+    $("#crashFx").innerHTML = CRASH.map(t =>
+      '<button class="chip" data-fx="' + esc(t) + '" aria-pressed="' +
+      (draft.medoff.fx.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+  }
+  $("#crashAt").value = draft.medoff.crashAt || "";
+  $("#crashEnd").value = draft.medoff.crashEnd || "";
+  crashHint();
 }
 
 function painSummary() {
