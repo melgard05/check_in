@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:37-->
+<!DOCTYPE html><!--build:38-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1010,7 +1010,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 37;
+const BUILD = 38;
 
 const DEFAULT_CFG = {
   windows: [
@@ -4302,8 +4302,7 @@ function init() {
   buildWheel($("#wM"), 55, 5, pushSleep);
   buildWheel($("#wNH"), 5, 1, pushNap);
   buildWheel($("#wNM"), 55, 5, pushNap);
-  bindSliders($("#coreItems")); bindSliders($("#extraItems"));
-  bindSliders($("#sleepItems")); bindSliders($("#painItems")); bindSliders($("#napItems"));
+  bindSliders($("#v-log"));   // delegated, so every slider group is covered
 
   const due = dueWindows(todayISO());
   setDraft(todayISO(), bestWindow(todayISO()));
