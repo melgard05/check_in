@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:34-->
+<!DOCTYPE html><!--build:35-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -429,6 +429,16 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           </div>
         </div>
         <div id="medOffItems"></div>
+        <div id="crashWrap" style="display:none">
+          <div class="eyebrow" style="margin:16px 0 8px">The crash</div>
+          <div class="row" style="margin-bottom:10px">
+            <label class="fld" style="flex:0 1 160px"><span>Hit around</span>
+              <input type="time" id="crashAt"></label>
+            <div style="flex:1 1 170px;align-self:end;padding-bottom:9px" class="mini" id="crashGap"></div>
+          </div>
+          <p class="sub" style="margin-bottom:9px">What it felt like &mdash; tap any that fit.</p>
+          <div class="chips" id="crashFx"></div>
+        </div>
       </div>
     </div>
 
@@ -984,6 +994,10 @@ const CTX = [
 ];
 const CTXBY = {}; CTX.forEach(c => CTXBY[c.id] = c);
 
+const CRASH = ["Irritable / short fuse", "Exhausted, hit a wall", "Foggy, can't think",
+  "Ravenous", "Tearful or low", "Restless, can't settle", "Headache", "Jittery / shaky",
+  "Anxious", "Zoned out", "Sudden sleepiness"];
+
 const TAGS = ["Conflict","Deadline / pressure","Travel","Missed meds","Poor sleep","Skipped meals",
   "Alcohol","Illness","Money stress","Big social event","Good news","Time outside","Overstimulated",
   "Doctor / therapy","Med change"];
@@ -991,7 +1005,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 34;
+const BUILD = 35;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1166,7 +1180,7 @@ function newDraft(date, winId) {
   return { date, win: winId, ts: new Date().toISOString(), v: {}, n: {},
     pain: { sites: [], kinds: [] }, nap: { on: false, h: 0, m: 0, start: "" },
     ctx: (earlier && earlier.ctx) || "",
-    medoff: { st: "", at: "" },
+    medoff: { st: "", at: "", crashAt: "", fx: [] },
     recall: false, period: false,
     sleep: null, meds: null, tags: [], warns: [], note: "" };
 }
@@ -1190,6 +1204,8 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (!d.medoff || typeof d.medoff !== "object" || Array.isArray(d.medoff)) d.medoff = {};
   if (["time", "still", "none"].indexOf(d.medoff.st) < 0) d.medoff.st = "";
   if (typeof d.medoff.at !== "string") d.medoff.at = d.medoff.at == null ? "" : String(d.medoff.at);
+  if (typeof d.medoff.crashAt !== "string") d.medoff.crashAt = d.medoff.crashAt == null ? "" : String(d.medoff.crashAt);
+  if (!Array.isArray(d.medoff.fx)) d.medoff.fx = d.medoff.fx ? [].concat(d.medoff.fx) : [];
   if (!d.nap || typeof d.nap !== "object" || Array.isArray(d.nap)) d.nap = {};
   d.nap.on = !!d.nap.on;
   d.nap.h = +d.nap.h || 0;
@@ -1322,6 +1338,7 @@ function applyVal(item, v) {
   else { fill.style.left = g.left + "%"; fill.style.width = g.width + "%"; }
   fill.style.background = col;
 
+  if (key === "rebound") { renderLog(); return; }
   if (it.grp === "pain") {
     let pw = item.querySelector(".pw");
     if (!pw) { pw = document.createElement("span"); pw.className = "pw";
@@ -1594,6 +1611,20 @@ function cycleDayOf(dateISO) {
   return Math.round((b - a) / 86400000) + 1;
 }
 
+/* how long after the dose stopped working the crash landed */
+function crashHint() {
+  const el = $("#crashGap"); if (!el) return;
+  const off = draft.medoff.at, cr = draft.medoff.crashAt;
+  if (!cr) { el.textContent = "Roughly when it hit is enough."; return; }
+  if (draft.medoff.st !== "time" || !off) { el.textContent = ""; return; }
+  let d = minsOf(cr) - minsOf(off);
+  if (d < -720) d += 1440;
+  el.innerHTML = Math.abs(d) < 8 ? "Right as it wore off."
+    : d > 0 ? '<span style="color:var(--ink-3)">' + (d >= 60 ? Math.floor(d / 60) + "h " : "") +
+        (d % 60) + "m after it wore off.</span>"
+    : '<span style="color:var(--warn)">' + Math.abs(d) + "m before you noticed it wearing off.</span>";
+}
+
 function medOffHint() {
   const el = $("#medOffHint"); if (!el) return;
   const at = draft.medoff.at;
@@ -1709,6 +1740,16 @@ function renderLog() {
     $("#medOffAt").value = draft.medoff.at || "";
     $("#medOffItems").innerHTML = st && st !== "none"
       ? activeItems("med").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("") : "";
+    // only ask about the crash once there's a crash to describe
+    const showCrash = st && st !== "none" && draft.v.rebound != null && draft.v.rebound >= 3;
+    $("#crashWrap").style.display = showCrash ? "" : "none";
+    if (showCrash) {
+      $("#crashAt").value = draft.medoff.crashAt || "";
+      $("#crashFx").innerHTML = CRASH.map(t =>
+        '<button class="chip" data-fx="' + esc(t) + '" aria-pressed="' +
+        (draft.medoff.fx.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+      crashHint();
+    }
     medOffHint();
   }
 
@@ -1940,7 +1981,10 @@ function daily(days) {
     if (CFG.cycle) { row.cday = cycleDayOf(date); row.period = es.some(e => e.period); }
     const mo = es.find(e => e.medoff && e.medoff.st);
     if (mo) row.medoff = { st: mo.medoff.st, at: mo.medoff.at || "",
-      mins: mo.medoff.st === "time" && mo.medoff.at ? minsOf(mo.medoff.at) : null };
+      mins: mo.medoff.st === "time" && mo.medoff.at ? minsOf(mo.medoff.at) : null,
+      crashAt: mo.medoff.crashAt || "",
+      crashMins: mo.medoff.crashAt ? minsOf(mo.medoff.crashAt) : null,
+      fx: (mo.medoff.fx || []).slice() };
     const cx = es.map(e => e.ctx).filter(Boolean);
     if (cx.length) {
       row.ctx = cx.sort((a, b) =>
@@ -2376,6 +2420,9 @@ function readoutFor(i) {
   if (r.sleep) bits.unshift("night <b>" + Math.floor(r.sleep.hours) + "h " +
     pad(Math.round((r.sleep.hours % 1) * 60)) + "m</b>" +
     (r.nap ? ", total <b>" + r.total.toFixed(1) + "h</b>" : ""));
+  if (r.medoff && r.medoff.crashAt) bits.push('<span style="color:var(--high-2)">crash at <b>' +
+    esc(r.medoff.crashAt) + "</b>" + (r.medoff.fx.length ? " · " + esc(r.medoff.fx.join(", ").toLowerCase()) : "") +
+    "</span>");
   if (r.medoff && r.medoff.st) bits.push("meds " + (r.medoff.st === "still" ? "<b>lasted all day</b>"
     : r.medoff.st === "none" ? "<b>unclear</b>" : "off at <b>" + esc(r.medoff.at) + "</b>"));
   if (r.nap) bits.push('<span style="color:#9b7fd4">napped <b>' + Math.floor(r.nap.hours) + "h " +
@@ -2840,6 +2887,25 @@ function renderFlags(rows) {
     if (early >= 4) out.push(["", "Wearing off before 2pm on " + early + " of the last " + recent.length + " days",
       "That leaves a long stretch of the day uncovered."]);
   }
+  // what the crash consistently looks like
+  const fxRows = rows.slice(-21).filter(r => r.medoff && r.medoff.fx && r.medoff.fx.length);
+  if (fxRows.length >= 4) {
+    const tally = {};
+    fxRows.forEach(r => r.medoff.fx.forEach(x => { tally[x] = (tally[x] || 0) + 1; }));
+    const top = Object.keys(tally).sort((a, c) => tally[c] - tally[a]).slice(0, 3)
+      .filter(x => tally[x] >= 2);
+    const timed = fxRows.filter(r => r.medoff.crashMins != null);
+    let when = "";
+    if (timed.length >= 3) {
+      const avg = timed.reduce((a, r) => a + r.medoff.crashMins, 0) / timed.length;
+      when = " Usually around " + pad(Math.floor(avg / 60)) + ":" + pad(Math.round(avg % 60)) + ".";
+    }
+    if (top.length) out.push(["", "The crash has a consistent shape",
+      top.map(x => x.toLowerCase() + " (" + tally[x] + "\u00d7)").join(", ") + " across " +
+      fxRows.length + " days." + when +
+      " Naming the specific effects is more useful to a prescriber than saying it wears off badly."]);
+  }
+
   const reb = rows.slice(-10).filter(r => r.v.rebound != null && r.v.rebound >= 7);
   if (reb.length >= 3) out.push(["", "Rough crash on " + reb.length + " of the last 10 days",
     "Rebound as a dose wears off is treatable — timing, dose shape, or a small afternoon top-up " +
@@ -2954,7 +3020,8 @@ function buildExport(kind) {
     const noted = on.filter(i => rows.some(r => r.inotes[i.key]));
     const head = ["date", "checkins", "context", "worked", "sleep_hours", "bedtime", "wake_time",
       "nap_hours", "nap_start", "nap_carried_from_prev_evening", "total_sleep_hours",
-      "med_wore_off", "med_wore_off_time", "from_memory", "med_adherence", "daylight_hours"]
+      "med_wore_off", "med_wore_off_time", "crash_time", "crash_effects",
+      "from_memory", "med_adherence", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
       .concat(noted.map(i => i.key + "_note"))
@@ -2968,6 +3035,8 @@ function buildExport(kind) {
       r.nap ? (r.nap.carried ? "yes" : "no") : "",
       r.total ? r.total.toFixed(2) : "",
       r.medoff ? r.medoff.st : "", r.medoff ? r.medoff.at || "" : "",
+      r.medoff ? r.medoff.crashAt || "" : "",
+      r.medoff && r.medoff.fx ? r.medoff.fx.join("; ") : "",
       r.recall ? "yes" : "no",
       r.meds == null ? "" : r.meds.toFixed(2), r.day.toFixed(2)]
       .concat(on.map(i => r.v[i.key] == null ? "" : r.v[i.key].toFixed(2)))
@@ -4131,7 +4200,12 @@ function commit(skip, reason) {
       if (!draft.n[k] || !draft.n[k].trim()) delete draft.n[k]; else draft.n[k] = draft.n[k].trim();
     });
     if (!(CFG.medWin && draft.win === CFG.medWin)) draft.medoff = { st: "", at: "" };
-    else if (draft.medoff.st === "time") draft.medoff.at = $("#medOffAt").value || "";
+    else {
+      if (draft.medoff.st === "time") draft.medoff.at = $("#medOffAt").value || "";
+      if (draft.v.rebound != null && draft.v.rebound >= 3)
+        draft.medoff.crashAt = $("#crashAt").value || "";
+      else { draft.medoff.crashAt = ""; draft.medoff.fx = []; }
+    }
     if ((CFG.napWins || []).indexOf(draft.win) > -1 && draft.nap && draft.nap.on) {
       draft.nap = { on: true, h: wheelVal($("#wNH")), m: wheelVal($("#wNM")),
         start: $("#napStart").value || "" };
@@ -4190,7 +4264,8 @@ function init() {
     if (draft.nap.on && !draft.nap.h && !draft.nap.m) draft.nap.m = 30;   // a sensible starting point
     renderLog();
   };
-  $("#medOffAt").onchange = () => { draft.medoff.at = $("#medOffAt").value; medOffHint(); };
+  $("#medOffAt").onchange = () => { draft.medoff.at = $("#medOffAt").value; medOffHint(); crashHint(); };
+  $("#crashAt").onchange = () => { draft.medoff.crashAt = $("#crashAt").value; crashHint(); };
   $("#napStart").onchange = () => {
     draft.nap = Object.assign(draft.nap || {}, { start: $("#napStart").value }); pushNap();
   };
@@ -4231,6 +4306,13 @@ function init() {
     const sx = ev.target.closest("[data-sugdel]");
     if (sx) { STATE.suggestions = (STATE.suggestions || []).filter(x => x.id !== sx.dataset.sugdel);
       saveState(); renderSug(); return; }
+    const fx = ev.target.closest("[data-fx]");
+    if (fx) {
+      const v = fx.dataset.fx, i = draft.medoff.fx.indexOf(v);
+      i > -1 ? draft.medoff.fx.splice(i, 1) : draft.medoff.fx.push(v);
+      fx.setAttribute("aria-pressed", i > -1 ? "false" : "true");
+      return;
+    }
     const mo = ev.target.closest("[data-medoff]");
     if (mo) {
       const v = mo.dataset.medoff;
