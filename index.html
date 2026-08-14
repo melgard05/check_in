@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:42-->
+<!DOCTYPE html><!--build:43-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1078,7 +1078,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 42;
+const BUILD = 43;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1142,6 +1142,7 @@ let series = { mood:true, irrit:true, energy:true, anxiety:false, focus:false, i
   fog:false, confid:false, pain:true, sleepq:false, calls:false };
 let lastExport = "";
 let gateKey = null;
+let gateWin = null;   // the window the prompt names, so "Do it now" opens that one
 
 /* ---------- helpers ---------- */
 const $  = s => document.querySelector(s);
@@ -2124,14 +2125,17 @@ function refreshDue() {
   if (!due.length) clearNotifs();                  // nothing open: take the prompts down
   // blocking gate for the most overdue window
   if (CFG.nag && due.length && !dashOn) {
-    const w = due[due.length - 1], key = today + "|" + w.id;
+    // prompt for the oldest one still open — that's the one at risk of being lost
+    const w = due[0], key = today + "|" + w.id;
     if (key !== gateKey) {
       gateKey = key;
+      gateWin = w.id;
       $("#gateH").textContent = w.label + " check-in";
-      $("#gateK").textContent = due.length > 1 ? due.length + " check-ins due" : "check-in due";
+      $("#gateK").textContent = due.length > 1
+        ? due.length + " check-ins due · this one first" : "check-in due";
       $("#gate").classList.add("on");
     }
-  } else { $("#gate").classList.remove("on"); gateKey = null; }
+  } else { $("#gate").classList.remove("on"); gateKey = null; gateWin = null; }
 }
 
 /* ============================================================
@@ -4888,13 +4892,17 @@ function init() {
   $("#skipBtn").onclick = () => { const r = prompt("Skip this check-in. Why? (optional — asleep, at work, forgot)");
     if (r === null) return; commit(true, r.trim()); };
 
-  $("#gateGo").onclick = () => { $("#gate").classList.remove("on");
+  $("#gateGo").onclick = () => {
+    $("#gate").classList.remove("on");
+    // open the one the prompt actually named, not whichever is nearest now
     const due = dueWindows(todayISO());
-    setDraft(todayISO(), bestWindow(todayISO()));
+    const target = (gateWin && due.some(w => w.id === gateWin)) ? gateWin
+      : (due[0] ? due[0].id : bestWindow(todayISO()));
+    setDraft(todayISO(), target);
     show("log"); };
   $("#gateSkip").onclick = () => { const due = dueWindows(todayISO());
     if (!due.length) { $("#gate").classList.remove("on"); return; }
-    const w = due[due.length - 1];
+    const w = due.find(x => x.id === gateWin) || due[0];
     const r = prompt("Skip the " + w.label.toLowerCase() + " check-in. Why? (optional)");
     if (r === null) return;
     STATE.skipped[todayISO() + "|" + w.id] = r.trim() || true; saveState();
@@ -5094,7 +5102,11 @@ function init() {
     navigator.serviceWorker.addEventListener("message", ev => {
       if (ev.data && ev.data.type === "open-checkin") {
         const due = dueWindows(todayISO());
-        setDraft(todayISO(), bestWindow(todayISO()));
+        // the notification carries which windows it was raised for
+        const named = (ev.data.due || []).map(w => w && w.id).filter(Boolean);
+        const target = named.find(id => due.some(w => w.id === id))
+          || (due[0] ? due[0].id : bestWindow(todayISO()));
+        setDraft(todayISO(), target);
         show("log"); refreshDue();
       }
     });
@@ -5106,7 +5118,7 @@ function init() {
   }
   if (/[?&]due=1/.test(location.search)) {
     const due = dueWindows(todayISO());
-    setDraft(todayISO(), bestWindow(todayISO()));
+    if (due.length) setDraft(todayISO(), due[0].id);
   }
   const setupParam = (location.search.match(/[?&]setup=([^&]+)/) || [])[1];
   if (setupParam) {
