@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:40-->
+<!DOCTYPE html><!--build:42-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -160,6 +160,13 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .sugat{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:3px}
 .sugdel{flex:0 0 22px;background:none;border:0;color:var(--ink-3);font-size:17px;cursor:pointer;padding:0;line-height:1}
 .sugdel:hover{color:var(--bad)}
+.pnote{display:flex;align-items:flex-start;gap:8px;padding:5px 0}
+.pnote:before{content:"\2022";color:var(--accent);font-size:17px;line-height:1.35;flex:0 0 auto}
+.pnote input{flex:1;background:none;border:0;border-bottom:1px solid var(--line);border-radius:0;
+  padding:4px 2px;font-size:14.5px}
+.pnote input:focus{border-bottom-color:var(--accent);outline:none}
+.pnote button{background:none;border:0;color:var(--ink-3);font-size:17px;cursor:pointer;padding:0 2px;line-height:1}
+.pnote button:hover{color:var(--bad)}
 
 /* ---------- wheel ---------- */
 .wheelwrap{display:flex;gap:10px;align-items:stretch;position:relative;margin:6px 0 2px}
@@ -674,8 +681,15 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <textarea id="planAvoid" rows="3" placeholder="What to steer clear of. Staying up. Big decisions. Spending. Scrolling."></textarea></label>
       <label class="fld" style="margin-bottom:11px"><span>People to reach</span>
         <textarea id="planContacts" rows="3" placeholder="Name and number, one per line. Your prescriber, someone at home, a friend who knows."></textarea></label>
-      <label class="fld"><span>Anything else worth remembering</span>
-        <textarea id="planNote" rows="3" placeholder="A note to yourself. What you'd want to hear. What's true even when it doesn't feel true."></textarea></label>
+      <div class="fld"><span>Anything else worth remembering</span>
+        <div id="planNotes"></div>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <input type="text" id="planNoteNew" placeholder="One reminder at a time" style="flex:1 1 200px">
+          <button class="btn sm" id="planNoteAdd">Add</button>
+        </div>
+        <div class="mini" style="margin-top:6px">Each line stands on its own, so you can read just
+          the one you need rather than a paragraph.</div>
+      </div>
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm pri" id="planSave">Save plan</button>
         <span class="mini" id="planWhen" style="align-self:center"></span>
@@ -857,6 +871,14 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     </div>
 
     <div class="card">
+      <h2>Quick spike check</h2>
+      <p class="sub">What the spike button asks about. Anxiety and irritability spike together for
+        some people and separately for others &mdash; keeping them apart is what tells you which.</p>
+      <div class="schedrow" id="spikePick" style="border-bottom:0;padding-bottom:2px"></div>
+      <div class="mini" id="spikeTotal" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
       <h2>What to track</h2>
       <p class="sub">Turn off anything that's noise. Fewer, honest entries beat many guessed ones.</p>
       <div id="itemCfg"></div>
@@ -1015,6 +1037,7 @@ const ITEMS = [
   { key:"painlimit",label:"Got in the way",  low:"Not at all",       high:"Stopped me cold", grp:"pain", anchor:"low",    note:true },
   // sleep-only
   { key:"rebound",  label:"Crash as it wore off", low:"None",           high:"Rough",           grp:"med",   anchor:"low",    note:true },
+  { key:"manic",    label:"Elevated / revved", low:"None",          high:"Racing, can't stop", grp:"spike", anchor:"low", note:true },
   { key:"napfeel",  label:"Nap left me",     low:"Groggy, worse",    high:"Refreshed",       grp:"nap",   anchor:"center", note:true },
   { key:"sleepq",   label:"Sleep quality",   low:"Broken, unrested", high:"Deep, rested",    grp:"sleep", anchor:"center", note:true },
   { key:"wakefeel", label:"Waking mood",     low:"Dread",            high:"Ready",           grp:"sleep", anchor:"center", note:true }
@@ -1055,7 +1078,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 40;
+const BUILD = 42;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1069,8 +1092,9 @@ const DEFAULT_CFG = {
   cycle: false,               // track cycle day
   sched: {},                  // per-item overrides: { key: { wins:[], days:[] } }
   quick: true,                // short check-in by default, everything else behind a tap
+  spikeItems: ["anxiety", "irrit", "manic"],
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
-  plan: { helps: "", avoid: "", contacts: "", note: "", updated: 0 },
+  plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
   altDays: [0, 6],            // 0 Sun … 6 Sat
   cfgAt: 0,
   off: ITEMS.filter(i => i.off).map(i => i.key),
@@ -1092,7 +1116,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "medList", "off", "meds", "lat", "nagMins"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1201,7 +1225,30 @@ async function load() {
   if (!Array.isArray(CFG.off)) CFG.off = DEFAULT_CFG.off.slice();
   if (!Array.isArray(CFG.windows) || !CFG.windows.length) CFG.windows = DEFAULT_CFG.windows.slice();
   if (!CFG.cloud) CFG.cloud = { url:"", uid:"", push:false, sync:false };
+  if (typeof CFG.cloud.key !== "string") CFG.cloud.key = "";
+  if (!CFG.fb) CFG.fb = { url:"", apiKey:"", email:"", uid:"", on:false };
   if (!CFG.nagMins) CFG.nagMins = 20;
+  // Object.assign is shallow, so a stored object replaces the whole default.
+  // Anything nested has to be topped up explicitly or it goes missing.
+  if (!CFG.plan || typeof CFG.plan !== "object") CFG.plan = {};
+  ["helps", "avoid", "contacts", "note"].forEach(k => {
+    if (typeof CFG.plan[k] !== "string") CFG.plan[k] = "";
+  });
+  if (!Array.isArray(CFG.plan.notes)) {          // the note box became a list
+    CFG.plan.notes = (CFG.plan.note || "").split("\n").map(x => x.trim()).filter(Boolean);
+  }
+  if (typeof CFG.plan.updated !== "number") CFG.plan.updated = 0;
+  if (!Array.isArray(CFG.altDays)) CFG.altDays = [0, 6];
+  if (!Array.isArray(CFG.napWins)) CFG.napWins = CFG.napWin ? [CFG.napWin] : ["mid", "pm"];
+  if (typeof CFG.medWin !== "string") CFG.medWin = "pm";
+  if (typeof CFG.cycle !== "boolean") CFG.cycle = false;
+  if (typeof CFG.quick !== "boolean") CFG.quick = true;
+  if (!Array.isArray(CFG.quickItems) || !CFG.quickItems.length)
+    CFG.quickItems = ["mood", "irrit", "energy", "anxiety", "fog"];
+  if (!CFG.sched || typeof CFG.sched !== "object") CFG.sched = {};
+  if (!Array.isArray(CFG.spikeItems) || !CFG.spikeItems.length)
+    CFG.spikeItems = ["anxiety", "irrit", "manic"];
+  if (typeof CFG.cfgAt !== "number") CFG.cfgAt = 0;
   // migrate the old newline-separated med list into scheduled entries
   if (!Array.isArray(CFG.medList)) CFG.medList = [];
   if (!CFG.medList.length && (CFG.meds || "").trim()) {
@@ -2425,9 +2472,10 @@ function drawMain() {
   rows.forEach((r, i) => {
     if (!r.spikes || !r.spikes.length) return;
     const x = xAt(i, n);
+    const anyManic = r.spikes.some(x => x.manic != null && x.manic >= 6);
     g += '<circle cx="' + x.toFixed(1) + '" cy="' + (top + 4) + '" r="' +
          Math.min(4.5, 2 + r.spikes.length * 0.7).toFixed(1) +
-         '" fill="#d9a03c" opacity=".85"/>';
+         '" fill="' + (anyManic ? "#c25a4a" : "#d9a03c") + '" opacity=".85"/>';
   });
 
   // med-change markers
@@ -3000,7 +3048,16 @@ function renderFlags(rows) {
     const peak = Object.keys(hcount).sort((a, c) => hcount[c] - hcount[a])[0];
     const clustered = peak != null && hcount[peak] >= Math.max(2, Math.ceil(spk.length / 3));
     const days = new Set(spk.map(x => x.date)).size;
-    out.push(["", spk.length + " spikes logged across " + days + " days",
+    const kinds = [];
+    ["anxiety", "irrit", "manic"].forEach(k => {
+      const n = spk.filter(x => x[k] != null && x[k] >= 6).length;
+      if (n) kinds.push(n + " " + (k === "anxiety" ? "anxiety" : k === "irrit" ? "irritability" : "elevated") );
+    });
+    const manicN = spk.filter(x => x.manic != null && x.manic >= 7).length;
+    out.push([manicN >= 3 ? "hi" : "", spk.length + " spikes logged across " + days + " days",
+      (kinds.length ? kinds.join(", ") + ". " : "") +
+      (manicN >= 3 ? "The elevated ones are worth flagging specifically \u2014 short surges are easy " +
+        "to dismiss in the moment and easy to forget by the evening check-in. " : "") +
       (top.length ? "Most often after " + top.map(t => t.toLowerCase() + " (" + tal[t] + "\u00d7)").join(", ") + ". " : "") +
       (clustered ? "They cluster around " + pad(peak) + ":00. " : "") +
       "Spikes are what the three daily ratings average away \u2014 a day that scores a calm 4 can " +
@@ -3293,11 +3350,12 @@ function buildExport(kind) {
       "sites", "qualities", "pain_notes", "mood", "muscle_tension"], out);
   }
   if (kind === "spikes") {
-    return toCSV(["date", "time", "anxiety", "irritability", "triggers", "note"],
+    return toCSV(["date", "time", "anxiety", "irritability", "elevated", "triggers", "note"],
       (STATE.spikes || []).slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 :
         (a.at < b.at ? -1 : 1))
         .map(x => [x.date, x.at, x.anxiety == null ? "" : x.anxiety,
-          x.irrit == null ? "" : x.irrit, (x.tags || []).join("; "), x.note || ""]));
+          x.irrit == null ? "" : x.irrit, x.manic == null ? "" : x.manic,
+          (x.tags || []).join("; "), x.note || ""]));
   }
   if (kind === "notes") {
     const out = [];
@@ -3448,6 +3506,8 @@ function printSummary() {
       on.map(i => '<td class="m">' + (r.v[i.key] == null ? "\u2014" : r.v[i.key].toFixed(1)) + "</td>").join("") +
       '<td class="sm">' + esc2(r.warns.concat(r.tags).join(", ")) + "</td></tr>").join("") + "</table>" +
 
+    ((CFG.plan.notes || []).length ? "<h2>Reminders to self</h2><ul>" +
+      CFG.plan.notes.map(t => "<li>" + esc2(t) + "</li>").join("") + "</ul>" : "") +
     '<div class="sm" style="margin-top:18px">Self-reported ratings, 1\u201310, where 5 is this ' +
     "person's stated baseline for mood-type items and 1 is none for pain and symptom items. " +
     "Not a clinical instrument.</div>");
@@ -3488,6 +3548,14 @@ function renderCfg() {
     alt.length === 0 ? '<span style="color:var(--warn)">No days selected — every day uses the M&ndash;F times.</span>'
     : alt.length === 7 ? '<span style="color:var(--warn)">Every day selected — the M&ndash;F times are never used.</span>'
     : "Second schedule on " + alt.map(i => DAYS[i]).join(", ") + ". Everything else uses the first.";
+  $("#spikePick").innerHTML = ["anxiety", "irrit", "manic"].filter(k => ITEM[k]).map(k =>
+    '<button class="chip sm" data-spitem="' + k + '" aria-pressed="' +
+    ((CFG.spikeItems || []).indexOf(k) > -1 ? "true" : "false") + '">' +
+    esc(ITEM[k].label) + "</button>").join("");
+  const spTotal = (STATE.spikes || []).length;
+  $("#spikeTotal").textContent = spTotal
+    ? spTotal + " spike" + (spTotal > 1 ? "s" : "") + " logged so far."
+    : "Nothing logged yet. The button sits at the top of the Log tab.";
   $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
   $("#quickPick").style.display = CFG.quick ? "" : "none";
   if (CFG.quick) $("#quickPick").innerHTML =
@@ -3569,7 +3637,8 @@ function renderCfg() {
   $("#togFb").setAttribute("aria-pressed", CFG.fb.on ? "true" : "false");
   setDot("#dFbAuth", CFG.fb.uid ? "ok" : "");
   setDot("#dFbDb", CFG.fb.on && CFG.fb.uid ? "ok" : "");
-  const pf = { planHelps:"helps", planAvoid:"avoid", planContacts:"contacts", planNote:"note" };
+  const pf = { planHelps:"helps", planAvoid:"avoid", planContacts:"contacts" };
+  renderPlanNotes();
   Object.keys(pf).forEach(id => { const el = $("#" + id); if (el && document.activeElement !== el)
     el.value = CFG.plan[pf[id]] || ""; });
   $("#planWhen").textContent = CFG.plan.updated
@@ -4020,10 +4089,27 @@ function refreshConn() {
 /* ---------- the plan ----------
    Surfaced when readings have been low for a while, or warning signs keep firing.
    Deliberately quiet: a dismissible line, never a modal, never a diagnosis. */
+function renderPlanNotes() {
+  const el = $("#planNotes"); if (!el) return;
+  const list = CFG.plan.notes || [];
+  el.innerHTML = list.length
+    ? list.map((t, i) => '<div class="pnote"><input type="text" data-pnote="' + i + '" value="' +
+        esc(t) + '"><button data-pnotedel="' + i + '" aria-label="Remove">&times;</button></div>').join("")
+    : '<div class="mini" style="padding:4px 0">Nothing here yet. Things that are true even when they ' +
+      "don't feel true tend to be the ones worth writing down.</div>";
+}
+async function addPlanNote(text) {
+  text = (text || "").trim(); if (!text) return;
+  CFG.plan.notes = (CFG.plan.notes || []).concat([text]);
+  CFG.plan.updated = Date.now();
+  await touchCfg();
+  renderPlanNotes();
+}
+
 function planFilled() {
   const p = CFG.plan || {};
   return !!((p.helps || "").trim() || (p.avoid || "").trim() ||
-            (p.contacts || "").trim() || (p.note || "").trim());
+            (p.contacts || "").trim() || (p.notes || []).length);
 }
 function maybeOfferPlan() {
   const bar = $("#planBar"); if (!bar) return;
@@ -4048,8 +4134,8 @@ function maybeOfferPlan() {
 let spikeDraft = null;
 function openSpike() {
   const now = new Date();
-  spikeDraft = { anxiety: null, irrit: null, tags: [], note: "",
-    at: pad(now.getHours()) + ":" + pad(now.getMinutes()) };
+  spikeDraft = { tags: [], note: "", at: pad(now.getHours()) + ":" + pad(now.getMinutes()) };
+  (CFG.spikeItems || []).forEach(k => { spikeDraft[k] = null; });
   $("#spikeAt").value = spikeDraft.at;
   $("#spikeNote").value = "";
   renderSpikeItems();
@@ -4057,21 +4143,23 @@ function openSpike() {
     '<button class="chip ev" data-sptag="' + esc(t) + '" aria-pressed="false">' + esc(t) + "</button>").join("");
   $("#spikeSheet").classList.add("on");
 }
+function spikeKeys() { return (CFG.spikeItems || []).filter(k => ITEM[k]); }
 function renderSpikeItems() {
-  $("#spikeItems").innerHTML = ["anxiety", "irrit"].filter(k => ITEM[k])
-    .map(k => sliderHTML(ITEM[k], spikeDraft[k], "")).join("");
+  const ks = spikeKeys();
+  $("#spikeItems").innerHTML = ks.length
+    ? ks.map(k => sliderHTML(ITEM[k], spikeDraft[k], "")).join("")
+    : '<div class="mini">Nothing selected to rate — turn something on under Quick spike check.</div>';
 }
 async function saveSpike() {
-  if (spikeDraft.anxiety == null && spikeDraft.irrit == null) {
+  if (!spikeKeys().some(k => spikeDraft[k] != null)) {
     toast("Rate at least one of them", true); return;
   }
   spikeDraft.note = $("#spikeNote").value.trim();
   spikeDraft.at = $("#spikeAt").value || spikeDraft.at;
-  STATE.spikes = (STATE.spikes || []).concat([{
-    id: "sp" + Date.now().toString(36), date: todayISO(), at: spikeDraft.at,
-    ts: new Date().toISOString(), anxiety: spikeDraft.anxiety, irrit: spikeDraft.irrit,
-    tags: spikeDraft.tags.slice(), note: spikeDraft.note
-  }]);
+  const rec = { id: "sp" + Date.now().toString(36), date: todayISO(), at: spikeDraft.at,
+    ts: new Date().toISOString(), tags: spikeDraft.tags.slice(), note: spikeDraft.note };
+  spikeKeys().forEach(k => { rec[k] = spikeDraft[k]; });
+  STATE.spikes = (STATE.spikes || []).concat([rec]);
   await saveState();
   $("#spikeSheet").classList.remove("on");
   spikeDraft = null;
@@ -4585,6 +4673,13 @@ function init() {
       if (open) { const ta = wrap.querySelector("textarea"); if (ta) ta.focus(); }
       return;
     }
+    const pd = ev.target.closest("[data-pnotedel]");
+    if (pd) {
+      CFG.plan.notes.splice(+pd.dataset.pnotedel, 1);
+      CFG.plan.updated = Date.now();
+      touchCfg().then(renderPlanNotes);
+      return;
+    }
     const sp = ev.target.closest("[data-sptag]");
     if (sp && spikeDraft) {
       const v = sp.dataset.sptag, i = spikeDraft.tags.indexOf(v);
@@ -4670,6 +4765,17 @@ function init() {
       touchCfg().then(() => { renderCfg(); renderLog(); });
       return;
     }
+    const si = ev.target.closest("[data-spitem]");
+    if (si) {
+      const k = si.dataset.spitem;
+      const cur = CFG.spikeItems || [];
+      // leave at least one, or the sheet has nothing to ask
+      CFG.spikeItems = cur.indexOf(k) > -1
+        ? (cur.length > 1 ? cur.filter(x => x !== k) : cur)
+        : cur.concat([k]);
+      touchCfg().then(() => renderCfg());
+      return;
+    }
     const qk = ev.target.closest("[data-quick]");
     if (qk) {
       const k = qk.dataset.quick;
@@ -4714,7 +4820,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,[data-spitem],[data-pnotedel],[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
@@ -4804,10 +4910,26 @@ function init() {
   });
 
   $("#togQuick").onclick = () => { CFG.quick = !CFG.quick; showAll = false;
-    $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
+    $("#spikePick").innerHTML = ["anxiety", "irrit", "manic"].filter(k => ITEM[k]).map(k =>
+    '<button class="chip sm" data-spitem="' + k + '" aria-pressed="' +
+    ((CFG.spikeItems || []).indexOf(k) > -1 ? "true" : "false") + '">' +
+    esc(ITEM[k].label) + "</button>").join("");
+  const spTotal = (STATE.spikes || []).length;
+  $("#spikeTotal").textContent = spTotal
+    ? spTotal + " spike" + (spTotal > 1 ? "s" : "") + " logged so far."
+    : "Nothing logged yet. The button sits at the top of the Log tab.";
+  $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
     touchCfg(); renderCfg(); renderLog(); };
   $("#togCycle").onclick = () => { CFG.cycle = !CFG.cycle;
-    $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
+    $("#spikePick").innerHTML = ["anxiety", "irrit", "manic"].filter(k => ITEM[k]).map(k =>
+    '<button class="chip sm" data-spitem="' + k + '" aria-pressed="' +
+    ((CFG.spikeItems || []).indexOf(k) > -1 ? "true" : "false") + '">' +
+    esc(ITEM[k].label) + "</button>").join("");
+  const spTotal = (STATE.spikes || []).length;
+  $("#spikeTotal").textContent = spTotal
+    ? spTotal + " spike" + (spTotal > 1 ? "s" : "") + " logged so far."
+    : "Nothing logged yet. The button sits at the top of the Log tab.";
+  $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
   $("#quickPick").style.display = CFG.quick ? "" : "none";
   if (CFG.quick) $("#quickPick").innerHTML =
     '<div class="schedrow" style="padding-top:2px">' +
@@ -4820,7 +4942,15 @@ function init() {
   $("#togCycle").setAttribute("aria-pressed", CFG.cycle ? "true" : "false");
     touchCfg(); renderLog(); renderPatterns(); };
   $("#togNag").onclick = () => { CFG.nag = !CFG.nag;
-    $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
+    $("#spikePick").innerHTML = ["anxiety", "irrit", "manic"].filter(k => ITEM[k]).map(k =>
+    '<button class="chip sm" data-spitem="' + k + '" aria-pressed="' +
+    ((CFG.spikeItems || []).indexOf(k) > -1 ? "true" : "false") + '">' +
+    esc(ITEM[k].label) + "</button>").join("");
+  const spTotal = (STATE.spikes || []).length;
+  $("#spikeTotal").textContent = spTotal
+    ? spTotal + " spike" + (spTotal > 1 ? "s" : "") + " logged so far."
+    : "Nothing logged yet. The button sits at the top of the Log tab.";
+  $("#togQuick").setAttribute("aria-pressed", CFG.quick ? "true" : "false");
   $("#quickPick").style.display = CFG.quick ? "" : "none";
   if (CFG.quick) $("#quickPick").innerHTML =
     '<div class="schedrow" style="padding-top:2px">' +
@@ -5007,10 +5137,26 @@ function init() {
   };
 
   /* ---- plan ---- */
-  const planFields = { planHelps:"helps", planAvoid:"avoid", planContacts:"contacts", planNote:"note" };
+  const planFields = { planHelps:"helps", planAvoid:"avoid", planContacts:"contacts" };
   Object.keys(planFields).forEach(id => { const el = $("#" + id); if (el) el.value = CFG.plan[planFields[id]] || ""; });
+  $("#planNoteAdd").onclick = async () => {
+    await addPlanNote($("#planNoteNew").value);
+    $("#planNoteNew").value = "";
+    $("#planNoteNew").focus();
+  };
+  $("#planNoteNew").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); $("#planNoteAdd").click(); }
+  });
+  document.addEventListener("input", ev => {
+    const i = ev.target.dataset && ev.target.dataset.pnote;
+    if (i == null) return;
+    CFG.plan.notes[+i] = ev.target.value;
+    clearTimeout(window.__pnT);
+    window.__pnT = setTimeout(() => { CFG.plan.updated = Date.now(); touchCfg(); }, 500);
+  });
   $("#planSave").onclick = async () => {
     Object.keys(planFields).forEach(id => { CFG.plan[planFields[id]] = $("#" + id).value; });
+    CFG.plan.notes = (CFG.plan.notes || []).map(x => (x || "").trim()).filter(Boolean);
     CFG.plan.updated = Date.now();
     await touchCfg(); renderCfg(); toast("Plan saved");
   };
@@ -5041,7 +5187,7 @@ function init() {
   $("#spikeItems").addEventListener("pointerup", () => {
     // the spike sheet has its own draft, so mirror the values across
     if (!spikeDraft) return;
-    ["anxiety", "irrit"].forEach(k => {
+    spikeKeys().forEach(k => {
       const el = $("#spikeItems").querySelector('.item[data-k="' + k + '"] .ival');
       if (el && el.textContent !== "–") spikeDraft[k] = +el.textContent;
     });
