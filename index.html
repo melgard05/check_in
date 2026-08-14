@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:39-->
+<!DOCTYPE html><!--build:40-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -864,8 +864,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div class="card">
       <h2>Medication list</h2>
-      <p class="sub">Set when each one is taken. As-needed doses get a count instead of a tick,
-        so you can see how often you actually reach for them.</p>
+      <p class="sub">Set when each one is taken &mdash; pick more than one for a twice-daily dose,
+        and it gets its own tick at each. As-needed doses get a count instead of a tick, so you can
+        see how often you actually reach for them.</p>
       <div id="medEditor"></div>
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm pri" id="medAdd">Add medication</button>
@@ -1054,7 +1055,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 39;
+const BUILD = 40;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1205,12 +1206,20 @@ async function load() {
   if (!Array.isArray(CFG.medList)) CFG.medList = [];
   if (!CFG.medList.length && (CFG.meds || "").trim()) {
     CFG.medList = (CFG.meds || "").split("\n").map(x => x.trim()).filter(Boolean)
-      .map((name, i) => ({ id: "m" + i, name,
-        when: /night|bed|pm\b|evening/i.test(name) ? "pm" : "am" }));
+      .map((name, i) => {
+        const both = /twice|bid|2x|morning and (night|evening)/i.test(name);
+        const pmOnly = /night|bed|evening/i.test(name);
+        return { id: "m" + i, name,
+          whens: both ? ["am", "pm"] : pmOnly ? ["pm"] : ["am"] };
+      });
   }
   CFG.medList.forEach((m, i) => {
     if (!m.id) m.id = "m" + i;
-    if (["am", "pm", "prn"].indexOf(m.when) < 0) m.when = "am";
+    // "when" was a single value; twice-daily doses need a set
+    if (!Array.isArray(m.whens)) m.whens = m.when ? [m.when] : ["am"];
+    m.whens = m.whens.filter(x => ["am", "pm", "prn"].indexOf(x) > -1);
+    if (!m.whens.length) m.whens = ["am"];
+    m.when = m.whens[0];                     // kept so older builds still read it
   });
   const e = await Store.get(K_ENT);
   if (e) {
@@ -1904,22 +1913,25 @@ function renderLog() {
     const isFirst = draft.win === (CFG.windows[0] || {}).id;
     const groups = [];
     // morning doses stay askable all day so a late tick still lands
-    if (list.some(m => m.when === "am")) groups.push({ k: "am", label: "Morning", show: true });
-    if (list.some(m => m.when === "pm")) groups.push({ k: "pm", label: "Evening", show: isLast || !isFirst });
+    const inGroup = (m, k) => (m.whens || [m.when]).indexOf(k) > -1;
+    if (list.some(m => inGroup(m, "am"))) groups.push({ k: "am", label: "Morning", show: true });
+    if (list.some(m => inGroup(m, "pm"))) groups.push({ k: "pm", label: "Evening", show: isLast || !isFirst });
     let h = "";
     groups.forEach(g => {
       if (!g.show) return;
       h += '<div class="eyebrow" style="margin:' + (h ? "16px" : "0") + ' 0 8px">' + g.label + "</div>" +
-        '<div class="chips">' + list.filter(m => m.when === g.k).map(m =>
-          '<button class="chip" data-med="' + esc(m.id) + '" aria-pressed="' +
-          (draft.meds.taken[m.id] ? "true" : "false") + '">' + esc(m.name) + "</button>").join("") + "</div>" +
+        '<div class="chips">' + list.filter(m => inGroup(m, g.k)).map(m => {
+          const key = m.id + "@" + g.k;      // a twice-daily dose is two separate ticks
+          return '<button class="chip" data-med="' + esc(key) + '" aria-pressed="' +
+            (draft.meds.taken[key] ? "true" : "false") + '">' + esc(m.name) + "</button>";
+        }).join("") + "</div>" +
         '<div class="row" style="margin-top:9px">' +
           '<label class="fld" style="flex:0 1 150px"><span>Taken at</span>' +
           '<input type="time" data-medat="' + g.k + '" value="' + esc(draft.meds.at[g.k] || "") + '"></label>' +
           '<button class="btn sm" data-mednow="' + g.k + '" style="align-self:end;margin-bottom:1px">Now</button>' +
         "</div>";
     });
-    const prn = list.filter(m => m.when === "prn");
+    const prn = list.filter(m => inGroup(m, "prn"));
     if (prn.length) {
       h += '<div class="eyebrow" style="margin:16px 0 8px">As needed</div>' +
         prn.map(m => {
@@ -2141,8 +2153,13 @@ function daily(days) {
         (e.pain.kinds || []).forEach(s => row.kinds.indexOf(s) < 0 && row.kinds.push(s));
       }
       if (e.meds && e.meds.taken) {
-        const sched = (CFG.medList || []).filter(m => m.when !== "prn");
-        if (sched.length) row.meds = sched.filter(m => e.meds.taken[m.id]).length / sched.length;
+        // a twice-daily med is two doses, so count them separately
+        const doses = [];
+        (CFG.medList || []).forEach(m => (m.whens || [m.when]).forEach(wq => {
+          if (wq !== "prn") doses.push(m.id + "@" + wq);
+        }));
+        if (doses.length) row.meds = doses.filter(k =>
+          e.meds.taken[k] || e.meds.taken[k.split("@")[0]]).length / doses.length;
         Object.keys(e.meds.at || {}).forEach(k => { if (e.meds.at[k]) row.medAt[k] = e.meds.at[k]; });
         Object.keys(e.meds.prn || {}).forEach(k => { row.prn += +e.meds.prn[k] || 0; });
       } });
@@ -3564,7 +3581,7 @@ function renderCfg() {
         '<div class="seg">' +
           ["am,Morning", "pm,Evening", "prn,As needed"].map(o => { const q = o.split(",");
             return '<button data-medwhen="' + i + ":" + q[0] + '" aria-pressed="' +
-              (m.when === q[0] ? "true" : "false") + '">' + q[1] + "</button>"; }).join("") +
+              ((m.whens || []).indexOf(q[0]) > -1 ? "true" : "false") + '">' + q[1] + "</button>"; }).join("") +
         "</div>" +
         '<button class="btn sm dang" data-meddel="' + i + '">&times;</button></div>').join("")
     : '<div class="mini">Nothing listed yet. Adherence and wear-off questions appear once you add one.</div>';
@@ -4627,8 +4644,12 @@ function init() {
     }
     const mw = ev.target.closest("[data-medwhen]");
     if (mw) {
-      const q = mw.dataset.medwhen.split(":");
-      CFG.medList[+q[0]].when = q[1];
+      const q = mw.dataset.medwhen.split(":"), m = CFG.medList[+q[0]];
+      m.whens = Array.isArray(m.whens) ? m.whens : [m.when];
+      const at = m.whens.indexOf(q[1]);
+      if (at > -1) { if (m.whens.length > 1) m.whens.splice(at, 1); }   // keep at least one
+      else m.whens.push(q[1]);
+      m.when = m.whens[0];
       touchCfg().then(() => { renderCfg(); renderLog(); });
       return;
     }
@@ -4711,7 +4732,8 @@ function init() {
       draft.meds.taken[id] = !draft.meds.taken[id];
       t.setAttribute("aria-pressed", draft.meds.taken[id] ? "true" : "false");
       // first tick of a group stamps the time if it's blank
-      const m = (CFG.medList || []).find(x => x.id === id);
+      const when = id.indexOf("@") > -1 ? id.split("@")[1] : "am";
+      const m = { when: when };
       if (m && draft.meds.taken[id] && !draft.meds.at[m.when]) {
         const now = new Date();
         draft.meds.at[m.when] = pad(now.getHours()) + ":" + pad(now.getMinutes());
