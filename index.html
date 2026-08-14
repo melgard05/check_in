@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:38-->
+<!DOCTYPE html><!--build:39-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -62,6 +62,8 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .connbar .btn{padding:5px 11px;font-size:12.5px}
 .planbar span{flex:1;color:var(--ink)}
 .planbar .btn{padding:5px 11px;font-size:12.5px}
+.spikebtn{margin-top:4px;background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
+.spikebtn:hover{background:#332618}
 .updbar span{flex:1;color:var(--ink)}
 .updbar .btn{padding:5px 11px;font-size:12.5px}
 
@@ -117,6 +119,17 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .notewrap{padding:2px 0 6px}
 .noteta{min-height:0;font-size:14px;padding:8px 10px;line-height:1.35;
   background:#10151a;border-color:var(--line)}
+.prnrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.prnrow:last-child{border-bottom:0}
+.prnname{flex:1;font-size:14.5px;color:var(--ink-2)}
+.prnname.on{color:var(--ink);font-weight:600}
+.prnqty{font-family:var(--mono);font-size:17px;min-width:2ch;text-align:center;color:var(--ink-3)}
+.prnqty.on{color:var(--accent);font-weight:600}
+.prnrow .btn{padding:5px 13px}
+.medrow{display:flex;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.medrow input{flex:1}
+.medrow .seg{flex:0 0 auto}
+.medrow .seg button{padding:6px 9px;font-size:11px}
 .painsum{font-family:var(--mono);font-size:12px;color:var(--ink-2);padding:9px 11px;background:var(--panel-2);
   border:1px solid var(--line);border-radius:8px;margin-top:11px;line-height:1.55}
 .painsum b{color:var(--accent);font-weight:600}
@@ -477,6 +490,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
+    <button class="btn full spikebtn" id="spikeBtn">Log a spike happening now</button>
+    <div class="mini" style="text-align:center;margin:7px 0 4px" id="spikeCount"></div>
+
     <div class="eyebrow" id="ebCore">Core</div>
     <div class="card" id="coreItems"></div>
 
@@ -693,6 +709,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm" data-exp="sleep">Sleep CSV</button>
         <button class="btn sm" data-exp="pain">Pain CSV</button>
         <button class="btn sm" data-exp="notes">Notes CSV</button>
+        <button class="btn sm" data-exp="spikes">Spikes CSV</button>
         <button class="btn sm" data-exp="events">Tags CSV</button>
       </div>
       <div class="row" style="gap:8px;margin-top:8px">
@@ -847,10 +864,13 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div class="card">
       <h2>Medication list</h2>
-      <p class="sub">One per line. Dose changes get marked on the chart.</p>
-      <textarea id="medList" placeholder="Lamotrigine 200mg — morning&#10;Vyvanse 40mg — 7am"></textarea>
-      <div class="row" style="margin-top:9px"><button class="btn sm" id="medSave">Save list</button>
-      <button class="btn sm" id="medChange">Log a dose change today</button></div>
+      <p class="sub">Set when each one is taken. As-needed doses get a count instead of a tick,
+        so you can see how often you actually reach for them.</p>
+      <div id="medEditor"></div>
+      <div class="row" style="margin-top:11px;gap:8px">
+        <button class="btn sm pri" id="medAdd">Add medication</button>
+        <button class="btn sm" id="medChange">Log a dose change today</button>
+      </div>
     </div>
 
     <div class="card">
@@ -890,6 +910,26 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   <button data-v="pat" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="8" r="2.4"/><circle cx="17" cy="16" r="2.4"/><path d="M9 9.6l6 5"/><path d="M4 20h3M17 4h3" opacity=".5"/></svg>Patterns</button>
   <button data-v="data" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></svg>Data</button>
 </nav>
+
+<div class="gate" id="spikeSheet">
+  <div class="gatebox" style="border-color:var(--warn);max-width:440px">
+    <div class="k">spike</div>
+    <h3 style="margin-bottom:10px">What just happened</h3>
+    <div id="spikeItems"></div>
+    <div class="row" style="margin-top:10px">
+      <label class="fld" style="flex:0 1 140px"><span>Time</span><input type="time" id="spikeAt"></label>
+      <div style="flex:1 1 150px;align-self:end;padding-bottom:9px" class="mini">Defaults to now.</div>
+    </div>
+    <p class="sub" style="margin:12px 0 8px">What set it off, if you know.</p>
+    <div class="chips" id="spikeTags"></div>
+    <label class="fld" style="margin-top:12px"><span>Note</span>
+      <textarea id="spikeNote" rows="2" placeholder="Anything worth remembering about it."></textarea></label>
+    <div class="row" style="margin-top:13px;gap:8px">
+      <button class="btn pri" style="flex:2 1 150px" id="spikeSave">Save</button>
+      <button class="btn gho" style="flex:1 1 100px" id="spikeCancel">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <div class="gate" id="gate">
   <div class="gatebox">
@@ -950,6 +990,7 @@ const ITEMS = [
   { key:"anxiety",  label:"Anxiety",         low:"Calm",            high:"Panicked",         grp:"core", anchor:"low",    note:true },
   { key:"focus",    label:"Focus",           low:"Can't hold a thought", high:"Locked in",   grp:"core", anchor:"center", note:true },
   { key:"fog",      label:"Brain fog",       low:"Clear",           high:"Thick fog",        grp:"core", anchor:"low",    note:true },
+  { key:"confid",   label:"Confidence",      low:"Doubting everything", high:"Invincible",   grp:"core", anchor:"center", note:true },
   { key:"initiate", label:"Task initiation", low:"Frozen, can't start", high:"Starting easily", grp:"core", anchor:"center", note:true },
   // body & behavior
   { key:"appetite", label:"Appetite",        low:"No interest",      high:"Ravenous",        grp:"body", anchor:"center", note:true },
@@ -1003,6 +1044,9 @@ const CRASH = ["Irritable / short fuse", "Exhausted, hit a wall", "Foggy, can't 
   "Ravenous", "Tearful or low", "Restless, can't settle", "Headache", "Jittery / shaky",
   "Anxious", "Zoned out", "Sudden sleepiness"];
 
+const SPIKE_TRIGGERS = ["Phone call", "Interruption", "Conflict", "Running late", "Noise / crowd",
+  "Bad news", "Something broke", "Waiting", "Too many demands", "Hungry", "Tired", "Came out of nowhere"];
+
 const TAGS = ["Conflict","Deadline / pressure","Travel","Missed meds","Poor sleep","Skipped meals",
   "Alcohol","Illness","Money stress","Big social event","Good news","Time outside","Overstimulated",
   "Doctor / therapy","Med change"];
@@ -1010,7 +1054,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 38;
+const BUILD = 39;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1029,7 +1073,7 @@ const DEFAULT_CFG = {
   altDays: [0, 6],            // 0 Sun … 6 Sat
   cfgAt: 0,
   off: ITEMS.filter(i => i.off).map(i => i.key),
-  nag: true, lat: 46.8, meds: "", nagMins: 20,
+  nag: true, lat: 46.8, meds: "", medList: [], nagMins: 20,
   cloud: { url: "", uid: "", account: "", key: "", push: false, sync: false },
   fb: { url: "", apiKey: "", email: "", uid: "", on: false }
 };
@@ -1047,7 +1091,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "off", "meds", "lat", "nagMins"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "medList", "off", "meds", "lat", "nagMins"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1070,7 +1114,7 @@ let range = 30;
 let showRoll = true;
 let corrCtl = "";   // "", "sleep" or "worked"
 let series = { mood:true, irrit:true, energy:true, anxiety:false, focus:false, initiate:false,
-  fog:false, pain:true, sleepq:false, calls:false };
+  fog:false, confid:false, pain:true, sleepq:false, calls:false };
 let lastExport = "";
 let gateKey = null;
 
@@ -1136,7 +1180,7 @@ function vcol(v) {
 }
 const SCOL = { mood:"#7fd4c1", irrit:"#c25a4a", energy:"#c98b3a", anxiety:"#9b7fd4",
   focus:"#5fa8d4", initiate:"#8fbf6a", pain:"#d4657f", sleepq:"#6f8fd4", fog:"#8a93a8",
-  calls:"#d49a5f" };
+  calls:"#d49a5f", confid:"#c9a03c" };
 
 /* daylight hours from latitude + date, no network */
 function dayLength(iso, lat) {
@@ -1157,6 +1201,17 @@ async function load() {
   if (!Array.isArray(CFG.windows) || !CFG.windows.length) CFG.windows = DEFAULT_CFG.windows.slice();
   if (!CFG.cloud) CFG.cloud = { url:"", uid:"", push:false, sync:false };
   if (!CFG.nagMins) CFG.nagMins = 20;
+  // migrate the old newline-separated med list into scheduled entries
+  if (!Array.isArray(CFG.medList)) CFG.medList = [];
+  if (!CFG.medList.length && (CFG.meds || "").trim()) {
+    CFG.medList = (CFG.meds || "").split("\n").map(x => x.trim()).filter(Boolean)
+      .map((name, i) => ({ id: "m" + i, name,
+        when: /night|bed|pm\b|evening/i.test(name) ? "pm" : "am" }));
+  }
+  CFG.medList.forEach((m, i) => {
+    if (!m.id) m.id = "m" + i;
+    if (["am", "pm", "prn"].indexOf(m.when) < 0) m.when = "am";
+  });
   const e = await Store.get(K_ENT);
   if (e) {
     try {
@@ -1170,6 +1225,7 @@ async function load() {
   if (s) { try { Object.assign(STATE, JSON.parse(s)); } catch (er) {} }
   if (!STATE.skipped) STATE.skipped = {};
   if (!Array.isArray(STATE.suggestions)) STATE.suggestions = [];
+  if (!Array.isArray(STATE.spikes)) STATE.spikes = [];
   if (!STATE.dirty) STATE.dirty = {};
 }
 const saveCfg   = () => Store.set(K_CFG, JSON.stringify(CFG));
@@ -1187,7 +1243,7 @@ function newDraft(date, winId) {
     ctx: (earlier && earlier.ctx) || "",
     medoff: { st: "", at: "", crashAt: "", crashEnd: "", fx: [] },
     recall: false, period: false,
-    sleep: null, meds: null, tags: [], warns: [], note: "" };
+    sleep: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "" };
 }
 function fixDraft(d) {                       // older records, and anything Firebase handed back
   if (!d || typeof d !== "object") return newDraft(todayISO(), (CFG.windows[0] || {}).id || "am");
@@ -1217,7 +1273,15 @@ function fixDraft(d) {                       // older records, and anything Fire
   d.nap.h = +d.nap.h || 0;
   d.nap.m = +d.nap.m || 0;
   if (typeof d.nap.start !== "string") d.nap.start = d.nap.start == null ? "" : String(d.nap.start);
-  if (d.meds != null && typeof d.meds !== "object") d.meds = null;
+  // meds used to be { 0:true, 1:false } against the old index list
+  if (!d.meds || typeof d.meds !== "object" || Array.isArray(d.meds)) d.meds = {};
+  if (!d.meds.taken || typeof d.meds.taken !== "object") {
+    const legacy = {};
+    Object.keys(d.meds).forEach(k => { if (/^\d+$/.test(k) && d.meds[k]) legacy["m" + k] = true; });
+    d.meds = { taken: legacy, at: {}, prn: {} };
+  }
+  if (!d.meds.at || typeof d.meds.at !== "object") d.meds.at = {};
+  if (!d.meds.prn || typeof d.meds.prn !== "object") d.meds.prn = {};
   if (d.sleep != null && typeof d.sleep !== "object") d.sleep = null;
   if (!d.ts) d.ts = new Date().toISOString();
   return d;
@@ -1750,7 +1814,7 @@ function renderLog() {
   }
 
   // medication wearing off — only meaningful if meds are listed
-  const medsListed = (CFG.meds || "").split("\n").filter(x => x.trim()).length > 0;
+  const medsListed = (CFG.medList || []).some(m => (m.name || "").trim());
   const wantMedOff = medsListed && CFG.medWin && draft.win === CFG.medWin;
   $("#medOffBlock").style.display = wantMedOff ? "" : "none";
   if (wantMedOff) {
@@ -1833,14 +1897,40 @@ function renderLog() {
   }
 
   // meds
-  const meds = (CFG.meds || "").split("\n").map(s => s.trim()).filter(Boolean);
-  $("#medBlock").style.display = meds.length ? "" : "none";   // always ask: it confounds everything else
-  if (meds.length) {
-    draft.meds = draft.meds || {};
-    $("#medCard").innerHTML = '<p class="sub" style="margin-bottom:11px">Tap each one you\'ve taken today.</p>' +
-      '<div class="chips">' + meds.map((m, i) =>
-        '<button class="chip" data-med="' + i + '" aria-pressed="' + (draft.meds[i] ? "true" : "false") + '">' +
-        esc(m) + "</button>").join("") + "</div>";
+  const list = CFG.medList || [];
+  $("#medBlock").style.display = list.length ? "" : "none";   // always ask: it confounds everything else
+  if (list.length) {
+    const isLast = draft.win === lastWinId();
+    const isFirst = draft.win === (CFG.windows[0] || {}).id;
+    const groups = [];
+    // morning doses stay askable all day so a late tick still lands
+    if (list.some(m => m.when === "am")) groups.push({ k: "am", label: "Morning", show: true });
+    if (list.some(m => m.when === "pm")) groups.push({ k: "pm", label: "Evening", show: isLast || !isFirst });
+    let h = "";
+    groups.forEach(g => {
+      if (!g.show) return;
+      h += '<div class="eyebrow" style="margin:' + (h ? "16px" : "0") + ' 0 8px">' + g.label + "</div>" +
+        '<div class="chips">' + list.filter(m => m.when === g.k).map(m =>
+          '<button class="chip" data-med="' + esc(m.id) + '" aria-pressed="' +
+          (draft.meds.taken[m.id] ? "true" : "false") + '">' + esc(m.name) + "</button>").join("") + "</div>" +
+        '<div class="row" style="margin-top:9px">' +
+          '<label class="fld" style="flex:0 1 150px"><span>Taken at</span>' +
+          '<input type="time" data-medat="' + g.k + '" value="' + esc(draft.meds.at[g.k] || "") + '"></label>' +
+          '<button class="btn sm" data-mednow="' + g.k + '" style="align-self:end;margin-bottom:1px">Now</button>' +
+        "</div>";
+    });
+    const prn = list.filter(m => m.when === "prn");
+    if (prn.length) {
+      h += '<div class="eyebrow" style="margin:16px 0 8px">As needed</div>' +
+        prn.map(m => {
+          const n = +draft.meds.prn[m.id] || 0;
+          return '<div class="prnrow"><span class="prnname' + (n ? " on" : "") + '">' + esc(m.name) + "</span>" +
+            '<button class="btn sm" data-prn="' + esc(m.id) + ':-1">&minus;</button>' +
+            '<span class="prnqty' + (n ? " on" : "") + '">' + n + "</span>" +
+            '<button class="btn sm" data-prn="' + esc(m.id) + ':1">+</button></div>';
+        }).join("");
+    }
+    $("#medCard").innerHTML = h;
   }
   // warns + tags
   $("#warnChips").innerHTML = WARNS.map(t =>
@@ -1852,6 +1942,7 @@ function renderLog() {
   $("#eNote").value = draft.note || "";
 
   renderSug();
+  renderSpikeCount();
 
   const existing = ENTRIES.some(x => x.date === draft.date && x.win === draft.win);
   const sk = STATE.skipped[draft.date + "|" + draft.win];
@@ -1990,6 +2081,7 @@ function refreshDue() {
 function dayList(days) {
   const dates = {};
   ENTRIES.forEach(e => dates[e.date] = 1);
+  (STATE.spikes || []).forEach(x => { if (x && x.date) dates[x.date] = 1; });
   let keys = Object.keys(dates).sort();
   if (!keys.length) return [];
   const end = new Date(), out = [];
@@ -2006,7 +2098,7 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0 };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -2048,8 +2140,13 @@ function daily(days) {
         (e.pain.sites || []).forEach(s => row.sites.indexOf(s) < 0 && row.sites.push(s));
         (e.pain.kinds || []).forEach(s => row.kinds.indexOf(s) < 0 && row.kinds.push(s));
       }
-      if (e.meds) { const vals = Object.values(e.meds);
-        row.meds = vals.length ? vals.filter(Boolean).length / vals.length : null; } });
+      if (e.meds && e.meds.taken) {
+        const sched = (CFG.medList || []).filter(m => m.when !== "prn");
+        if (sched.length) row.meds = sched.filter(m => e.meds.taken[m.id]).length / sched.length;
+        Object.keys(e.meds.at || {}).forEach(k => { if (e.meds.at[k]) row.medAt[k] = e.meds.at[k]; });
+        Object.keys(e.meds.prn || {}).forEach(k => { row.prn += +e.meds.prn[k] || 0; });
+      } });
+    row.spikes = (STATE.spikes || []).filter(x => x.date === date);
     row.day = dayLength(date, CFG.lat);
     return row;
   });
@@ -2307,6 +2404,15 @@ function drawMain() {
          'font-family="ui-monospace,monospace" text-anchor="middle">appt</text>';
   } });
 
+  // spike markers along the top
+  rows.forEach((r, i) => {
+    if (!r.spikes || !r.spikes.length) return;
+    const x = xAt(i, n);
+    g += '<circle cx="' + x.toFixed(1) + '" cy="' + (top + 4) + '" r="' +
+         Math.min(4.5, 2 + r.spikes.length * 0.7).toFixed(1) +
+         '" fill="#d9a03c" opacity=".85"/>';
+  });
+
   // med-change markers
   rows.forEach((r, i) => { if (r.tags.indexOf("Med change") > -1) {
     const x = xAt(i, n);
@@ -2470,6 +2576,9 @@ function readoutFor(i) {
   if (r.v.pain != null) s += '<br><span style="color:var(--high-2)">pain <b>' + r.v.pain.toFixed(1) + "</b>" +
     (r.sites.length ? " · " + esc(r.sites.join(", ").toLowerCase()) : "") +
     (r.kinds.length ? " · " + esc(r.kinds.join(", ").toLowerCase()) : "") + "</span>";
+  if (r.spikes && r.spikes.length) s += '<br><span style="color:var(--warn)">' + r.spikes.length +
+    " spike" + (r.spikes.length > 1 ? "s" : "") + ": " +
+    esc(r.spikes.map(x => x.at + (x.tags.length ? " (" + x.tags[0].toLowerCase() + ")" : "")).join(", ")) + "</span>";
   if (r.warns.length) s += '<br><span style="color:var(--warn)">' + esc(r.warns.join(", ")) + "</span>";
   if (r.tags.length) s += "<br>" + esc(r.tags.join(", "));
   const ino = Object.keys(r.inotes);
@@ -2861,6 +2970,26 @@ function renderFlags(rows) {
         : "If it's still running, that's the kind of stretch worth a call rather than waiting it out.")]);
   });
 
+  // spikes
+  const spk = (STATE.spikes || []).filter(x => {
+    const cut = addDays(todayISO(), -21); return x.date >= cut; });
+  if (spk.length >= 5) {
+    const tal = {};
+    spk.forEach(x => (x.tags || []).forEach(t => { tal[t] = (tal[t] || 0) + 1; }));
+    const top = Object.keys(tal).sort((a, c) => tal[c] - tal[a]).slice(0, 3).filter(t => tal[t] >= 2);
+    const hours = spk.filter(x => x.at).map(x => Math.floor(minsOf(x.at) / 60));
+    const hcount = {};
+    hours.forEach(h => { hcount[h] = (hcount[h] || 0) + 1; });
+    const peak = Object.keys(hcount).sort((a, c) => hcount[c] - hcount[a])[0];
+    const clustered = peak != null && hcount[peak] >= Math.max(2, Math.ceil(spk.length / 3));
+    const days = new Set(spk.map(x => x.date)).size;
+    out.push(["", spk.length + " spikes logged across " + days + " days",
+      (top.length ? "Most often after " + top.map(t => t.toLowerCase() + " (" + tal[t] + "\u00d7)").join(", ") + ". " : "") +
+      (clustered ? "They cluster around " + pad(peak) + ":00. " : "") +
+      "Spikes are what the three daily ratings average away \u2014 a day that scores a calm 4 can " +
+      "still contain three of these."]);
+  }
+
   // phone calls — the useful question is whether this is its own thing
   if (isOn("calls")) {
     const cd = rows.slice(-21).filter(r => r.n && r.v.calls != null);
@@ -3080,7 +3209,8 @@ function buildExport(kind) {
     const head = ["date", "checkins", "context", "worked", "sleep_hours", "bedtime", "wake_time",
       "nap_hours", "nap_start", "nap_carried_from_prev_evening", "total_sleep_hours",
       "med_wore_off", "med_wore_off_time", "crash_time", "crash_end", "crash_minutes", "crash_effects",
-      "from_memory", "med_adherence", "daylight_hours"]
+      "from_memory", "med_adherence", "med_taken_am", "med_taken_pm", "prn_doses",
+      "spike_count", "spike_times", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
       .concat(noted.map(i => i.key + "_note"))
@@ -3099,7 +3229,10 @@ function buildExport(kind) {
       r.medoff && r.medoff.crashLen != null ? r.medoff.crashLen : "",
       r.medoff && r.medoff.fx ? r.medoff.fx.join("; ") : "",
       r.recall ? "yes" : "no",
-      r.meds == null ? "" : r.meds.toFixed(2), r.day.toFixed(2)]
+      r.meds == null ? "" : r.meds.toFixed(2),
+      r.medAt.am || "", r.medAt.pm || "", r.prn || "",
+      r.spikes.length || "", r.spikes.map(x => x.at).join("; "),
+      r.day.toFixed(2)]
       .concat(on.map(i => r.v[i.key] == null ? "" : r.v[i.key].toFixed(2)))
       .concat([r.sites.join("; "), r.kinds.join("; ")])
       .concat(noted.map(i => r.inotes[i.key] || ""))
@@ -3141,6 +3274,13 @@ function buildExport(kind) {
     });
     return toCSV(["date", "checkin", "pain_now", "descriptor", "pain_worst", "interference",
       "sites", "qualities", "pain_notes", "mood", "muscle_tension"], out);
+  }
+  if (kind === "spikes") {
+    return toCSV(["date", "time", "anxiety", "irritability", "triggers", "note"],
+      (STATE.spikes || []).slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 :
+        (a.at < b.at ? -1 : 1))
+        .map(x => [x.date, x.at, x.anxiety == null ? "" : x.anxiety,
+          x.irrit == null ? "" : x.irrit, (x.tags || []).join("; "), x.note || ""]));
   }
   if (kind === "notes") {
     const out = [];
@@ -3417,7 +3557,17 @@ function renderCfg() {
     el.value = CFG.plan[pf[id]] || ""; });
   $("#planWhen").textContent = CFG.plan.updated
     ? "Last updated " + new Date(CFG.plan.updated).toLocaleDateString() : "Not written yet.";
-  $("#medList").value = CFG.meds || "";
+  $("#medEditor").innerHTML = (CFG.medList || []).length
+    ? CFG.medList.map((m, i) =>
+        '<div class="medrow"><input type="text" data-medname="' + i + '" value="' + esc(m.name) +
+        '" placeholder="name and dose">' +
+        '<div class="seg">' +
+          ["am,Morning", "pm,Evening", "prn,As needed"].map(o => { const q = o.split(",");
+            return '<button data-medwhen="' + i + ":" + q[0] + '" aria-pressed="' +
+              (m.when === q[0] ? "true" : "false") + '">' + q[1] + "</button>"; }).join("") +
+        "</div>" +
+        '<button class="btn sm dang" data-meddel="' + i + '">&times;</button></div>').join("")
+    : '<div class="mini">Nothing listed yet. Adherence and wear-off questions appear once you add one.</div>';
   $("#cfgLat").value = CFG.lat;
   const dl = dayLength(todayISO(), CFG.lat);
   $("#latNote").textContent = "Today: " + dl.toFixed(1) + " h of daylight at " + CFG.lat + "°.";
@@ -3873,6 +4023,52 @@ function maybeOfferPlan() {
     ? "It's been a rough stretch. You wrote some things down for a moment like this."
     : "It's been a rough stretch. Worth writing down what helps, while you're the one deciding.";
   bar.classList.add("on");
+}
+
+/* ---------- spikes ----------
+   Anxiety and irritability move in minutes, not in the hours between check-ins.
+   A scheduled rating catches the average; this catches the peak. */
+let spikeDraft = null;
+function openSpike() {
+  const now = new Date();
+  spikeDraft = { anxiety: null, irrit: null, tags: [], note: "",
+    at: pad(now.getHours()) + ":" + pad(now.getMinutes()) };
+  $("#spikeAt").value = spikeDraft.at;
+  $("#spikeNote").value = "";
+  renderSpikeItems();
+  $("#spikeTags").innerHTML = SPIKE_TRIGGERS.map(t =>
+    '<button class="chip ev" data-sptag="' + esc(t) + '" aria-pressed="false">' + esc(t) + "</button>").join("");
+  $("#spikeSheet").classList.add("on");
+}
+function renderSpikeItems() {
+  $("#spikeItems").innerHTML = ["anxiety", "irrit"].filter(k => ITEM[k])
+    .map(k => sliderHTML(ITEM[k], spikeDraft[k], "")).join("");
+}
+async function saveSpike() {
+  if (spikeDraft.anxiety == null && spikeDraft.irrit == null) {
+    toast("Rate at least one of them", true); return;
+  }
+  spikeDraft.note = $("#spikeNote").value.trim();
+  spikeDraft.at = $("#spikeAt").value || spikeDraft.at;
+  STATE.spikes = (STATE.spikes || []).concat([{
+    id: "sp" + Date.now().toString(36), date: todayISO(), at: spikeDraft.at,
+    ts: new Date().toISOString(), anxiety: spikeDraft.anxiety, irrit: spikeDraft.irrit,
+    tags: spikeDraft.tags.slice(), note: spikeDraft.note
+  }]);
+  await saveState();
+  $("#spikeSheet").classList.remove("on");
+  spikeDraft = null;
+  renderSpikeCount();
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  toast("Logged");
+}
+function renderSpikeCount() {
+  const el = $("#spikeCount"); if (!el) return;
+  const today = (STATE.spikes || []).filter(x => x.date === todayISO());
+  el.innerHTML = today.length
+    ? today.length + " spike" + (today.length > 1 ? "s" : "") + " today · " +
+      today.map(x => esc(x.at)).join(", ")
+    : '<span style="color:var(--ink-3)">Anxiety and irritability move faster than three check-ins can catch.</span>';
 }
 
 /* ---------- suggestions ---------- */
@@ -4372,6 +4568,13 @@ function init() {
       if (open) { const ta = wrap.querySelector("textarea"); if (ta) ta.focus(); }
       return;
     }
+    const sp = ev.target.closest("[data-sptag]");
+    if (sp && spikeDraft) {
+      const v = sp.dataset.sptag, i = spikeDraft.tags.indexOf(v);
+      i > -1 ? spikeDraft.tags.splice(i, 1) : spikeDraft.tags.push(v);
+      sp.setAttribute("aria-pressed", i > -1 ? "false" : "true");
+      return;
+    }
     const sd = ev.target.closest("[data-sugdone]");
     if (sd) { const s = (STATE.suggestions || []).find(x => x.id === sd.dataset.sugdone);
       if (s) { s.done = !s.done; saveState(); renderSug(); } return; }
@@ -4420,6 +4623,22 @@ function init() {
       if (CFG.off.indexOf(k) < 0) CFG.off.push(k);
       CFG.quickItems = (CFG.quickItems || []).filter(x => x !== k);
       touchCfg().then(() => { renderPatterns(); renderLog(); toast("Turned off"); });
+      return;
+    }
+    const mw = ev.target.closest("[data-medwhen]");
+    if (mw) {
+      const q = mw.dataset.medwhen.split(":");
+      CFG.medList[+q[0]].when = q[1];
+      touchCfg().then(() => { renderCfg(); renderLog(); });
+      return;
+    }
+    const md = ev.target.closest("[data-meddel]");
+    if (md) {
+      const m = CFG.medList[+md.dataset.meddel];
+      if (m && (!m.name || confirm("Remove " + m.name + "? Entries already logged keep their record."))) {
+        CFG.medList.splice(+md.dataset.meddel, 1);
+        touchCfg().then(() => { renderCfg(); renderLog(); });
+      }
       return;
     }
     const nw = ev.target.closest("[data-napwin]");
@@ -4474,7 +4693,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
@@ -4488,8 +4707,31 @@ function init() {
     if (t.dataset.warn) { const v = t.dataset.warn, i = draft.warns.indexOf(v);
       i > -1 ? draft.warns.splice(i, 1) : draft.warns.push(v);
       t.setAttribute("aria-pressed", i > -1 ? "false" : "true"); return; }
-    if (t.dataset.med) { const i = t.dataset.med; draft.meds = draft.meds || {};
-      draft.meds[i] = !draft.meds[i]; t.setAttribute("aria-pressed", draft.meds[i] ? "true" : "false"); return; }
+    if (t.dataset.med) { const id = t.dataset.med;
+      draft.meds.taken[id] = !draft.meds.taken[id];
+      t.setAttribute("aria-pressed", draft.meds.taken[id] ? "true" : "false");
+      // first tick of a group stamps the time if it's blank
+      const m = (CFG.medList || []).find(x => x.id === id);
+      if (m && draft.meds.taken[id] && !draft.meds.at[m.when]) {
+        const now = new Date();
+        draft.meds.at[m.when] = pad(now.getHours()) + ":" + pad(now.getMinutes());
+        const fld = document.querySelector('[data-medat="' + m.when + '"]');
+        if (fld) fld.value = draft.meds.at[m.when];
+      }
+      return; }
+    if (t.dataset.mednow) {
+      const now = new Date();
+      draft.meds.at[t.dataset.mednow] = pad(now.getHours()) + ":" + pad(now.getMinutes());
+      const fld = document.querySelector('[data-medat="' + t.dataset.mednow + '"]');
+      if (fld) fld.value = draft.meds.at[t.dataset.mednow];
+      return; }
+    if (t.dataset.prn) {
+      const p2 = t.dataset.prn.split(":");
+      const cur = +draft.meds.prn[p2[0]] || 0;
+      const nx = Math.max(0, Math.min(20, cur + (+p2[1])));
+      if (nx) draft.meds.prn[p2[0]] = nx; else delete draft.meds.prn[p2[0]];
+      renderLog();
+      return; }
     if (t.dataset.s) { series[t.dataset.s] = !series[t.dataset.s]; drawMain(); return; }
     if (t.dataset.ctl != null && t.closest("#ctlSeg")) {
       corrCtl = t.dataset.ctl;
@@ -4572,7 +4814,19 @@ function init() {
     Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
 
   $("#medWinSel").onchange = () => { CFG.medWin = $("#medWinSel").value; touchCfg(); renderLog(); };
-  $("#medSave").onclick = () => { CFG.meds = $("#medList").value; touchCfg(); renderLog(); toast("Med list saved"); };
+  $("#medAdd").onclick = () => {
+    CFG.medList = (CFG.medList || []).concat([{ id: "m" + Date.now().toString(36), name: "", when: "am" }]);
+    touchCfg().then(() => { renderCfg(); renderLog();
+      const els = document.querySelectorAll("[data-medname]");
+      if (els.length) els[els.length - 1].focus(); });
+  };
+  document.addEventListener("input", ev => {
+    const i = ev.target.dataset && ev.target.dataset.medname;
+    if (i == null) return;
+    CFG.medList[+i].name = ev.target.value;
+    clearTimeout(window.__medT);
+    window.__medT = setTimeout(() => { touchCfg(); renderLog(); }, 500);
+  });
   $("#medChange").onclick = () => {
     if (draft.tags.indexOf("Med change") < 0) draft.tags.push("Med change");
     renderLog(); show("log"); toast("Tagged — save the check-in to record it"); };
@@ -4756,6 +5010,21 @@ function init() {
     STATE.planHidden = todayISO(); saveState();
   };
 
+  /* ---- spikes ---- */
+  $("#spikeBtn").onclick = openSpike;
+  $("#spikeCancel").onclick = () => { $("#spikeSheet").classList.remove("on"); spikeDraft = null; };
+  $("#spikeSave").onclick = saveSpike;
+  $("#spikeAt").onchange = () => { if (spikeDraft) spikeDraft.at = $("#spikeAt").value; };
+  bindSliders($("#spikeItems"));
+  $("#spikeItems").addEventListener("pointerup", () => {
+    // the spike sheet has its own draft, so mirror the values across
+    if (!spikeDraft) return;
+    ["anxiety", "irrit"].forEach(k => {
+      const el = $("#spikeItems").querySelector('.item[data-k="' + k + '"] .ival');
+      if (el && el.textContent !== "–") spikeDraft[k] = +el.textContent;
+    });
+  });
+
   /* ---- suggestions ---- */
   $("#sugAdd").onclick = async () => {
     const v = $("#sugIn").value;
@@ -4781,6 +5050,11 @@ function init() {
     await touchCfg(); renderCfg(); refreshDue();
     if (CFG.cloud.push) { await pushEnable(); cloudLog("weekend schedule pushed to the worker", true); }
   };
+  document.addEventListener("change", ev => {
+    const g = ev.target.dataset && ev.target.dataset.medat;
+    if (!g || !draft) return;
+    draft.meds.at[g] = ev.target.value;
+  });
   $("#winCfg").addEventListener("change", ev => {
     const i = ev.target.dataset.wt, j = ev.target.dataset.we;
     if (i != null) CFG.windows[+i].time = ev.target.value;
