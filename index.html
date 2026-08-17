@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:43-->
+<!DOCTYPE html><!--build:44-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -99,6 +99,7 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .iends{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin:0 1px 7px;gap:10px}
 .iends span:last-child{text-align:right}
 .track{position:relative;height:42px;cursor:pointer;user-select:none;touch-action:pan-y}
+#spikeSheet .gatebox{max-width:440px}
 .rail{position:absolute;left:0;right:0;top:17px;height:8px;border-radius:6px;background:var(--panel-2);
   border:1px solid var(--line-2);overflow:hidden}
 .fill{position:absolute;top:0;bottom:0;background:var(--base);opacity:.85}
@@ -251,10 +252,13 @@ input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visibl
 
 /* ---------- reminder gate ---------- */
 .gate{position:fixed;inset:0;z-index:90;background:rgba(6,8,10,.9);backdrop-filter:blur(5px);
-  display:none;align-items:center;justify-content:center;padding:18px}
+  display:none;align-items:flex-start;justify-content:center;
+  padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+  overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .gate.on{display:flex}
+.gatebox{margin:auto 0}
 .gatebox{background:var(--panel);border:1px solid var(--warn);border-radius:14px;max-width:400px;width:100%;
-  padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.7)}
+  padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.7);max-height:none}
 .gatebox .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--warn)}
 .gatebox h3{margin:7px 0 6px;font-size:19px}
 .gatebox p{margin:0 0 15px;font-size:14px;color:var(--ink-2)}
@@ -363,6 +367,8 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     <span id="planBarTxt">It's been a rough stretch. You wrote some things down for a moment like this.</span>
     <button class="btn sm pri" id="planBarGo">Open it</button>
     <button class="btn sm gho" id="planBarHide">Not now</button>
+    <button class="btn sm gho" id="planBarClose" aria-label="Dismiss"
+      style="padding:5px 10px;font-size:16px;line-height:1">&times;</button>
   </div>
   <div class="updbar" id="updBar">
     <span id="updTxt">New build ready.</span>
@@ -1078,7 +1084,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 43;
+const BUILD = 44;
 
 const DEFAULT_CFG = {
   windows: [
@@ -4590,6 +4596,7 @@ function commit(skip, reason) {
     toast("Saved");
   }
   gateKey = null;
+  gateWin = null;
   refreshDue();
   refreshConn();
   clearNotifs();
@@ -4597,7 +4604,10 @@ function commit(skip, reason) {
   reportState();                              // stop the nagging straight away
   syncAll(true).then(() => reportState());     // then report the merged picture
   const due = dueWindows(todayISO());
-  setDraft(todayISO(), bestWindow(todayISO()));
+  // work through them oldest first rather than jumping to the current hour
+  const stillDue = dueWindows(todayISO());
+  setDraft(todayISO(), stillDue.length ? stillDue[0].id : bestWindow(todayISO()));
+  if (stillDue.length) toast(stillDue.length + " still open — " + stillDue[0].label + " next");
 }
 
 function init() {
@@ -4610,7 +4620,8 @@ function init() {
   bindSliders($("#v-log"));   // delegated, so every slider group is covered
 
   const due = dueWindows(todayISO());
-  setDraft(todayISO(), bestWindow(todayISO()));
+  // start on the oldest one still open, then work forward through the day
+  setDraft(todayISO(), due.length ? due[0].id : bestWindow(todayISO()));
   refreshDue();
   scheduleNotifs();
 
@@ -5152,16 +5163,19 @@ function init() {
   const planFields = { planHelps:"helps", planAvoid:"avoid", planContacts:"contacts" };
   Object.keys(planFields).forEach(id => { const el = $("#" + id); if (el) el.value = CFG.plan[planFields[id]] || ""; });
   $("#planNoteAdd").onclick = async () => {
-    await addPlanNote($("#planNoteNew").value);
-    $("#planNoteNew").value = "";
-    $("#planNoteNew").focus();
+    const box = $("#planNoteNew");
+    const text = box.value;
+    box.value = "";                       // clear first: renderCfg may run before the await resolves
+    await addPlanNote(text);
+    box.value = "";
+    box.focus();
   };
   $("#planNoteNew").addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); $("#planNoteAdd").click(); }
   });
   document.addEventListener("input", ev => {
     const i = ev.target.dataset && ev.target.dataset.pnote;
-    if (i == null) return;
+    if (i == null || !CFG.plan.notes) return;
     CFG.plan.notes[+i] = ev.target.value;
     clearTimeout(window.__pnT);
     window.__pnT = setTimeout(() => { CFG.plan.updated = Date.now(); touchCfg(); }, 500);
@@ -5183,7 +5197,11 @@ function init() {
   };
   $("#connHide").onclick = () => { $("#connBar").classList.remove("on");
     STATE.connHidden = todayISO(); saveState(); };
-  $("#planBarGo").onclick = () => { show("data");
+  $("#planBarClose").onclick = () => {
+    $("#planBar").classList.remove("on");
+    STATE.planHidden = todayISO(); saveState();
+  };
+  $("#planBarGo").onclick = () => { $("#planBar").classList.remove("on"); show("data");
     setTimeout(() => { const c = $("#planCard"); if (c) c.scrollIntoView({ block: "start", behavior: "smooth" }); }, 60); };
   $("#planBarHide").onclick = () => {
     $("#planBar").classList.remove("on");     // hide first, persist after
