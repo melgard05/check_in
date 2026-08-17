@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:45-->
+<!DOCTYPE html><!--build:46-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1084,7 +1084,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 45;
+const BUILD = 46;
 
 const DEFAULT_CFG = {
   windows: [
@@ -4629,6 +4629,15 @@ function init() {
   // start on the oldest one still open, then work forward through the day
   setDraft(todayISO(), due.length ? due[0].id : bestWindow(todayISO()));
   refreshDue();
+  // ...but local storage alone can't know what another device closed, so ask
+  // before this stands as the answer
+  pullDue().then(() => {
+    const now = dueWindows(todayISO());
+    const want = now.length ? now[0].id : bestWindow(todayISO());
+    if (draft && draft.win !== want) setDraft(todayISO(), want);
+    refreshDue();
+    if (!now.length) clearNotifs();
+  });
   scheduleNotifs();
 
   $$("nav button").forEach(b => b.onclick = () => show(b.dataset.v));
