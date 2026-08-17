@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:46-->
+<!DOCTYPE html><!--build:47-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1084,7 +1084,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 46;
+const BUILD = 47;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1294,6 +1294,11 @@ async function load() {
   if (!STATE.skipped) STATE.skipped = {};
   if (!Array.isArray(STATE.suggestions)) STATE.suggestions = [];
   if (!Array.isArray(STATE.spikes)) STATE.spikes = [];
+  // ids of things deliberately removed, so a sync can't resurrect them
+  if (!STATE.gone || typeof STATE.gone !== "object") STATE.gone = {};
+  // forget tombstones after a month; by then every device has caught up
+  const cutoff = Date.now() - 30 * 86400000;
+  Object.keys(STATE.gone).forEach(k => { if ((STATE.gone[k] || 0) < cutoff) delete STATE.gone[k]; });
   if (!STATE.dirty) STATE.dirty = {};
 }
 const saveCfg   = () => Store.set(K_CFG, JSON.stringify(CFG));
@@ -3969,11 +3974,27 @@ function applyDayCtx() {
   } });
   ENTRIES.forEach(e => { if (!e.ctx && byDate[e.date]) e.ctx = byDate[e.date].ctx; });
 }
-function mergeSuggestions(remote) {
+function mergeSpikes(remote) {
+  const gone = STATE.gone || {};
   const by = {};
-  (STATE.suggestions || []).forEach(s => { by[s.id] = s; });
-  (remote || []).forEach(s => { if (s && s.id && !by[s.id]) by[s.id] = s;
-    else if (s && s.id && s.done && by[s.id]) by[s.id].done = true; });
+  (STATE.spikes || []).forEach(x => { if (x && x.id && !gone[x.id]) by[x.id] = x; });
+  (remote || []).forEach(x => {
+    if (!x || !x.id || gone[x.id] || by[x.id]) return;
+    by[x.id] = x;
+  });
+  STATE.spikes = Object.keys(by).map(k => by[k])
+    .sort((a, b) => (a.date + a.at) < (b.date + b.at) ? -1 : 1);
+}
+
+function mergeSuggestions(remote) {
+  const gone = STATE.gone || {};
+  const by = {};
+  (STATE.suggestions || []).forEach(s => { if (!gone[s.id]) by[s.id] = s; });
+  (remote || []).forEach(s => {
+    if (!s || !s.id || gone[s.id]) return;        // deleted here: don't take it back
+    if (!by[s.id]) by[s.id] = s;
+    else if (s.done) by[s.id].done = true;
+  });
   STATE.suggestions = Object.keys(by).map(k => by[k]).sort((a, b) => a.at < b.at ? -1 : 1);
 }
 
@@ -3987,10 +4008,15 @@ async function cloudSync(quiet) {
     if (o && Array.isArray(o.entries)) {
       pulled = mergeEntries(o.entries);
       if (o.state) {
+        // tombstones first, so a deletion made anywhere wins the merge below
+        Object.keys(o.state.gone || {}).forEach(k => {
+          if (!STATE.gone[k]) STATE.gone[k] = o.state.gone[k];
+        });
         Object.keys(o.state.skipped || {}).forEach(k => {
           if (!STATE.skipped[k]) STATE.skipped[k] = o.state.skipped[k];
         });
         mergeSuggestions(o.state.suggestions);
+        mergeSpikes(o.state.spikes);
       }
       // a real entry always beats a skip for the same slot
       Object.keys(STATE.skipped).forEach(k => {
@@ -4391,7 +4417,11 @@ async function fbSync(quiet) {
         const local = k.replace("_", "|");
         if (!STATE.skipped[local]) STATE.skipped[local] = st.skipped[k];
       });
+      Object.keys(st.gone || {}).forEach(k => {
+        if (!STATE.gone[k]) STATE.gone[k] = st.gone[k];
+      });
       mergeSuggestions(Object.keys(st.suggestions || {}).map(k => st.suggestions[k]));
+      mergeSpikes(Object.keys(st.spikes || {}).map(k => st.spikes[k]));
     }
     Object.keys(STATE.skipped).forEach(k => {
       const p = k.split("|");
@@ -4417,7 +4447,8 @@ async function fbSync(quiet) {
     const sugOut = {}; (STATE.suggestions || []).forEach(s => { sugOut[s.id] = s; });
     await fetch(fbPath(tok, "/state"), {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ skipped: skipOut, suggestions: sugOut,
+      body: JSON.stringify({ skipped: skipOut, suggestions: sugOut, gone: STATE.gone || {},
+        spikes: (STATE.spikes || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
         meta: { at: new Date().toISOString(), build: BUILD, device: CFG.cloud.uid || "?" } })
     });
     await fetch(fbPath(tok, "/settings"), {
@@ -4722,8 +4753,15 @@ function init() {
     if (sd) { const s = (STATE.suggestions || []).find(x => x.id === sd.dataset.sugdone);
       if (s) { s.done = !s.done; saveState(); renderSug(); } return; }
     const sx = ev.target.closest("[data-sugdel]");
-    if (sx) { STATE.suggestions = (STATE.suggestions || []).filter(x => x.id !== sx.dataset.sugdel);
-      saveState(); renderSug(); return; }
+    if (sx) {
+      const id = sx.dataset.sugdel;
+      STATE.suggestions = (STATE.suggestions || []).filter(x => x.id !== id);
+      STATE.gone = STATE.gone || {};
+      STATE.gone[id] = Date.now();              // remember it was removed on purpose
+      renderSug();
+      saveState().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
     const fx = ev.target.closest("[data-fx]");
     if (fx) {
       const v = fx.dataset.fx, i = draft.medoff.fx.indexOf(v);
