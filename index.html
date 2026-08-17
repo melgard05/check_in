@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:44-->
+<!DOCTYPE html><!--build:45-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1084,7 +1084,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 44;
+const BUILD = 45;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1130,8 +1130,13 @@ function sharedCfg() {
 }
 function adoptCfg(remote) {
   if (!remote || !((remote.cfgAt || 0) > (CFG.cfgAt || 0))) return false;
+  const keepPlan = CFG.plan;
   SHARED_CFG.forEach(k => { if (remote[k] !== undefined) CFG[k] = remote[k]; });
   CFG.cfgAt = remote.cfgAt;
+  // The plan is edited item by item, so a whole-object overwrite would undo a
+  // deletion made here. Merge it on its own timestamp instead.
+  if (keepPlan && (!remote.plan || (keepPlan.updated || 0) >= (remote.plan.updated || 0)))
+    CFG.plan = keepPlan;
   return true;
 }
 function touchCfg() { CFG.cfgAt = Date.now(); return saveCfg(); }
@@ -4112,8 +4117,9 @@ async function addPlanNote(text) {
   text = (text || "").trim(); if (!text) return;
   CFG.plan.notes = (CFG.plan.notes || []).concat([text]);
   CFG.plan.updated = Date.now();
-  await touchCfg();
   renderPlanNotes();
+  await touchCfg();
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
 }
 
 function planFilled() {
@@ -4692,7 +4698,8 @@ function init() {
     if (pd) {
       CFG.plan.notes.splice(+pd.dataset.pnotedel, 1);
       CFG.plan.updated = Date.now();
-      touchCfg().then(renderPlanNotes);
+      renderPlanNotes();                       // reflect it immediately
+      touchCfg().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return;
     }
     const sp = ev.target.closest("[data-sptag]");
