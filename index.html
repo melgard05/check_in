@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:52-->
+<!DOCTYPE html><!--build:53-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -177,6 +177,12 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .pnote input:focus{border-bottom-color:var(--accent);outline:none}
 .pnote button{background:none;border:0;color:var(--ink-3);font-size:17px;cursor:pointer;padding:0 2px;line-height:1}
 .pnote button:hover{color:var(--bad)}
+.wakerow{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.wakerow:last-child{border-bottom:0}
+.wkat{font-family:var(--mono);font-size:14px;color:var(--ink);flex:0 0 auto}
+.wklen{flex:1;font-size:13px;color:var(--ink-2)}
+.wakerow button{background:none;border:0;color:var(--ink-3);font-size:17px;cursor:pointer;padding:0 2px}
+.wakerow button:hover{color:var(--bad)}
 
 /* ---------- wheel ---------- */
 .wheelwrap{display:flex;gap:10px;align-items:stretch;position:relative;margin:6px 0 2px}
@@ -449,6 +455,21 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           <label class="fld"><span>Bedtime</span><input type="time" id="sBed"></label>
           <label class="fld"><span>Woke at</span><input type="time" id="sWake"></label>
         </div>
+        <div class="eyebrow" style="margin:16px 0 8px">Awake in the night</div>
+        <div id="wakeList"></div>
+        <div class="row" style="gap:8px;margin-top:8px;align-items:flex-end">
+          <label class="fld" style="flex:0 1 130px"><span>Woke at</span>
+            <input type="time" id="wakeAt"></label>
+          <label class="fld" style="flex:0 1 120px"><span>For how long</span>
+            <select id="wakeLen">
+              <option value="10">10 min</option><option value="20">20 min</option>
+              <option value="30" selected>30 min</option><option value="45">45 min</option>
+              <option value="60">1 h</option><option value="90">1.5 h</option>
+              <option value="120">2 h</option><option value="180">3 h</option>
+              <option value="240">4 h+</option></select></label>
+          <button class="btn sm" id="wakeAdd" style="margin-bottom:1px">Add</button>
+        </div>
+        <div class="mini" id="wakeSum" style="margin-top:8px"></div>
         <div class="mini" style="margin-top:8px">Timing matters as much as duration — a drifting bedtime is often the earliest signal.</div>
         <div id="sleepItems"></div>
       </div>
@@ -780,7 +801,8 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="row" style="gap:8px;margin-top:8px">
         <button class="btn sm" id="showTxt">Show text</button>
         <button class="btn sm" id="copyTxt">Copy last export</button>
-        <button class="btn sm" id="printBtn">Print summary</button>
+        <button class="btn sm pri" id="printDoc">For your doctor</button>
+        <button class="btn sm" id="printBtn">Full detail</button>
         <button class="btn sm" id="printWork">Print work vs time off</button>
       </div>
       <textarea id="expBox" style="display:none;margin-top:10px;min-height:150px;font-family:var(--mono);font-size:11px"></textarea>
@@ -1130,7 +1152,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 52;
+const BUILD = 53;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1411,6 +1433,9 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (!d.meds.at || typeof d.meds.at !== "object") d.meds.at = {};
   if (!d.meds.prn || typeof d.meds.prn !== "object") d.meds.prn = {};
   if (d.sleep != null && typeof d.sleep !== "object") d.sleep = null;
+  if (d.sleep && !Array.isArray(d.sleep.wakes)) d.sleep.wakes = [];
+  if (d.sleep) d.sleep.wakes = d.sleep.wakes.filter(x => x && x.at)
+    .map(x => ({ at: String(x.at), mins: Math.max(1, Math.min(600, +x.mins || 0)) }));
   if (!d.ts) d.ts = new Date().toISOString();
   return d;
 }
@@ -1747,6 +1772,24 @@ function fillFromTimes() {
   pushSleep();
 }
 
+function wakeMins(sl) {
+  return ((sl && sl.wakes) || []).reduce((a, x) => a + (+x.mins || 0), 0);
+}
+function renderWakes() {
+  const el = $("#wakeList"); if (!el || !draft) return;
+  const list = (draft.sleep && draft.sleep.wakes) || [];
+  el.innerHTML = list.length
+    ? list.map((x, i) => '<div class="wakerow"><span class="wkat">' + esc(x.at) + "</span>" +
+        '<span class="wklen">' + hm(x.mins) + "</span>" +
+        '<button data-wakedel="' + i + '" aria-label="Remove">&times;</button></div>').join("")
+    : '<div class="mini">None logged. Add one for each time you were properly awake, not just stirring.</div>';
+  const tot = wakeMins(draft.sleep);
+  $("#wakeSum").innerHTML = list.length
+    ? "<b>" + list.length + " waking" + (list.length > 1 ? "s" : "") + ", " + hm(tot) +
+      " awake.</b> That's time in bed but not asleep, so wind the length above down to match."
+    : "";
+}
+
 function pushSleep() {
   if (!draft) return;
   const h = wheelVal($("#wH")), m = wheelVal($("#wM"));
@@ -1773,6 +1816,9 @@ function pushSleep() {
 
   let out = (napHrs ? "night " : "total ") + "<b>" + h + "h " + pad(m) + "m</b>" +
     (night && !napHrs ? '  ·  ' + night.toFixed(2) + " h" : "") + (napHrs ? "" : flag);
+  const awake = wakeMins(draft.sleep);
+  if (awake) out += '<br><span style="color:#9b7fd4">' + hm(awake) + " awake in the night" +
+    " (" + draft.sleep.wakes.length + "\u00d7)</span>";
   if (inBed != null) {
     const diff = inBed - Math.round(night * 60);
     out += '<br><span style="color:var(--ink-3)">' +
@@ -1942,6 +1988,7 @@ function renderLog() {
     setWheel($("#wH"), s.h == null ? 7 : s.h);
     setWheel($("#wM"), s.m == null ? 0 : s.m);
     $("#sBed").value = s.bed || ""; $("#sWake").value = s.wake || "";
+    renderWakes();
     pushSleep();   // also folds in any nap that belongs to this night
     $("#sleepItems").innerHTML = activeItems("sleep").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
   }
@@ -2258,7 +2305,8 @@ function daily(days) {
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
     });
     const se = es.find(e => e.sleep && (e.sleep.h != null));
-    if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake };
+    if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake,
+      wakes: (se.sleep.wakes || []).slice(), awakeMins: wakeMins(se.sleep) };
     row.recall = es.length > 0 && es.every(e => e.recall);
     if (CFG.cycle) { row.cday = cycleDayOf(date); row.period = es.some(e => e.period); }
     const mo = es.find(e => e.medoff && e.medoff.st);
@@ -3550,6 +3598,22 @@ function renderFlags(rows) {
           "suit some people better than open days; worth noticing if time off is consistently harder."]);
   }
 
+  // broken nights
+  const wk14 = rows.slice(-14).filter(r => r.sleep);
+  const broken = wk14.filter(r => (r.sleep.wakes || []).length);
+  if (broken.length >= 4) {
+    const avgW = broken.reduce((a, r) => a + r.sleep.awakeMins, 0) / broken.length;
+    const times = {};
+    broken.forEach(r => (r.sleep.wakes || []).forEach(x => {
+      const h = Math.floor(minsOf(x.at) / 60); times[h] = (times[h] || 0) + 1; }));
+    const peak = Object.keys(times).sort((a, c) => times[c] - times[a])[0];
+    out.push(["", "Broken sleep on " + broken.length + " of the last " + wk14.length + " nights",
+      "Averaging " + hm(Math.round(avgW)) + " awake" +
+      (peak != null && times[peak] >= 3 ? ", most often around " + pad(peak) + ":00" : "") + ". " +
+      "Waking in the small hours and struggling to get back is a different problem from not " +
+      "getting to sleep, and it points somewhere different."]);
+  }
+
   // daytime sleep
   const nap14 = rows.slice(-14).filter(r => r.n);
   const napped = nap14.filter(r => r.nap);
@@ -3604,6 +3668,7 @@ function buildExport(kind) {
     // one value column per item, then a matching note column for anything noted
     const noted = on.filter(i => rows.some(r => r.inotes[i.key]));
     const head = ["date", "checkins", "context", "worked", "sleep_hours", "bedtime", "wake_time",
+      "night_wakings", "awake_minutes", "waking_times",
       "nap_hours", "nap_start", "nap_carried_from_prev_evening", "total_sleep_hours",
       "med_wore_off", "med_wore_off_time", "crash_time", "crash_end", "crash_minutes", "crash_effects",
       "from_memory", "med_adherence", "med_taken_am", "med_taken_pm", "prn_doses",
@@ -3617,6 +3682,9 @@ function buildExport(kind) {
       r.worked == null ? "" : (r.worked ? "yes" : "no"),
       r.sleep ? r.sleep.hours.toFixed(2) : "", r.sleep ? r.sleep.bed || "" : "",
       r.sleep ? r.sleep.wake || "" : "",
+      r.sleep && r.sleep.wakes ? (r.sleep.wakes.length || "") : "",
+      r.sleep && r.sleep.awakeMins ? r.sleep.awakeMins : "",
+      r.sleep && r.sleep.wakes ? r.sleep.wakes.map(x => x.at + "+" + x.mins + "m").join("; ") : "",
       r.nap ? r.nap.hours.toFixed(2) : "", r.nap ? r.nap.start || "" : "",
       r.nap ? (r.nap.carried ? "yes" : "no") : "",
       r.total ? r.total.toFixed(2) : "",
@@ -3741,6 +3809,166 @@ function download(name, text, mime) {
    Two views, because they answer different questions: whole days show what a
    working day costs overall, individual check-ins show whether it's the work
    itself or the hours around it. */
+/* One page a clinician can read in a minute: what changed, what's steady,
+   what the patient wants to ask. Prose over tables — a specialist has minutes,
+   not the appetite for a correlation matrix. */
+function printDoctor() {
+  const rows = daily(90).filter(r => r.n);
+  const w = window.open("", "_blank");
+  if (!w) { toast("Popup blocked \u2014 allow popups for this site", true); return; }
+  const esc2 = x => esc(x);
+  const wk = rows.slice(-28), prev = rows.slice(-56, -28);
+  const mean = (set, k) => { const v = set.map(r => k === "sleep" ? (r.sleep ? r.sleep.hours : null)
+      : k === "total" ? (r.total || null) : r.v[k]).filter(x => x != null);
+    return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
+  const f = v => v == null ? "\u2014" : v.toFixed(1);
+  const cov = coverageAudit(28);
+
+  const bullets = [];
+
+  // mood range and direction
+  const m = mean(wk, "mood"), mp = mean(prev, "mood");
+  if (m != null) {
+    const lows = wk.filter(r => r.v.mood != null && r.v.mood <= 3).length;
+    const highs = wk.filter(r => r.v.mood != null && r.v.mood >= 8).length;
+    bullets.push("Self-rated mood averaged <b>" + f(m) + "/10</b> over the last four weeks" +
+      (mp != null && Math.abs(m - mp) >= 0.5
+        ? ", " + (m > mp ? "up" : "down") + " " + Math.abs(m - mp).toFixed(1) + " on the four before"
+        : ", little changed from the four before") + "." +
+      (lows || highs ? " Days at or below 3: <b>" + lows + "</b>. Days at or above 8: <b>" +
+        highs + "</b>." : ""));
+  }
+  // episodes
+  const eps = episodes(rows).slice(-3);
+  if (eps.length) bullets.push("Sustained runs on a 5-day rolling average: " +
+    eps.map(e => "<b>" + e.len + " days " + (e.kind === "high" ? "elevated" : "low") + "</b>" +
+      (rows[e.start] ? " (" + fmtDate(rows[e.start].date) + "\u2013" + fmtDate(rows[e.end].date) + ")" : "")
+    ).join(", ") + ".");
+  // sleep, including fragmentation
+  const sl = mean(wk, "sleep");
+  if (sl != null) {
+    const short = wk.filter(r => r.sleep && r.sleep.hours < 6).length;
+    const brk = wk.filter(r => r.sleep && (r.sleep.wakes || []).length);
+    let t = "Sleep averaged <b>" + f(sl) + "h</b> a night" +
+      (short ? ", with <b>" + short + "</b> night" + (short > 1 ? "s" : "") + " under six" : "") + ".";
+    if (brk.length) {
+      const avgW = brk.reduce((a, r) => a + r.sleep.awakeMins, 0) / brk.length;
+      t += " Woke in the night on <b>" + brk.length + "</b> of " + wk.filter(r => r.sleep).length +
+        " nights, averaging <b>" + hm(Math.round(avgW)) + "</b> awake.";
+    }
+    const naps = wk.filter(r => r.nap);
+    if (naps.length) t += " Daytime sleep on " + naps.length + " days.";
+    bullets.push(t);
+  }
+  // medication
+  const medDays = wk.filter(r => r.meds != null);
+  if (medDays.length) {
+    const adh = medDays.reduce((a, r) => a + r.meds, 0) / medDays.length;
+    let t = "Doses ticked as taken on <b>" + Math.round(adh * 100) + "%</b> of scheduled doses " +
+      "across " + medDays.length + " days.";
+    const mo = wk.filter(r => r.medoff && r.medoff.mins != null);
+    if (mo.length >= 4) {
+      const avg = mo.reduce((a, r) => a + r.medoff.mins, 0) / mo.length;
+      t += " Stimulant effect reported as wearing off around <b>" +
+        pad(Math.floor(avg / 60)) + ":" + pad(Math.round(avg % 60)) + "</b>";
+      const cr = wk.filter(r => r.medoff && r.medoff.crashLen != null);
+      if (cr.length >= 3) {
+        const ca = cr.reduce((a, r) => a + r.medoff.crashLen, 0) / cr.length;
+        const fx = {};
+        wk.forEach(r => ((r.medoff && r.medoff.fx) || []).forEach(x => { fx[x] = (fx[x] || 0) + 1; }));
+        const top = Object.keys(fx).sort((a, c) => fx[c] - fx[a]).slice(0, 3);
+        t += ", followed by a rebound lasting <b>" + hm(Math.round(ca)) + "</b> on average" +
+          (top.length ? ", described as " + top.map(x => x.toLowerCase()).join(", ") : "");
+      }
+      t += ".";
+    }
+    const prn = wk.reduce((a, r) => a + (r.prn || 0), 0);
+    if (prn) t += " As-needed doses taken <b>" + prn + "</b> times in four weeks.";
+    bullets.push(t);
+  }
+  // context
+  const on = rows.filter(r => r.worked === true), off = rows.filter(r => r.worked === false);
+  if (on.length >= 5 && off.length >= 5) {
+    const dm = mean(on, "mood") - mean(off, "mood");
+    const da = (mean(on, "anxiety") != null && mean(off, "anxiety") != null)
+      ? mean(on, "anxiety") - mean(off, "anxiety") : null;
+    if (Math.abs(dm) >= 0.5 || (da != null && Math.abs(da) >= 0.5))
+      bullets.push("Working days versus time off: mood <b>" + (dm > 0 ? "+" : "") + dm.toFixed(1) +
+        "</b>" + (da != null ? ", anxiety <b>" + (da > 0 ? "+" : "") + da.toFixed(1) + "</b>" : "") +
+        " (" + on.length + " working days, " + off.length + " off).");
+  }
+  // spikes
+  const sp = (STATE.spikes || []).filter(x => x.date >= addDays(todayISO(), -28));
+  if (sp.length) {
+    const tal = {};
+    sp.forEach(x => (x.tags || []).forEach(t => { tal[t] = (tal[t] || 0) + 1; }));
+    const top = Object.keys(tal).sort((a, c) => tal[c] - tal[a]).slice(0, 2);
+    const manic = sp.filter(x => x.manic != null && x.manic >= 7).length;
+    bullets.push("<b>" + sp.length + "</b> discrete anxiety or irritability surges logged between " +
+      "scheduled check-ins" + (top.length ? ", most often following " +
+        top.map(t => t.toLowerCase()).join(" or ") : "") +
+      (manic ? "; <b>" + manic + "</b> rated as elevated or revved rather than anxious" : "") + ".");
+  }
+  // warning signs
+  const wn = {};
+  wk.forEach(r => (r.warns || []).forEach(x => { wn[x] = (wn[x] || 0) + 1; }));
+  const rep = Object.keys(wn).filter(x => wn[x] >= 3).sort((a, c) => wn[c] - wn[a]).slice(0, 4);
+  if (rep.length) bullets.push("Recurring early warning signs: " +
+    rep.map(x => x.toLowerCase() + " (" + wn[x] + " days)").join(", ") + ".");
+
+  const flags = (STATE.flagLog || []).filter(x => x.date >= addDays(todayISO(), -28));
+  const flagNames = [];
+  flags.forEach(x => { if (flagNames.indexOf(x.title) < 0) flagNames.push(x.title); });
+
+  w.document.write('<!doctype html><meta charset="utf-8"><title>Baseline summary</title><style>' +
+    'body{font:13.5px/1.6 -apple-system,system-ui,sans-serif;margin:26px;color:#111;max-width:700px}' +
+    'h1{font-size:20px;margin:0 0 2px}h2{font-size:12.5px;margin:20px 0 7px;border-bottom:1px solid #bbb;' +
+    'padding-bottom:3px;text-transform:uppercase;letter-spacing:.07em}' +
+    'ul{margin:0;padding-left:19px}li{margin:0 0 8px}' +
+    '.sm{color:#555;font-size:11.5px}.box{border:1px solid #ddd;border-left:3px solid #888;' +
+    'padding:9px 12px;margin:10px 0;font-size:12.5px}' +
+    '.ask{background:#f7f7f5;border:1px solid #ddd;padding:10px 12px;margin-top:8px;font-size:12.5px}' +
+    '@media print{body{margin:14mm}}</style>' +
+
+    "<h1>Baseline \u2014 self-tracking summary</h1>" +
+    '<div class="sm">Prepared ' + new Date().toLocaleDateString() +
+    " \u00b7 covering the last four weeks \u00b7 " + rows.length + " days with entries in 90</div>" +
+
+    (cov.pct < 0.5
+      ? '<div class="box">Check-ins were completed on ' + Math.round(cov.pct * 100) +
+        "% of occasions in this period, so these figures are indicative.</div>"
+      : "") +
+    (cov.bias != null && cov.bias < -0.5
+      ? '<div class="box">Partially-logged days average ' + Math.abs(cov.bias).toFixed(1) +
+        " points lower on mood than fully-logged ones, so the averages below may understate the " +
+        "harder days.</div>" : "") +
+
+    "<h2>What the record shows</h2>" +
+    (bullets.length ? "<ul>" + bullets.map(t => "<li>" + t + "</li>").join("") + "</ul>"
+      : "<p>Not enough logged yet to summarise.</p>") +
+
+    (flagNames.length
+      ? "<h2>Flagged by the app this month</h2><ul>" +
+        flagNames.slice(0, 6).map(t => "<li>" + esc2(t) + "</li>").join("") + "</ul>" +
+        '<div class="sm">Threshold checks on self-reported data, not diagnostic.</div>'
+      : "") +
+
+    "<h2>What I would like to ask about</h2>" +
+    '<div class="ask">' +
+      ((CFG.plan.notes || []).length
+        ? "<ul style=\"margin:0\">" + CFG.plan.notes.slice(0, 6).map(t => "<li>" + esc2(t) + "</li>").join("") + "</ul>"
+        : "&nbsp;<br>&nbsp;<br>&nbsp;") +
+    "</div>" +
+
+    '<div class="sm" style="margin-top:20px">All figures are self-reported daily ratings on a 1\u201310 ' +
+    "scale, recorded up to several times a day. For mood-type items 5 is the patient's stated personal " +
+    "baseline; for pain and symptom items 1 is none. Associations described are descriptive only and " +
+    "have not been tested for significance. This is a patient self-monitoring record, not a clinical " +
+    "instrument or a diagnosis.</div>");
+  w.document.close();
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+}
+
 function printWorkReport() {
   const rows = daily(90).filter(r => r.n);
   const w = window.open("", "_blank");
@@ -5138,6 +5366,16 @@ function init() {
     if (draft.nap.on && !draft.nap.h && !draft.nap.m) draft.nap.m = 30;   // a sensible starting point
     renderLog();
   };
+  $("#wakeAdd").onclick = () => {
+    const at = $("#wakeAt").value;
+    if (!at) { toast("What time did you wake?", true); return; }
+    draft.sleep = draft.sleep || { h: 0, m: 0, bed: "", wake: "", wakes: [] };
+    if (!Array.isArray(draft.sleep.wakes)) draft.sleep.wakes = [];
+    draft.sleep.wakes.push({ at, mins: +$("#wakeLen").value || 30 });
+    draft.sleep.wakes.sort((a, c) => minsOf(a.at) - minsOf(c.at));
+    $("#wakeAt").value = "";
+    renderWakes(); pushSleep();
+  };
   $("#medOffAt").onchange = () => { draft.medoff.at = $("#medOffAt").value; medOffHint(); crashHint(); };
   $("#crashAt").onchange = () => { draft.medoff.crashAt = $("#crashAt").value; crashHint(); };
   $("#crashEnd").onchange = () => { draft.medoff.crashEnd = $("#crashEnd").value; crashHint(); };
@@ -5186,6 +5424,12 @@ function init() {
       return;
     }
     if (ev.target.closest("#flagsMore")) { flagsAll = true; renderFlags(daily(0)); return; }
+    const wk = ev.target.closest("[data-wakedel]");
+    if (wk && draft.sleep) {
+      draft.sleep.wakes.splice(+wk.dataset.wakedel, 1);
+      renderWakes(); pushSleep();
+      return;
+    }
     const pd = ev.target.closest("[data-pnotedel]");
     if (pd) {
       CFG.plan.notes.splice(+pd.dataset.pnotedel, 1);
@@ -5348,7 +5592,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,#flagsMore,[data-medask],[data-spitem],[data-pnotedel],[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,#flagsMore,[data-wakedel],[data-medask],[data-spitem],[data-pnotedel],[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
@@ -5589,6 +5833,7 @@ function init() {
     catch (e) { $("#expBox").style.display = ""; $("#expBox").value = lastExport;
       $("#expBox").select(); toast("Select and copy manually", true); } };
   $("#printBtn").onclick = printSummary;
+  $("#printDoc").onclick = printDoctor;
   $("#printWork").onclick = printWorkReport;
 
   const backup = () => JSON.stringify({ v:1, at:new Date().toISOString(), cfg:CFG, entries:ENTRIES, state:STATE });
