@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:51-->
+<!DOCTYPE html><!--build:52-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -781,6 +781,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm" id="showTxt">Show text</button>
         <button class="btn sm" id="copyTxt">Copy last export</button>
         <button class="btn sm" id="printBtn">Print summary</button>
+        <button class="btn sm" id="printWork">Print work vs time off</button>
       </div>
       <textarea id="expBox" style="display:none;margin-top:10px;min-height:150px;font-family:var(--mono);font-size:11px"></textarea>
     </div>
@@ -1129,7 +1130,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 51;
+const BUILD = 52;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3736,6 +3737,127 @@ function download(name, text, mime) {
   } catch (e) { return false; }
 }
 
+/* Work against time off, on one page.
+   Two views, because they answer different questions: whole days show what a
+   working day costs overall, individual check-ins show whether it's the work
+   itself or the hours around it. */
+function printWorkReport() {
+  const rows = daily(90).filter(r => r.n);
+  const w = window.open("", "_blank");
+  if (!w) { toast("Popup blocked \u2014 allow popups for this site", true); return; }
+
+  const keys = ITEMS.filter(i => (i.grp === "core" || i.key === "pain") && isOn(i.key)).map(i => i.key);
+  const badHigh = { irrit:1, anxiety:1, pain:1, spend:1, fog:1, calls:1, binge:1 };
+  const label = k => k === "sleep" ? "Hours slept" : k === "total" ? "Total sleep" : ITEM[k].label;
+  const esc2 = x => esc(x);
+  const f1 = v => v == null ? "\u2014" : v.toFixed(1);
+
+  const mean = (set, k, get) => { const v = set.map(get).filter(x => x != null);
+    return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
+  const dayVal = (r, k) => k === "sleep" ? (r.sleep ? r.sleep.hours : null)
+    : k === "total" ? (r.total || null) : r.v[k];
+
+  // ---- whole days
+  const on = rows.filter(r => r.worked === true), off = rows.filter(r => r.worked === false);
+  const dayRows = keys.concat(["sleep", "total"]).map(k => {
+    const a = mean(on, k, r => dayVal(r, k)), c = mean(off, k, r => dayVal(r, k));
+    if (a == null || c == null) return null;
+    return { k, a, c, d: a - c, worse: badHigh[k] ? (a - c) > 0 : (a - c) < 0 };
+  }).filter(Boolean).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+
+  // ---- individual check-ins
+  const wEnt = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && CTXBY[e.ctx].work);
+  const oEnt = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && !CTXBY[e.ctx].work);
+  const ciRows = keys.map(k => {
+    const a = mean(wEnt, k, e => e.v[k]), c = mean(oEnt, k, e => e.v[k]);
+    if (a == null || c == null) return null;
+    return { k, a, c, d: a - c, worse: badHigh[k] ? (a - c) > 0 : (a - c) < 0 };
+  }).filter(Boolean).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
+
+  // ---- each context on its own
+  const ctxRows = CTX.map(cx => {
+    const set = ENTRIES.filter(e => e.ctx === cx.id);
+    if (set.length < 3) return null;
+    return { label: cx.label, n: set.length, work: cx.work,
+      vals: keys.map(k => mean(set, k, e => e.v[k])) };
+  }).filter(Boolean);
+
+  // ---- spikes, which are the thing daily averages hide
+  const spOn = (STATE.spikes || []).filter(x => {
+    const r = rows.find(y => y.date === x.date); return r && r.worked === true; });
+  const spOff = (STATE.spikes || []).filter(x => {
+    const r = rows.find(y => y.date === x.date); return r && r.worked === false; });
+  const perDay = (n, d) => d ? (n / d).toFixed(2) : "\u2014";
+
+  const big = dayRows.filter(x => Math.abs(x.d) >= 0.5);
+  const headline = !big.length ? "No clear difference between working days and time off."
+    : big.slice(0, 3).map(x => label(x.k).toLowerCase() + " " +
+        (x.d > 0 ? "+" : "") + x.d.toFixed(1)).join(", ") + ".";
+
+  const tbl = (title, list, aHead, cHead, nA, nB) =>
+    "<h2>" + title + "</h2><table><tr><th>" + "</th><th>" + aHead + "</th><th>" + cHead +
+    "</th><th>Difference</th></tr>" +
+    list.map(x => "<tr><td>" + esc2(label(x.k)) + '</td><td class="m">' + f1(x.a) +
+      '</td><td class="m">' + f1(x.c) + '</td><td class="m ' + (Math.abs(x.d) < 0.3 ? "" :
+      x.worse ? "bad" : "good") + '">' + (x.d > 0 ? "+" : "") + x.d.toFixed(1) + "</td></tr>").join("") +
+    "</table>" + '<div class="sm">' + nA + " vs " + nB + ". " +
+    "Shaded where the difference favours one side; under 0.3 is noise.</div>";
+
+  w.document.write('<!doctype html><meta charset="utf-8"><title>Work vs time off</title><style>' +
+    'body{font:13px/1.55 -apple-system,system-ui,sans-serif;margin:26px;color:#111;max-width:740px}' +
+    'h1{font-size:19px;margin:0 0 3px}h2{font-size:13px;margin:20px 0 6px;border-bottom:1px solid #bbb;' +
+    'padding-bottom:3px;text-transform:uppercase;letter-spacing:.06em}' +
+    'table{border-collapse:collapse;width:100%;font-size:11.5px;margin-bottom:4px}' +
+    'th,td{text-align:left;padding:4px 7px 4px 0;border-bottom:1px solid #eee}' +
+    'th{border-bottom:1px solid #999;font-size:10px;text-transform:uppercase;letter-spacing:.08em}' +
+    '.m{font-family:ui-monospace,monospace}.sm{color:#555;font-size:11px}' +
+    '.bad{color:#b3261e;font-weight:600}.good{color:#1b6b3a;font-weight:600}' +
+    '.lead{border:1px solid #ddd;border-left:3px solid #888;padding:8px 11px;margin:10px 0;font-size:12.5px}' +
+    '@media print{body{margin:12mm}}</style>' +
+
+    "<h1>Work vs time off</h1>" +
+    '<div class="sm">' + new Date().toLocaleDateString() + " \u00b7 last 90 days \u00b7 " +
+      on.length + " working days, " + off.length + " off</div>" +
+
+    (on.length < 3 || off.length < 3
+      ? '<div class="lead">Not enough of both kinds of day yet. Tag where you were on each check-in ' +
+        "and this fills in.</div>"
+      : '<div class="lead"><b>In short:</b> ' + esc2(headline) + "</div>" +
+
+        tbl("Whole days", dayRows, "Working", "Off", on.length + " working days", off.length + " off") +
+
+        (ciRows.length
+          ? tbl("Check-in by check-in", ciRows, "At work", "Not at work",
+              wEnt.length + " check-ins at work", oEnt.length + " elsewhere") +
+            '<div class="sm">A day often contains both, so this separates the hours rather than ' +
+            "labelling the whole day. Where the two tables disagree, this one is closer to the truth.</div>"
+          : "") +
+
+        (ctxRows.length > 1
+          ? "<h2>By where you were</h2><table><tr><th></th>" +
+            ctxRows.map(c => "<th>" + esc2(c.label) + "</th>").join("") + "</tr>" +
+            keys.map((k, i) => "<tr><td>" + esc2(label(k)) + "</td>" +
+              ctxRows.map(c => '<td class="m">' + f1(c.vals[i]) + "</td>").join("") + "</tr>").join("") +
+            '<tr><td class="sm">check-ins</td>' +
+            ctxRows.map(c => '<td class="sm">' + c.n + "</td>").join("") + "</tr></table>"
+          : "") +
+
+        ((spOn.length || spOff.length)
+          ? "<h2>Spikes</h2><table><tr><th></th><th>Working</th><th>Off</th></tr>" +
+            "<tr><td>Spikes logged</td>" + '<td class="m">' + spOn.length + '</td><td class="m">' +
+            spOff.length + "</td></tr>" +
+            "<tr><td>Per day</td>" + '<td class="m">' + perDay(spOn.length, on.length) +
+            '</td><td class="m">' + perDay(spOff.length, off.length) + "</td></tr></table>" +
+            '<div class="sm">Short surges that a three-times-a-day average would smooth away.</div>'
+          : "")) +
+
+    '<div class="sm" style="margin-top:18px">Self-reported ratings, 1&ndash;10. For mood-type items ' +
+    "5 is this person's stated baseline; for pain and symptom items 1 is none. Differences are " +
+    "descriptive, not tested for significance, and association is not cause. Not a clinical instrument.</div>");
+  w.document.close();
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+}
+
 function printSummary() {
   const rows = daily(90).filter(r => r.n);
   const w = window.open("", "_blank");
@@ -5467,6 +5589,7 @@ function init() {
     catch (e) { $("#expBox").style.display = ""; $("#expBox").value = lastExport;
       $("#expBox").select(); toast("Select and copy manually", true); } };
   $("#printBtn").onclick = printSummary;
+  $("#printWork").onclick = printWorkReport;
 
   const backup = () => JSON.stringify({ v:1, at:new Date().toISOString(), cfg:CFG, entries:ENTRIES, state:STATE });
   $("#bkExport").onclick = () => { const t = backup();
