@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:48-->
+<!DOCTYPE html><!--build:49-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -150,6 +150,9 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
   border-radius:8px;padding:9px 11px;margin-top:10px;max-height:130px;overflow:auto;white-space:pre-wrap;
   line-height:1.55}
 .wklbl{font-family:var(--mono);font-size:10px;color:var(--ink-3);letter-spacing:.06em;flex:0 0 auto}
+.winrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.winrow:last-of-type{border-bottom:0}
+.wnote{flex:1 1 100%;font-size:11px;color:var(--ink-3);font-family:var(--mono)}
 .daysel{display:flex;gap:5px}
 .daysel button{flex:1;padding:9px 0;border-radius:8px;border:1px solid var(--line-2);background:var(--panel-2);
   color:var(--ink-3);font-family:var(--mono);font-size:12px;cursor:pointer;letter-spacing:.04em}
@@ -676,6 +679,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <p class="sub">Averages on days you worked against days you didn't. Needs 3+ of each.</p>
       <div id="workSplit"></div>
       <div id="ctxSplit" style="margin-top:18px"></div>
+      <div id="ctxPerWin" style="margin-top:18px"></div>
     </div>
     <div class="card" id="cycleCard" style="display:none">
       <h2>By cycle phase</h2>
@@ -1117,7 +1121,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 48;
+const BUILD = 49;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1238,6 +1242,11 @@ function toast(msg, warn) {
   clearTimeout(t._h); t._h = setTimeout(() => { t.className = "toast" + (warn ? " warn" : ""); }, 2200);
 }
 function winById(id) { return CFG.windows.find(w => w.id === id) || CFG.windows[0]; }
+function sortWindows() {
+  CFG.windows.sort((a, b) => minsOf(a.time) - minsOf(b.time));
+  // sleep belongs to the first check-in of the day unless told otherwise
+  if (!CFG.windows.some(w => w.sleep) && CFG.windows[0]) CFG.windows[0].sleep = true;
+}
 function sleepWin() { return CFG.windows.find(w => w.sleep) || CFG.windows[0]; }
 
 /* value -> diverging color */
@@ -1403,7 +1412,12 @@ function setDraft(date, winId) {
   catch (e) { draft = newDraft(date, winId); }
   // a fresh entry for a past day is being written from memory by definition
   if (!ENTRIES.some(x => x.date === date && x.win === winId) && date < todayISO()) draft.recall = true;
-  if (!draft.ctx) {                               // inherit the day's context if one exists
+  const saved = ENTRIES.some(x => x.date === date && x.win === winId);
+  if (!saved && winId === lastWinId()) {
+    // the last check-in of the day is the one most likely to be somewhere else,
+    // so it gets asked rather than inheriting the work tag from earlier
+    draft.ctx = "";
+  } else if (!draft.ctx) {
     const sib = ENTRIES.filter(x => x.date === date && x.ctx)
       .sort((a, b) => (a.ts || "") < (b.ts || "") ? 1 : -1)[0];
     if (sib) draft.ctx = sib.ctx;
@@ -2841,6 +2855,7 @@ function renderPatterns() {
   renderCycle(rows);
   renderWorkSplit(rows);
   renderCtxSplit(rows);
+  renderCtxPerWin();
   renderFlags(rows);
 }
 
@@ -3102,6 +3117,36 @@ function renderCtxSplit(rows) {
     "</tr></table></div>" +
     '<div class="mini">Green marks the best column for each row. Only contexts used on 3+ days appear, ' +
     'and small samples move around a lot &mdash; treat this as a hint, not a finding.</div>';
+}
+
+/* A whole day gets one work/not-work label, but a day usually contains both.
+   Comparing check-in by check-in is what actually separates them. */
+function renderCtxPerWin() {
+  const el = $("#ctxPerWin"); if (!el) return;
+  const work = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && CTXBY[e.ctx].work);
+  const off = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && !CTXBY[e.ctx].work);
+  if (work.length < 4 || off.length < 4) { el.innerHTML = ""; return; }
+  const keys = ITEMS.filter(i => (i.grp === "core" || i.key === "pain") && isOn(i.key)).map(i => i.key);
+  const mean = (set, k) => { const v = set.map(e => e.v[k]).filter(x => x != null);
+    return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
+  const badHigh = { irrit:1, anxiety:1, pain:1, spend:1, fog:1, calls:1, binge:1 };
+  el.innerHTML = '<div class="eyebrow" style="margin:0 0 8px">Check-in by check-in</div>' +
+    '<div class="mini" style="margin-bottom:9px">Each check-in on its own, grouped by what you ' +
+    "tagged at the time rather than by the whole day. This is the one to trust if your day has " +
+    "work and home in it.</div>" +
+    '<div class="scroll"><table class="tbl"><tr><th></th><th>Working</th><th>Not working</th>' +
+    "<th>Difference</th></tr>" +
+    keys.map(k => {
+      const a = mean(work, k), c = mean(off, k);
+      if (a == null || c == null) return "";
+      const d = a - c, worse = badHigh[k] ? d > 0 : d < 0;
+      const col = Math.abs(d) < 0.3 ? "var(--ink-3)" : worse ? "var(--high-2)" : "var(--base)";
+      return "<tr><td>" + esc(ITEM[k].label) + "</td><td>" + a.toFixed(1) + "</td><td>" +
+        c.toFixed(1) + '</td><td style="color:' + col + '">' + (d > 0 ? "+" : "") +
+        d.toFixed(1) + "</td></tr>";
+    }).join("") + "</table></div>" +
+    '<div class="mini">' + work.length + " check-ins tagged working, " + off.length +
+    " not. Green is the better direction for that row.</div>";
 }
 
 function renderWorkSplit(rows) {
@@ -3747,17 +3792,30 @@ function printSummary() {
    SETTINGS RENDER
    ============================================================ */
 function renderCfg() {
-  $("#winCfg").innerHTML = CFG.windows.map((w, i) =>
-    '<div class="sw"><div style="flex:1 1 120px"><div class="t">' + esc(w.label) + "</div>" +
-    '<div class="d">' + (w.sleep ? "asks about sleep" : "mood and body only") + "</div></div>" +
-    '<div style="display:flex;gap:6px;align-items:center">' +
-      (CFG.weekend ? '<span class="wklbl">usual</span>' : "") +
-      '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="width:112px">' +
-      (CFG.weekend
-        ? '<span class="wklbl">other</span><input type="time" data-we="' + i + '" value="' +
-          (w.timeWe || w.time) + '" style="width:112px">'
-        : "") +
-    "</div></div>").join("");
+  $("#winCfg").innerHTML = CFG.windows.map((w, i) => {
+    const n = ENTRIES.filter(e => e.win === w.id).length;
+    return '<div class="winrow">' +
+      '<input type="text" data-wlabel="' + i + '" value="' + esc(w.label) +
+        '" placeholder="name" style="flex:1 1 110px">' +
+      '<div style="display:flex;gap:5px;align-items:center;flex:0 0 auto">' +
+        (CFG.weekend ? '<span class="wklbl">M&ndash;F</span>' : "") +
+        '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="width:106px">' +
+        (CFG.weekend
+          ? '<span class="wklbl">S&ndash;S</span><input type="time" data-we="' + i + '" value="' +
+            (w.timeWe || w.time) + '" style="width:106px">'
+          : "") +
+      "</div>" +
+      '<button class="chip sm" data-wsleep="' + i + '" aria-pressed="' + (w.sleep ? "true" : "false") +
+        '" title="Ask about last night here">sleep</button>' +
+      '<button class="btn sm dang" data-windel="' + i + '"' +
+        (CFG.windows.length < 2 ? " disabled style=opacity:.4" : "") + ">&times;</button>" +
+      (n ? '<div class="wnote">' + n + " entr" + (n === 1 ? "y" : "ies") + " logged here</div>" : "") +
+      "</div>";
+  }).join("") +
+  '<div class="row" style="margin-top:10px"><button class="btn sm pri" id="winAdd">Add a check-in</button></div>' +
+  '<div class="mini" style="margin-top:7px">A check-in covers everything since the last one, so put ' +
+  'one where your day actually changes &mdash; leaving work, for instance &mdash; and the two sides ' +
+  "stop being averaged together.</div>";
   $("#napWinPick").innerHTML = CFG.windows.map(w =>
     '<button class="chip sm" data-napwin="' + w.id + '" aria-pressed="' +
     ((CFG.napWins || []).indexOf(w.id) > -1 ? "true" : "false") + '">' + esc(w.label) +
@@ -4184,7 +4242,11 @@ function applyDayCtx() {
     const cur = byDate[e.date];
     if (!cur || (e.ts || "") > cur.ts) byDate[e.date] = { ctx: e.ctx, ts: e.ts || "" };
   } });
-  ENTRIES.forEach(e => { if (!e.ctx && byDate[e.date]) e.ctx = byDate[e.date].ctx; });
+  // the last check-in of the day is the one most likely to be somewhere else,
+  // so it has to be answered rather than assumed
+  ENTRIES.forEach(e => {
+    if (!e.ctx && byDate[e.date] && e.win !== lastWinId()) e.ctx = byDate[e.date].ctx;
+  });
 }
 function mergeSpikes(remote) {
   const gone = STATE.gone || {};
@@ -5268,6 +5330,51 @@ function init() {
     Notification.requestPermission().then(() => { renderCfg(); scheduleNotifs(); }); };
 
   $("#medWinSel").onchange = () => { CFG.medWin = $("#medWinSel").value; touchCfg(); renderLog(); };
+  document.addEventListener("click", ev => {
+    const add = ev.target.closest("#winAdd");
+    if (add) {
+      const last = CFG.windows[CFG.windows.length - 1];
+      const mins = Math.min(23 * 60 + 30, minsOf(last ? last.time : "12:00") + 180);
+      CFG.windows.push({ id: "w" + Date.now().toString(36),
+        label: "New check-in", time: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60),
+        timeWe: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60), sleep: false });
+      sortWindows();
+      touchCfg().then(() => { renderCfg(); fillWinSelect(); refreshDue(); renderLog();
+        if (CFG.cloud.push) pushEnable(); });
+      return;
+    }
+    const wd = ev.target.closest("[data-windel]");
+    if (wd) {
+      const i = +wd.dataset.windel, w = CFG.windows[i];
+      if (CFG.windows.length < 2) return;
+      const n = ENTRIES.filter(e => e.win === w.id).length;
+      if (!confirm("Remove the " + w.label + " check-in?" +
+          (n ? "\n\n" + n + " entries were logged there. They stay in your data and exports, " +
+               "but won't appear as a check-in any more." : ""))) return;
+      CFG.windows.splice(i, 1);
+      sortWindows();
+      touchCfg().then(() => { renderCfg(); fillWinSelect(); refreshDue(); renderLog();
+        if (CFG.cloud.push) pushEnable(); });
+      return;
+    }
+    const ws = ev.target.closest("[data-wsleep]");
+    if (ws) {
+      const i = +ws.dataset.wsleep;
+      CFG.windows.forEach((w, j) => { w.sleep = (j === i) ? !w.sleep : false; });
+      if (!CFG.windows.some(w => w.sleep)) CFG.windows[0].sleep = true;
+      touchCfg().then(() => { renderCfg(); renderLog(); });
+      return;
+    }
+  });
+  document.addEventListener("input", ev => {
+    const i = ev.target.dataset && ev.target.dataset.wlabel;
+    if (i == null) return;
+    CFG.windows[+i].label = ev.target.value;
+    clearTimeout(window.__wlT);
+    window.__wlT = setTimeout(() => { touchCfg(); fillWinSelect();
+      if (CFG.cloud.push) pushEnable(); }, 600);
+  });
+
   $("#medAdd").onclick = () => {
     CFG.medList = (CFG.medList || []).concat([{ id: "m" + Date.now().toString(36), name: "", when: "am" }]);
     touchCfg().then(() => { renderCfg(); renderLog();
@@ -5544,7 +5651,9 @@ function init() {
     if (i != null) CFG.windows[+i].time = ev.target.value;
     else if (j != null) CFG.windows[+j].timeWe = ev.target.value;
     else return;
-    touchCfg(); fillWinSelect(); $("#eWin").value = draft.win; refreshDue(); scheduleNotifs();
+    sortWindows();
+    touchCfg(); renderCfg(); fillWinSelect(); $("#eWin").value = draft.win;
+    refreshDue(); scheduleNotifs();
     if (CFG.cloud.push) pushEnable();          // the worker needs the new schedule
   });
 
