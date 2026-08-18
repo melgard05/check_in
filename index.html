@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:50-->
+<!DOCTYPE html><!--build:51-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1129,7 +1129,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 50;
+const BUILD = 51;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2293,17 +2293,25 @@ function daily(days) {
         (e.pain.sites || []).forEach(s => row.sites.indexOf(s) < 0 && row.sites.push(s));
         (e.pain.kinds || []).forEach(s => row.kinds.indexOf(s) < 0 && row.kinds.push(s));
       }
-      if (e.meds && e.meds.taken) {
-        // a twice-daily med is two doses, so count them separately
-        const doses = [];
-        (CFG.medList || []).forEach(m => (m.whens || [m.when]).forEach(wq => {
-          if (wq !== "prn") doses.push(m.id + "@" + wq);
-        }));
-        if (doses.length) row.meds = doses.filter(k =>
-          e.meds.taken[k] || e.meds.taken[k.split("@")[0]]).length / doses.length;
-        Object.keys(e.meds.at || {}).forEach(k => { if (e.meds.at[k]) row.medAt[k] = e.meds.at[k]; });
-        Object.keys(e.meds.prn || {}).forEach(k => { row.prn += +e.meds.prn[k] || 0; });
-      } });
+      if (e.meds && e.meds.at) Object.keys(e.meds.at).forEach(k => {
+        if (e.meds.at[k]) row.medAt[k] = e.meds.at[k]; });
+      if (e.meds && e.meds.prn) Object.keys(e.meds.prn).forEach(k => {
+        row.prn += +e.meds.prn[k] || 0; });
+    });
+
+    // A dose ticked at any check-in counts for the day. Working this out one
+    // entry at a time meant the last one processed won, so an untouched midday
+    // check-in wiped a morning that had been fully ticked.
+    const takenToday = {};
+    es.forEach(e => { if (e.meds && e.meds.taken)
+      Object.keys(e.meds.taken).forEach(k => { if (e.meds.taken[k]) takenToday[k] = true; }); });
+    const doses = [];
+    (CFG.medList || []).forEach(m => {
+      if (!(m.name || "").trim()) return;              // a blank row is not a dose
+      (m.whens || [m.when]).forEach(wq => { if (wq !== "prn") doses.push(m.id + "@" + wq); });
+    });
+    if (doses.length && es.some(e => e.meds && e.meds.taken))
+      row.meds = doses.filter(k => takenToday[k] || takenToday[k.split("@")[0]]).length / doses.length;
     row.spikes = (STATE.spikes || []).filter(x => x.date === date);
     row.day = dayLength(date, CFG.lat);
     return row;
@@ -3263,10 +3271,31 @@ function renderFlags(rows) {
   const mx = last(7).filter(r => r.v.mood != null && r.v.irrit != null && r.v.mood <= 4 && r.v.irrit >= 7).length;
   if (mx >= 2) out.push(["hi", "Low mood with high irritability",
     mx + " days in the last week. Mixed states are easy to miss and worth naming to your prescriber specifically."]);
-  // med gaps
-  const mg = last(7).filter(r => r.meds != null && r.meds < 1).length;
-  if (mg >= 3) out.push(["", "Doses missed on " + mg + " of the last 7 days",
-    "Adherence gaps make everything else on these charts harder to read."]);
+  // med gaps — only count a day where a real share of doses went unticked,
+  // and name which one, since "you missed something" isn't actionable
+  const medDays = last(7).filter(r => r.meds != null);
+  const mg = medDays.filter(r => r.meds < 0.75).length;
+  if (mg >= 3) {
+    const sched = (CFG.medList || []).filter(m => (m.name || "").trim() &&
+      (m.whens || [m.when]).some(x => x !== "prn"));
+    const miss = {};
+    rows.slice(-7).forEach(r => {
+      const es = ENTRIES.filter(e => e.date === r.date);
+      if (!es.some(e => e.meds && e.meds.taken)) return;
+      const tk = {};
+      es.forEach(e => Object.keys((e.meds || {}).taken || {}).forEach(k => { tk[k] = true; }));
+      sched.forEach(m => (m.whens || [m.when]).forEach(wq => {
+        if (wq === "prn") return;
+        if (!tk[m.id + "@" + wq] && !tk[m.id])
+          miss[m.name + " (" + (wq === "am" ? "morning" : "evening") + ")"] =
+            (miss[m.name + " (" + (wq === "am" ? "morning" : "evening") + ")"] || 0) + 1;
+      }));
+    });
+    const worst = Object.keys(miss).sort((a, c) => miss[c] - miss[a]).slice(0, 3);
+    out.push(["", "Doses unticked on " + mg + " of the last " + medDays.length + " days",
+      (worst.length ? "Most often " + worst.map(x => x.toLowerCase() + " (" + miss[x] + "\u00d7)").join(", ") + ". " : "") +
+      "This counts what was ticked, so an untaken dose and an unticked one look the same here."]);
+  }
   // bedtime drift
   const beds = rows.slice(-10).filter(r => r.sleep && r.sleep.bed).map(r => {
     const m = minsOf(r.sleep.bed); return m > 720 ? m - 1440 : m; });
