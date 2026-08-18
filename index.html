@@ -137,21 +137,6 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .medrow input{flex:1}
 .medrow .seg{flex:0 0 auto}
 .medrow .seg button{padding:6px 9px;font-size:11px}
-/* ---------- missed-dose log ---------- */
-.missday{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
-.missday:last-child{border-bottom:0}
-.missdate{flex:0 0 86px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);
-  padding-top:6px;line-height:1.35;letter-spacing:.04em}
-.missdate b{display:block;font-size:12.5px;color:var(--ink-2);font-weight:600;letter-spacing:0}
-.missdoses{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
-.chip.dose{padding:5px 11px;font-size:12.5px}
-.chip.dose[aria-pressed="false"]{background:#1b1211;border-color:#4a2724;color:#e0857a}
-.chip.dose[aria-pressed="true"]{background:#16241f;border-color:var(--base);color:#84c2a1}
-.chip.dose small{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
-  opacity:.7;margin-left:6px}
-.missall{margin-left:auto;flex:0 0 auto;padding:5px 11px;font-size:12px}
-.missgap{font-size:11.5px;color:var(--ink-3);font-family:var(--mono);padding:7px 0 7px 96px;
-  border-bottom:1px solid var(--line)}
 .painsum{font-family:var(--mono);font-size:12px;color:var(--ink-2);padding:9px 11px;background:var(--panel-2);
   border:1px solid var(--line);border-radius:8px;margin-top:11px;line-height:1.55}
 .painsum b{color:var(--accent);font-weight:600}
@@ -688,36 +673,8 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <p class="sub">Things to mention at your next appointment. Not conclusions.</p>
       <div id="flags"></div>
     </div>
+  </section>
 
-    <div class="card" id="missCard">
-      <h2>Missed doses</h2>
-      <p class="sub">Every scheduled dose on a day you checked in that isn't ticked. Tap one to mark it
-        taken. Mostly useful after adding a medication you'd already been on for a while &mdash; the whole
-        stretch before you listed it reads as missed until you fill it back in. This writes to your
-        saved check-ins.</p>
-      <div id="missCtl">
-        <div class="row" style="gap:8px;margin-bottom:10px">
-          <div class="seg" id="missRangeSeg" style="flex:1 1 200px;align-self:end;margin-bottom:1px">
-            <button data-mrange="30" aria-pressed="false">30 days</button>
-            <button data-mrange="90" aria-pressed="false">90 days</button>
-            <button data-mrange="0" aria-pressed="true">All of it</button>
-          </div>
-          <label class="fld" style="flex:1 1 150px"><span>Medication</span>
-            <select id="missMedSel"></select></label>
-          <label class="fld" style="flex:0 1 140px"><span>Order</span>
-            <select id="missOrderSel">
-              <option value="old">Oldest first</option>
-              <option value="new">Newest first</option>
-            </select></label>
-        </div>
-        <div id="missSum" class="statnote"></div>
-        <div class="row" id="missActs" style="margin:11px 0 4px;gap:8px">
-          <button class="btn sm" id="missFill">Mark everything shown as taken</button>
-          <button class="btn sm gho" id="missShowAll" aria-pressed="false">Show ticked ones too</button>
-        </div>
-      </div>
-      <div id="missList"></div>
-    </div>
 
     <button class="btn full" id="deepTog" aria-expanded="false"
       style="margin-top:4px">Show the working out</button>
@@ -1195,7 +1152,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 54;
+const BUILD = 53;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2867,176 +2824,7 @@ function corrRow(label, r, n, note, p, cut) {
       (p != null ? " · p " + (p < 0.001 ? "< 0.001" : "= " + p.toFixed(3)) : "") +
       (note ? " · " + esc(note) : "") + "</div></div>";
 }
-/* ============================================================
-   Missed-dose log
-   Adherence is worked out against the medication list as it
-   stands today, so a drug added on Tuesday makes every earlier
-   day look like a missed dose. This lists what's unticked and
-   lets it be corrected in place, one dose, one day, or the lot.
-   ============================================================ */
-let missRange = 0;        // 0 = everything, otherwise days back
-let missMed = "";         // "" = all, otherwise a medList id
-let missOrder = "old";
-let missAll = false;      // show doses already ticked as well
-
-// every scheduled (non as-needed) dose currently on the list
-function doseDefs() {
-  const out = [];
-  (CFG.medList || []).forEach(m => {
-    const nm = (m.name || "").trim();
-    if (!nm) return;                                   // a blank row is not a dose
-    (m.whens || [m.when]).forEach(w => {
-      if (w !== "am" && w !== "pm") return;            // as-needed is a count, not a tick
-      const key = m.id + "@" + w;
-      if (out.some(d => d.key === key)) return;
-      out.push({ key, id: m.id, when: w, name: nm, label: w === "am" ? "morning" : "evening" });
-    });
-  });
-  return out;
-}
-// a dose ticked at any check-in counts for the whole day, same as the adherence figure
-function takenOn(date) {
-  const t = {};
-  ENTRIES.forEach(e => {
-    if (e.date !== date || !e.meds || !e.meds.taken) return;
-    Object.keys(e.meds.taken).forEach(k => { if (e.meds.taken[k]) t[k] = true; });
-  });
-  return t;
-}
-const doseOn = (t, d) => !!(t[d.key] || t[d.id]);      // a bare id is an old-format tick
-const missMeds = () => {
-  const seen = [];
-  doseDefs().forEach(d => { if (!seen.some(x => x.id === d.id)) seen.push({ id: d.id, name: d.name }); });
-  return seen;
-};
-function missedRows() {
-  const defs = doseDefs();
-  if (!defs.length) return [];
-  const wanted = missMed ? defs.filter(d => d.id === missMed) : defs;
-  if (!wanted.length) return [];
-  const dates = {};
-  ENTRIES.forEach(e => { if (e.date) dates[e.date] = 1; });
-  let keys = Object.keys(dates).sort();
-  if (missRange > 0) {
-    const s = new Date(); s.setDate(s.getDate() - (missRange - 1));
-    const from = todayISO(s);
-    keys = keys.filter(d => d >= from);
-  }
-  const out = [];
-  keys.forEach(date => {
-    const t = takenOn(date);
-    const doses = wanted.map(d => Object.assign({}, d, { on: doseOn(t, d) }));
-    const missing = doses.filter(d => !d.on).length;
-    out.push({ date, doses, missing });
-  });
-  return out;
-}
-const winRank = id => { const i = CFG.windows.findIndex(w => w.id === id); return i < 0 ? 99 : i; };
-/* Ticks a dose on a past day. Returns true if anything actually moved.
-   Only touches days that already have a check-in — inventing an entry for a
-   day you never logged would put a mood-less record into every other stat. */
-function setDose(date, key, on) {
-  const es = ENTRIES.filter(e => e.date === date).sort((a, b) => winRank(a.win) - winRank(b.win));
-  if (!es.length) return false;
-  const bare = key.split("@")[0], when = key.split("@")[1];
-  const mark = e => { e.ts = new Date().toISOString();
-    STATE.dirty = STATE.dirty || {}; STATE.dirty[e.date + "_" + e.win] = 1; };
-  let moved = false;
-  if (!on) {
-    es.forEach(e => {
-      if (!e.meds || !e.meds.taken) return;
-      let hit = false;
-      if (e.meds.taken[key])  { delete e.meds.taken[key];  hit = true; }
-      if (e.meds.taken[bare]) { delete e.meds.taken[bare]; hit = true; }   // clear the old format too
-      if (hit) { mark(e); moved = true; }
-    });
-    return moved;
-  }
-  // land the tick on the check-in the dose belongs to, so it reads right if the day is edited
-  const target = when === "pm" ? es[es.length - 1] : es[0];
-  if (!target.meds || typeof target.meds !== "object" || Array.isArray(target.meds))
-    target.meds = { taken: {}, at: {}, prn: {} };
-  if (!target.meds.taken || typeof target.meds.taken !== "object") target.meds.taken = {};
-  if (target.meds.taken[key]) return false;
-  target.meds.taken[key] = true;
-  mark(target);
-  // the log tab holds a copy of the open check-in; keep it in step or saving would undo this
-  if (draft && draft.date === target.date && draft.win === target.win) {
-    if (!draft.meds || typeof draft.meds !== "object") draft.meds = { taken: {}, at: {}, prn: {} };
-    if (!draft.meds.taken) draft.meds.taken = {};
-    draft.meds.taken[key] = true;
-    try { renderLog(); } catch (er) {}
-  }
-  return true;
-}
-function persistMed(msg) {
-  saveEnt();
-  saveState().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
-  renderMissed();
-  if (msg) toast(msg);
-}
-function renderMissed() {
-  if (!$("#missCard")) return;
-  const defs = doseDefs();
-  const meds = missMeds();
-  if (!defs.length) {
-    $("#missCtl").style.display = "none";
-    $("#missList").innerHTML = '<div class="mini">No scheduled medications listed yet. ' +
-      "Add them under Data &rarr; Medication list and this fills in.</div>";
-    return;
-  }
-  $("#missCtl").style.display = "";
-
-  if (!meds.some(m => m.id === missMed)) missMed = "";
-  const sel = $("#missMedSel");
-  sel.innerHTML = '<option value="">All medications</option>' +
-    meds.map(m => '<option value="' + esc(m.id) + '"' + (missMed === m.id ? " selected" : "") +
-      ">" + esc(m.name) + "</option>").join("");
-  $("#missOrderSel").value = missOrder;
-  $$("#missRangeSeg button").forEach(b =>
-    b.setAttribute("aria-pressed", +b.dataset.mrange === missRange ? "true" : "false"));
-  $("#missShowAll").setAttribute("aria-pressed", missAll ? "true" : "false");
-  $("#missShowAll").textContent = missAll ? "Only show what's missing" : "Show ticked ones too";
-
-  const all = missedRows();
-  const slots = all.reduce((a, r) => a + r.doses.length, 0);
-  const gone = all.reduce((a, r) => a + r.missing, 0);
-  const badDays = all.filter(r => r.missing).length;
-  const first = all.find(r => r.missing);
-  $("#missSum").innerHTML = !all.length
-    ? "No check-ins in this stretch."
-    : !gone
-      ? "Every scheduled dose is ticked across <b>" + all.length + "</b> logged " +
-        (all.length === 1 ? "day" : "days") + ". Nothing to fix."
-      : "<b>" + gone + "</b> of <b>" + slots + "</b> scheduled doses unticked, across <b>" + badDays +
-        "</b> " + (badDays === 1 ? "day" : "days") + ". Earliest is <b>" + fmtDate(first.date) +
-        "</b>. Unticked doses pull your adherence figure down, so it's worth clearing the ones you " +
-        "did actually take.";
-
-  $("#missFill").style.display = gone ? "" : "none";
-  const rows = (missAll ? all : all.filter(r => r.missing));
-  const ordered = missOrder === "new" ? rows.slice().reverse() : rows;
-  const CAP = 400;
-  $("#missList").innerHTML = !ordered.length
-    ? '<div class="mini">Nothing missing here.</div>'
-    : ordered.slice(0, CAP).map(r => {
-        const shown = missAll ? r.doses : r.doses.filter(d => !d.on);
-        return '<div class="missday"><div class="missdate"><b>' + fmtDate(r.date) + "</b>" +
-          DAYS[dowOf(r.date)] + " " + r.date.slice(0, 4) + "</div>" +
-          '<div class="missdoses">' +
-            shown.map(d => '<button class="chip dose" data-mfix="' + r.date + "|" + esc(d.key) +
-              '" aria-pressed="' + (d.on ? "true" : "false") + '">' + esc(d.name) +
-              "<small>" + d.label + "</small></button>").join("") +
-            (r.missing > 1 ? '<button class="btn sm missall" data-mday="' + r.date +
-              '">Tick all ' + r.missing + "</button>" : "") +
-          "</div></div>";
-      }).join("") +
-      (ordered.length > CAP ? '<div class="missgap">' + (ordered.length - CAP) +
-        " more days not shown — narrow the range or fix these first.</div>" : "");
-}
-
 function renderPatterns() {
-  renderMissed();
   const rows = daily(0);
   const MIN = 8;
   // same day vs mood
@@ -5685,25 +5473,6 @@ function init() {
       renderLog();
       return;
     }
-    // ---- missed-dose log ----
-    const mf = ev.target.closest("[data-mfix]");
-    if (mf) {
-      const p = mf.dataset.mfix.split("|");
-      const on = mf.getAttribute("aria-pressed") === "true";
-      if (setDose(p[0], p[1], !on)) persistMed(on ? "Cleared" : "Marked taken");
-      return;
-    }
-    const mdy = ev.target.closest("[data-mday]");
-    if (mdy) {
-      const date = mdy.dataset.mday, t = takenOn(date);
-      let n = 0;
-      doseDefs().filter(d => !missMed || d.id === missMed)
-        .forEach(d => { if (!doseOn(t, d) && setDose(date, d.key, true)) n++; });
-      if (n) persistMed(n + " marked taken on " + fmtDate(date));
-      return;
-    }
-    const mrg = ev.target.closest("[data-mrange]");
-    if (mrg) { missRange = +mrg.dataset.mrange; renderMissed(); return; }
     const pg = ev.target.closest("[data-png]");
     if (pg) { downloadPNG(pg.dataset.png, pg.dataset.nm); return; }
     const sv = ev.target.closest("[data-svg]");
@@ -6035,22 +5804,6 @@ function init() {
     clearTimeout(window.__medT);
     window.__medT = setTimeout(() => { touchCfg(); renderLog(); }, 500);
   });
-  $("#missMedSel").onchange   = () => { missMed = $("#missMedSel").value; renderMissed(); };
-  $("#missOrderSel").onchange = () => { missOrder = $("#missOrderSel").value; renderMissed(); };
-  $("#missShowAll").onclick   = () => { missAll = !missAll; renderMissed(); };
-  $("#missFill").onclick = () => {
-    const rows = missedRows().filter(r => r.missing);
-    const gone = rows.reduce((a, r) => a + r.missing, 0);
-    if (!gone) { toast("Nothing missing to fill in"); return; }
-    const who = missMed ? (missMeds().find(m => m.id === missMed) || {}).name : "every medication";
-    if (!confirm("Mark " + gone + " unticked " + (gone === 1 ? "dose" : "doses") + " for " + who +
-        " as taken, across " + rows.length + " " + (rows.length === 1 ? "day" : "days") +
-        " from " + fmtDate(rows[0].date) + " onward?\n\nThis edits saved check-ins. " +
-        "Only do it for a stretch you know you were actually taking them.")) return;
-    let n = 0;
-    rows.forEach(r => r.doses.forEach(d => { if (!d.on && setDose(r.date, d.key, true)) n++; }));
-    persistMed(n + " " + (n === 1 ? "dose" : "doses") + " marked taken");
-  };
   $("#medChange").onclick = () => {
     if (draft.tags.indexOf("Med change") < 0) draft.tags.push("Med change");
     renderLog(); show("log"); toast("Tagged — save the check-in to record it"); };
