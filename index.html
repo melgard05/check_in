@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:49-->
+<!DOCTYPE html><!--build:50-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -648,6 +648,20 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div id="plain"></div>
     </div>
     <div class="card">
+      <h2>Worth raising</h2>
+      <p class="sub">Things to mention at your next appointment. Not conclusions.</p>
+      <div id="flags"></div>
+    </div>
+  </section>
+
+
+    <button class="btn full" id="deepTog" aria-expanded="false"
+      style="margin-top:4px">Show the working out</button>
+    <div class="mini" style="text-align:center;margin-top:7px" id="deepHint">
+      Correlations, coverage, cycle phase, and the rest. Nothing here needs reading to use the app.</div>
+
+    <div id="deepWrap" style="display:none;margin-top:14px">
+    <div class="card">
       <h2>Your week</h2>
       <p class="sub">The last seven days against the seven before.</p>
       <div id="digest"></div>
@@ -703,12 +717,6 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <p class="sub">Everything the app has flagged, kept even after you clear the banner.
         Useful when an appointment asks "how long has this been going on".</p>
       <div id="flagHistory"></div>
-    </div>
-    <div class="card">
-      <h2>Worth raising</h2>
-      <p class="sub">Simple threshold checks over recent entries. These are prompts for a conversation
-        with your prescriber, not conclusions.</p>
-      <div id="flags"></div>
     </div>
   </section>
 
@@ -1121,7 +1129,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 49;
+const BUILD = 50;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2960,9 +2968,16 @@ function renderPlain(rows) {
     t: "You logged " + Math.round(cov.pct * 100) + "% of this week's check-ins" +
       (cov.pct < 0.5 ? ", so treat the above loosely" : "") + "." });
 
-  el.innerHTML = lines.map(l =>
+  // anything flagged comes first, then at most three more lines. A summary you
+  // scroll is not a summary.
+  const ordered = lines.filter(l => l.tone === "bad" || l.tone === "warn")
+    .concat(lines.filter(l => !l.tone));
+  el.innerHTML = ordered.slice(0, 4).map(l =>
     '<div class="plainline' + (l.tone ? " " + l.tone : "") + '"><i>' + l.icon + "</i><span>" +
-    esc(l.t) + "</span></div>").join("");
+    esc(l.t) + "</span></div>").join("") +
+    (ordered.length > 4
+      ? '<div class="mini" style="margin-top:9px">' + (ordered.length - 4) +
+        " more below, if you want it.</div>" : "");
 }
 
 function renderFlagHistory() {
@@ -3183,6 +3198,7 @@ function renderWorkSplit(rows) {
     "Green means the better direction for that row. Differences under 0.3 are noise.</div>";
 }
 let latestFlags = [];
+let flagsAll = false;
 
 /* Keep a record of everything raised, so clearing a banner doesn't erase the
    fact that it happened. This is the part a prescriber may want to see. */
@@ -3528,8 +3544,12 @@ function renderFlags(rows) {
 
   latestFlags = out.slice();
   recordFlags(out);
+  const shown = out.slice(0, flagsAll ? out.length : 3);
   $("#flags").innerHTML = out.length
-    ? out.map(f => '<div class="flag ' + f[0] + '"><b>' + esc(f[1]) + "</b><span>" + esc(f[2]) + "</span></div>").join("") +
+    ? shown.map(f => '<div class="flag ' + f[0] + '"><b>' + esc(f[1]) + "</b><span>" + esc(f[2]) + "</span></div>").join("") +
+      (out.length > 3 && !flagsAll
+        ? '<button class="btn sm gho full" id="flagsMore" style="margin-top:8px">Show ' +
+          (out.length - 3) + " more</button>" : "") +
       '<div class="mini">Threshold checks, not a diagnosis. Screenshot this before an appointment.</div>'
     : (rows.filter(r => r.n).length < 5
       ? '<div class="empty"><b>Nothing to check yet</b>These start after about a week of entries.</div>'
@@ -5014,6 +5034,7 @@ function init() {
       if (open) { const ta = wrap.querySelector("textarea"); if (ta) ta.focus(); }
       return;
     }
+    if (ev.target.closest("#flagsMore")) { flagsAll = true; renderFlags(daily(0)); return; }
     const pd = ev.target.closest("[data-pnotedel]");
     if (pd) {
       CFG.plan.notes.splice(+pd.dataset.pnotedel, 1);
@@ -5176,7 +5197,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,[data-medask],[data-spitem],[data-pnotedel],[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,#flagsMore,[data-medask],[data-spitem],[data-pnotedel],[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
@@ -5587,6 +5608,14 @@ function init() {
   };
   $("#connHide").onclick = () => { $("#connBar").classList.remove("on");
     STATE.connHidden = todayISO(); saveState(); };
+  $("#deepTog").onclick = () => {
+    const wrap = $("#deepWrap"), btn = $("#deepTog");
+    const open = wrap.style.display === "none";
+    wrap.style.display = open ? "" : "none";
+    btn.textContent = open ? "Hide the working out" : "Show the working out";
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    $("#deepHint").style.display = open ? "none" : "";
+  };
   $("#flagClear").onclick = () => clearFlagBanner(false);
   $("#flagMore").onclick = () => { clearFlagBanner(true); show("pat");
     setTimeout(() => { const c = $("#flags"); if (c) c.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60); };
