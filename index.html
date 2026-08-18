@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:47-->
+<!DOCTYPE html><!--build:48-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -62,6 +62,12 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .connbar .btn{padding:5px 11px;font-size:12.5px}
 .planbar span{flex:1;color:var(--ink)}
 .planbar .btn{padding:5px 11px;font-size:12.5px}
+.flagbar{display:none;align-items:flex-start;gap:10px;margin-top:9px;padding:10px 12px;border-radius:8px;
+  background:#221a10;border:1px solid var(--warn);font-size:13px;line-height:1.45}
+.flagbar.on{display:flex}
+.flagbar b{color:var(--warn);display:block;font-size:13.5px}
+.flagbar .fbody{color:var(--ink-2);font-size:12.5px;margin-top:2px}
+.flagbar .btn{padding:5px 10px;font-size:12px;flex:0 0 auto}
 .spikebtn{margin-top:4px;background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
 .spikebtn:hover{background:#332618}
 .updbar span{flex:1;color:var(--ink)}
@@ -303,6 +309,14 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 .tagmeh{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink-3);border:1px solid var(--line-2);border-radius:99px;padding:1px 6px;margin-left:6px;
   vertical-align:middle}
+.plainline{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);
+  font-size:14.5px;line-height:1.45}
+.plainline:last-child{border-bottom:0}
+.plainline i{font-style:normal;color:var(--ink-3);flex:0 0 16px;text-align:center;font-size:13px;padding-top:2px}
+.plainline.warn i{color:var(--warn)}
+.plainline.bad i{color:var(--bad)}
+.plainline.warn span{color:var(--ink)}
+.plainline.bad span{color:var(--ink)}
 .statnote{font-size:12px;color:var(--ink-3);background:var(--panel-2);border:1px solid var(--line);
   border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.5}
 .flag{border-left:3px solid var(--warn);background:#1b1710;padding:11px 13px;border-radius:0 8px 8px 0;
@@ -362,6 +376,14 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     <span id="connTxt"></span>
     <button class="btn sm pri" id="connGo">Fix it</button>
     <button class="btn sm gho" id="connHide">Later</button>
+  </div>
+  <div class="flagbar" id="flagBar">
+    <div style="flex:1">
+      <b id="flagTitle"></b>
+      <div id="flagBody" class="fbody"></div>
+    </div>
+    <button class="btn sm" id="flagMore">Details</button>
+    <button class="btn sm gho" id="flagClear" aria-label="Clear">&times;</button>
   </div>
   <div class="planbar" id="planBar">
     <span id="planBarTxt">It's been a rough stretch. You wrote some things down for a moment like this.</span>
@@ -617,6 +639,11 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
   <!-- ============ PATTERNS ============ -->
   <section class="view" id="v-pat">
+    <div class="card" id="plainCard">
+      <h2>In plain terms</h2>
+      <p class="sub">The short version. Everything below is the working out.</p>
+      <div id="plain"></div>
+    </div>
     <div class="card">
       <h2>Your week</h2>
       <p class="sub">The last seven days against the seven before.</p>
@@ -666,6 +693,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <p class="sub">Anything that never moves costs you time three times a day and tells you nothing.
         Turn it off here and the entries you've already logged are kept.</p>
       <div id="itemAudit"></div>
+    </div>
+    <div class="card">
+      <h2>Raised before</h2>
+      <p class="sub">Everything the app has flagged, kept even after you clear the banner.
+        Useful when an appointment asks "how long has this been going on".</p>
+      <div id="flagHistory"></div>
     </div>
     <div class="card">
       <h2>Worth raising</h2>
@@ -1084,7 +1117,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 47;
+const BUILD = 48;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1098,6 +1131,7 @@ const DEFAULT_CFG = {
   cycle: false,               // track cycle day
   sched: {},                  // per-item overrides: { key: { wins:[], days:[] } }
   quick: true,                // short check-in by default, everything else behind a tap
+  goodRight: true,            // symptom sliders run severe-left to none-right
   spikeItems: ["anxiety", "irrit", "manic"],
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
@@ -1122,7 +1156,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1258,6 +1292,7 @@ async function load() {
   if (!Array.isArray(CFG.quickItems) || !CFG.quickItems.length)
     CFG.quickItems = ["mood", "irrit", "energy", "anxiety", "fog"];
   if (!CFG.sched || typeof CFG.sched !== "object") CFG.sched = {};
+  if (typeof CFG.goodRight !== "boolean") CFG.goodRight = true;
   if (!Array.isArray(CFG.spikeItems) || !CFG.spikeItems.length)
     CFG.spikeItems = ["anxiety", "irrit", "manic"];
   if (typeof CFG.cfgAt !== "number") CFG.cfgAt = 0;
@@ -1296,6 +1331,8 @@ async function load() {
   if (!Array.isArray(STATE.spikes)) STATE.spikes = [];
   // ids of things deliberately removed, so a sync can't resurrect them
   if (!STATE.gone || typeof STATE.gone !== "object") STATE.gone = {};
+  if (!Array.isArray(STATE.flagLog)) STATE.flagLog = [];      // what was raised, and when
+  if (!STATE.flagSeen || typeof STATE.flagSeen !== "object") STATE.flagSeen = {};
   // forget tombstones after a month; by then every device has caught up
   const cutoff = Date.now() - 30 * 86400000;
   Object.keys(STATE.gone).forEach(k => { if ((STATE.gone[k] || 0) < cutoff) delete STATE.gone[k]; });
@@ -1379,6 +1416,12 @@ function setDraft(date, winId) {
    SLIDERS — fill outward from the baseline notch
    ============================================================ */
 const BASEPCT = ((5 - 1) / 9) * 100;
+/* Low-anchored items measure a symptom: 1 is none, 10 is bad. Those are the
+   ones worth reversing, so "further right" always means "better". Centred
+   items have a bad end on both sides, so reversing them would mean nothing. */
+const isRev = it => !!(CFG.goodRight && it && it.anchor === "low");
+const pctOf = (it, v) => isRev(it) ? ((10 - v) / 9) * 100 : ((v - 1) / 9) * 100;
+const valAtPct = (it, p) => isRev(it) ? Math.round(10 - p * 9) : Math.round(1 + p * 9);
 const noteOpen = {};                       // which note boxes are expanded
 let showAll = false;                       // "add detail" expansion, per draft
 
@@ -1393,15 +1436,19 @@ function lcol(v) {
 const icol = (it, v) => it.anchor === "low" ? lcol(v) : vcol(v);
 
 function fillGeom(it, val) {
-  const pct = ((val - 1) / 9) * 100;
-  if (it.anchor === "low") return { left: 0, width: pct, dot: pct < 1 };
+  const pct = pctOf(it, val);
+  if (it.anchor === "low") {
+    // fill from whichever end represents "none"
+    return isRev(it) ? { left: pct, width: 100 - pct, dot: pct > 99 }
+                     : { left: 0, width: pct, dot: pct < 1 };
+  }
   if (val === 5) return { left: BASEPCT, width: 0, dot: true };
   return { left: Math.min(pct, BASEPCT), width: Math.abs(pct - BASEPCT), dot: false };
 }
 
 function sliderHTML(it, val, note) {
   const has = val != null;
-  const pct = has ? ((val - 1) / 9) * 100 : (it.anchor === "low" ? 0 : BASEPCT);
+  const pct = has ? pctOf(it, val) : (it.anchor === "low" ? (isRev(it) ? 100 : 0) : BASEPCT);
   const col = icol(it, val);
   let fill = "";
   if (has) {
@@ -1413,7 +1460,7 @@ function sliderHTML(it, val, note) {
   let ticks = "";
   for (let i = 1; i <= 10; i++)
     ticks += '<i class="' + (i === 5 && it.anchor !== "low" ? "mid" : "") +
-      '" style="left:' + (((i - 1) / 9) * 100) + '%"></i>';
+      '" style="left:' + pctOf(it, i) + '%"></i>';
 
   const hasNote = !!(note && note.trim());
   const open = noteOpen[it.key] || hasNote;
@@ -1423,7 +1470,9 @@ function sliderHTML(it, val, note) {
     '<div class="ihead"><span class="ilabel">' + esc(it.label) + words + "</span>" +
       '<span class="ival' + (has ? "" : " unset") + '" style="' + (has ? "color:" + col : "") + '">' +
         (has ? val : "–") + "</span></div>" +
-    '<div class="iends"><span>1 · ' + esc(it.low) + "</span><span>" + esc(it.high) + " · 10</span></div>" +
+    '<div class="iends">' + (isRev(it)
+      ? "<span>" + esc(it.high) + " · 10</span><span>1 · " + esc(it.low) + "</span>"
+      : "<span>1 · " + esc(it.low) + "</span><span>" + esc(it.high) + " · 10</span>") + "</div>" +
     '<div class="track' + (has ? "" : " unset") + '" role="slider" tabindex="0" aria-label="' + esc(it.label) +
       '" aria-valuemin="1" aria-valuemax="10" aria-valuenow="' + (has ? val : 5) + '">' +
       '<div class="rail">' + fill + "</div>" +
@@ -1452,17 +1501,17 @@ function notePlaceholder(it) {
   return "What's actually going on with this one.";
 }
 
-function valFromX(track, clientX) {
+function valFromX(track, clientX, it) {
   const r = track.getBoundingClientRect();
   const p = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
-  return Math.round(1 + p * 9);
+  return valAtPct(it, p);
 }
 
 /* update in place — never re-render the item, or an open note box loses focus */
 function applyVal(item, v) {
   const key = item.dataset.k, it = ITEM[key];
   draft.v[key] = v;
-  const col = icol(it, v), pct = ((v - 1) / 9) * 100;
+  const col = icol(it, v), pct = pctOf(it, v);
   const track = item.querySelector(".track"), rail = item.querySelector(".rail");
   const knob = item.querySelector(".knob"), ival = item.querySelector(".ival");
 
@@ -1505,7 +1554,7 @@ function bindSliders(root) {
     if (mouse) {
       ev.preventDefault();
       dragging = true;
-      cur = valFromX(track, sx);
+      cur = valFromX(track, sx, ITEM[key]);
       applyVal(item, cur);
       try { track.setPointerCapture(ev.pointerId); } catch (e) {}
     }
@@ -1527,12 +1576,12 @@ function bindSliders(root) {
         try { track.setPointerCapture(e2.pointerId); } catch (e) {}
       }
       e2.preventDefault();
-      const nv = valFromX(track, e2.clientX);
+      const nv = valFromX(track, e2.clientX, ITEM[key]);
       if (nv !== cur) { cur = nv; applyVal(item, nv); }
     }
     function up(e2) {
       // never moved: it was a tap, so set the value where they touched
-      if (!dragging) applyVal(item, valFromX(track, e2.clientX));
+      if (!dragging) applyVal(item, valFromX(track, e2.clientX, ITEM[key]));
       cleanup();
     }
     function cancel() { cleanup(); }   // the browser claimed the gesture for scrolling
@@ -1545,9 +1594,12 @@ function bindSliders(root) {
     const track = ev.target.closest(".track"); if (!track) return;
     const item = track.closest(".item"), k = item.dataset.k;
     let v = draft.v[k] == null ? 5 : draft.v[k];
-    if (ev.key === "ArrowLeft" || ev.key === "ArrowDown") v = Math.max(1, v - 1);
-    else if (ev.key === "ArrowRight" || ev.key === "ArrowUp") v = Math.min(10, v + 1);
-    else if (ev.key === "Home") v = 1; else if (ev.key === "End") v = 10;
+    const rev = isRev(ITEM[k]);
+    const step = d => { v = Math.max(1, Math.min(10, v + (rev ? -d : d))); };
+    if (ev.key === "ArrowLeft" || ev.key === "ArrowDown") step(-1);
+    else if (ev.key === "ArrowRight" || ev.key === "ArrowUp") step(1);
+    else if (ev.key === "Home") v = rev ? 10 : 1;
+    else if (ev.key === "End") v = rev ? 1 : 10;
     else return;
     ev.preventDefault(); applyVal(item, v);
     const t2 = root.querySelector('.item[data-k="' + k + '"] .track'); if (t2) t2.focus();
@@ -2781,7 +2833,9 @@ function renderPatterns() {
       '<div class="mini">Only tags used on 3+ days appear. Small samples swing wildly.</div>'
     : '<div class="empty"><b>No tags used enough yet</b>Tag what happened on each check-in — ' +
       'this table is where the trigger hunting actually pays off.</div>';
+  renderPlain(rows);
   renderCoverAudit();
+  renderFlagHistory();
   renderItemAudit(rows);
   renderDigest(rows);
   renderCycle(rows);
@@ -2824,6 +2878,92 @@ function digestText() {
   if (topW.length) lines.push("Warning signs: " + topW.map(t => t.toLowerCase() + " ×" + wn[t]).join(", ") + ".");
   return { lines, nThis, logged: logged.length };
 }
+/* One screen, short sentences, conclusions first. The tables below are for
+   when you want to check the working; this is for when you don't. */
+function renderPlain(rows) {
+  const el = $("#plain"); if (!el) return;
+  const logged = rows.filter(r => r.n);
+  if (logged.length < 5) {
+    el.innerHTML = '<div class="empty"><b>Give it a week</b>Five days of check-ins and this starts ' +
+      "saying something useful.</div>";
+    return;
+  }
+  const lines = [];
+  const wk = rows.slice(-7).filter(r => r.n), pv = rows.slice(-14, -7).filter(r => r.n);
+  const mean = (set, k) => { const v = set.map(r => k === "sleep" ? (r.sleep ? r.sleep.hours : null)
+      : r.v[k]).filter(x => x != null);
+    return v.length ? v.reduce((a, c) => a + c, 0) / v.length : null; };
+
+  // how the week went
+  const m = mean(wk, "mood"), mp = mean(pv, "mood");
+  if (m != null) {
+    const d = mp == null ? 0 : m - mp;
+    lines.push({ icon: "\u25CF", t: "Mood averaged " + m.toFixed(1) + " this week" +
+      (Math.abs(d) >= 0.5 ? ", " + (d > 0 ? "up" : "down") + " " + Math.abs(d).toFixed(1) +
+        " on last week" : ", about the same as last week") + ".",
+      tone: m < 4 ? "bad" : m > 7 ? "warn" : "" });
+  }
+  // sleep, the thing most worth acting on
+  const sl = mean(wk, "sleep");
+  if (sl != null) {
+    const short = wk.filter(r => r.sleep && r.sleep.hours < 6).length;
+    lines.push({ icon: "\u25D0", t: "Slept " + sl.toFixed(1) + "h a night on average" +
+      (short ? ", with " + short + " night" + (short > 1 ? "s" : "") + " under six" : "") + ".",
+      tone: sl < 6 ? "bad" : "" });
+  }
+  // the single strongest link, stated as a sentence
+  const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key)
+    .concat(["sleep", "nap", "total", "medoff", "day"]);
+  let best = null;
+  cands.forEach(k => {
+    const pr = pair(rows, k, "mood", 0);
+    if (pr.r == null || pr.n < 8) return;
+    const pv2 = corrP(pr.r, pr.n);
+    if (pv2 == null || pv2 > 0.05) return;
+    if (!best || Math.abs(pr.r) > Math.abs(best.r)) best = { k, r: pr.r, n: pr.n };
+  });
+  if (best) {
+    const nm = best.k === "sleep" ? "how long you slept" : best.k === "medoff" ? "when your meds wore off"
+      : best.k === "total" ? "total sleep" : best.k === "nap" ? "napping"
+      : best.k === "day" ? "daylight" : ITEM[best.k].label.toLowerCase();
+    lines.push({ icon: "\u2194", t: "Of everything tracked, " + nm + " moves with your mood most" +
+      " (" + (best.r > 0 ? "together" : "opposite directions") + ", across " + best.n + " days)." });
+  }
+  // what got flagged
+  const fl = latestFlags.length;
+  if (fl) lines.push({ icon: "\u26A0", tone: "warn",
+    t: fl + " thing" + (fl > 1 ? "s" : "") + " worth raising: " +
+      latestFlags.slice(0, 2).map(f => f[1].toLowerCase()).join("; ") +
+      (fl > 2 ? "; and " + (fl - 2) + " more" : "") + "." });
+  // spikes
+  const sp = (STATE.spikes || []).filter(x => x.date >= addDays(todayISO(), -7));
+  if (sp.length) lines.push({ icon: "\u26A1",
+    t: sp.length + " spike" + (sp.length > 1 ? "s" : "") + " logged this week." });
+  // coverage, so the rest can be weighed
+  const cov = coverageAudit(7);
+  lines.push({ icon: "\u2713", tone: cov.pct < 0.5 ? "warn" : "",
+    t: "You logged " + Math.round(cov.pct * 100) + "% of this week's check-ins" +
+      (cov.pct < 0.5 ? ", so treat the above loosely" : "") + "." });
+
+  el.innerHTML = lines.map(l =>
+    '<div class="plainline' + (l.tone ? " " + l.tone : "") + '"><i>' + l.icon + "</i><span>" +
+    esc(l.t) + "</span></div>").join("");
+}
+
+function renderFlagHistory() {
+  const el = $("#flagHistory"); if (!el) return;
+  const log = (STATE.flagLog || []).slice().reverse();
+  if (!log.length) { el.innerHTML = '<div class="mini">Nothing flagged yet.</div>'; return; }
+  const byTitle = {};
+  log.forEach(x => { (byTitle[x.title] = byTitle[x.title] || []).push(x.date); });
+  el.innerHTML = '<div class="scroll"><table class="tbl"><tr><th>What</th><th>Days</th>' +
+    "<th>First</th><th>Last</th></tr>" +
+    Object.keys(byTitle).map(t => { const ds = byTitle[t].slice().sort();
+      return "<tr><td>" + esc(t) + "</td><td>" + ds.length + "</td><td>" +
+        fmtDate(ds[0]) + "</td><td>" + fmtDate(ds[ds.length - 1]) + "</td></tr>"; }).join("") +
+    "</table></div>";
+}
+
 function renderCoverAudit() {
   const el = $("#coverAudit"); if (!el) return;
   const a = coverageAudit(30);
@@ -2997,6 +3137,47 @@ function renderWorkSplit(rows) {
     '<div class="mini">' + on.length + " working days, " + off.length + " off. " +
     "Green means the better direction for that row. Differences under 0.3 are noise.</div>";
 }
+let latestFlags = [];
+
+/* Keep a record of everything raised, so clearing a banner doesn't erase the
+   fact that it happened. This is the part a prescriber may want to see. */
+function recordFlags(list) {
+  const today = todayISO();
+  let added = false;
+  (list || []).forEach(f => {
+    const key = today + "|" + f[1];
+    if ((STATE.flagLog || []).some(x => x.key === key)) return;
+    STATE.flagLog.push({ key, date: today, at: new Date().toISOString(),
+      level: f[0] || "", title: f[1], body: f[2] });
+    added = true;
+  });
+  if (STATE.flagLog.length > 400) STATE.flagLog = STATE.flagLog.slice(-400);
+  if (added) saveState();
+}
+
+function showFlagBanner() {
+  const bar = $("#flagBar"); if (!bar || dashOn) return;
+  const unseen = latestFlags.filter(f => !STATE.flagSeen[todayISO() + "|" + f[1]]);
+  if (!unseen.length) { bar.classList.remove("on"); return; }
+  // lead with the most serious one
+  const hi = unseen.find(f => f[0] === "hi") || unseen[0];
+  $("#flagTitle").textContent = hi[1];
+  $("#flagBody").textContent = unseen.length > 1
+    ? hi[2].split(".")[0] + ". Plus " + (unseen.length - 1) + " more."
+    : hi[2];
+  bar.dataset.key = todayISO() + "|" + hi[1];
+  bar.classList.add("on");
+}
+function clearFlagBanner(all) {
+  const bar = $("#flagBar");
+  const today = todayISO();
+  if (all) latestFlags.forEach(f => { STATE.flagSeen[today + "|" + f[1]] = Date.now(); });
+  else if (bar && bar.dataset.key) STATE.flagSeen[bar.dataset.key] = Date.now();
+  saveState();
+  if (bar) bar.classList.remove("on");
+  showFlagBanner();                      // reveal the next one, if any
+}
+
 function renderFlags(rows) {
   const recent = rows.slice(-14).filter(r => r.n);
   const out = [];
@@ -3082,6 +3263,31 @@ function renderFlags(rows) {
       (clustered ? "They cluster around " + pad(peak) + ":00. " : "") +
       "Spikes are what the three daily ratings average away \u2014 a day that scores a calm 4 can " +
       "still contain three of these."]);
+  }
+
+  // as-needed doses
+  const withMed = (STATE.spikes || []).filter(x => x.med &&
+    x.date >= addDays(todayISO(), -30));
+  if (withMed.length >= 3) {
+    const byMed = {};
+    withMed.forEach(x => { (byMed[x.medName || x.med] = byMed[x.medName || x.med] || []).push(x); });
+    Object.keys(byMed).forEach(nm => {
+      const set = byMed[nm];
+      if (set.length < 3) return;
+      const tal = {};
+      set.forEach(x => (x.tags || []).forEach(t => { tal[t] = (tal[t] || 0) + 1; }));
+      const top = Object.keys(tal).sort((a, c) => tal[c] - tal[a]).slice(0, 2).filter(t => tal[t] >= 2);
+      const hrs = set.filter(x => x.at).map(x => Math.floor(minsOf(x.at) / 60));
+      const hc = {}; hrs.forEach(h => { hc[h] = (hc[h] || 0) + 1; });
+      const peak = Object.keys(hc).sort((a, c) => hc[c] - hc[a])[0];
+      const avgAnx = (() => { const v = set.map(x => x.anxiety).filter(y => y != null);
+        return v.length ? (v.reduce((a, c) => a + c, 0) / v.length).toFixed(1) : null; })();
+      out.push(["", nm + " taken " + set.length + " times in the last month",
+        (top.length ? "Usually after " + top.map(t => t.toLowerCase()).join(" or ") + ". " : "") +
+        (peak != null && hc[peak] >= 2 ? "Most often around " + pad(peak) + ":00. " : "") +
+        (avgAnx ? "Anxiety averaging " + avgAnx + " at the moment you reached for it. " : "") +
+        "That pattern is what tells you whether it's covering a predictable gap or a random one."]);
+    });
   }
 
   // phone calls — the useful question is whether this is its own thing
@@ -3275,6 +3481,8 @@ function renderFlags(rows) {
   if (rep.length) out.push(["", "Recurring early warning signs",
     rep.map(w => w.toLowerCase() + " (" + wn[w] + "\u00d7)").join(", ") + " in the last 10 logged days."]);
 
+  latestFlags = out.slice();
+  recordFlags(out);
   $("#flags").innerHTML = out.length
     ? out.map(f => '<div class="flag ' + f[0] + '"><b>' + esc(f[1]) + "</b><span>" + esc(f[2]) + "</span></div>").join("") +
       '<div class="mini">Threshold checks, not a diagnosis. Screenshot this before an appointment.</div>'
@@ -3672,6 +3880,10 @@ function renderCfg() {
             return '<button data-medwhen="' + i + ":" + q[0] + '" aria-pressed="' +
               ((m.whens || []).indexOf(q[0]) > -1 ? "true" : "false") + '">' + q[1] + "</button>"; }).join("") +
         "</div>" +
+        ((m.whens || []).indexOf("prn") > -1
+          ? '<button class="chip sm" data-medask="' + i + '" aria-pressed="' +
+            (m.ask === false ? "false" : "true") + '" title="Ask how you were when you take it">' +
+            "snapshot</button>" : "") +
         '<button class="btn sm dang" data-meddel="' + i + '">&times;</button></div>').join("")
     : '<div class="mini">Nothing listed yet. Adherence and wear-off questions appear once you add one.</div>';
   $("#cfgLat").value = CFG.lat;
@@ -4174,9 +4386,13 @@ function maybeOfferPlan() {
    Anxiety and irritability move in minutes, not in the hours between check-ins.
    A scheduled rating catches the average; this catches the peak. */
 let spikeDraft = null;
-function openSpike() {
+function openSpike(med) {
   const now = new Date();
-  spikeDraft = { tags: [], note: "", at: pad(now.getHours()) + ":" + pad(now.getMinutes()) };
+  spikeDraft = { tags: [], note: "", med: med ? med.id : "", medName: med ? med.name : "",
+    at: pad(now.getHours()) + ":" + pad(now.getMinutes()) };
+  $("#spikeSheet").querySelector(".k").textContent = med ? "took " + med.name.split(" ")[0] : "spike";
+  $("#spikeSheet").querySelector("h3").textContent = med
+    ? "Where you were when you took it" : "What just happened";
   (CFG.spikeItems || []).forEach(k => { spikeDraft[k] = null; });
   $("#spikeAt").value = spikeDraft.at;
   $("#spikeNote").value = "";
@@ -4199,7 +4415,8 @@ async function saveSpike() {
   spikeDraft.note = $("#spikeNote").value.trim();
   spikeDraft.at = $("#spikeAt").value || spikeDraft.at;
   const rec = { id: "sp" + Date.now().toString(36), date: todayISO(), at: spikeDraft.at,
-    ts: new Date().toISOString(), tags: spikeDraft.tags.slice(), note: spikeDraft.note };
+    ts: new Date().toISOString(), tags: spikeDraft.tags.slice(), note: spikeDraft.note,
+    med: spikeDraft.med || "", medName: spikeDraft.medName || "" };
   spikeKeys().forEach(k => { rec[k] = spikeDraft[k]; });
   STATE.spikes = (STATE.spikes || []).concat([rec]);
   await saveState();
@@ -4637,6 +4854,7 @@ function commit(skip, reason) {
   refreshDue();
   refreshConn();
   clearNotifs();
+  try { renderFlags(daily(0)); showFlagBanner(); } catch (e) {}
   maybeOfferPlan();
   reportState();                              // stop the nagging straight away
   syncAll(true).then(() => reportState());     // then report the merged picture
@@ -4817,6 +5035,13 @@ function init() {
       touchCfg().then(() => { renderCfg(); renderLog(); });
       return;
     }
+    const ma = ev.target.closest("[data-medask]");
+    if (ma) {
+      const m = CFG.medList[+ma.dataset.medask];
+      m.ask = m.ask === false ? true : false;
+      touchCfg().then(() => renderCfg());
+      return;
+    }
     const md = ev.target.closest("[data-meddel]");
     if (md) {
       const m = CFG.medList[+md.dataset.meddel];
@@ -4889,7 +5114,7 @@ function init() {
       if (el && el._items) stepWheel(el, +p[1]);
       return;
     }
-    const t = ev.target.closest("#rollTog,[data-spitem],[data-pnotedel],[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
+    const t = ev.target.closest("#rollTog,[data-medask],[data-spitem],[data-pnotedel],[data-sptag],[data-medwhen],[data-meddel],[data-mednow],[data-prn],[data-napwin],[data-ctl],[data-drop],[data-quick],[data-swin],[data-sday],[data-tag],[data-warn],[data-med],[data-s],[data-d],[data-exp],[data-item],[data-edit],[data-site],[data-kind]");
     if (!t) return;
     if (t.dataset.site) { const v = t.dataset.site, i = draft.pain.sites.indexOf(v);
       i > -1 ? draft.pain.sites.splice(i, 1) : draft.pain.sites.push(v);
@@ -4928,6 +5153,10 @@ function init() {
       const nx = Math.max(0, Math.min(20, cur + (+p2[1])));
       if (nx) draft.meds.prn[p2[0]] = nx; else delete draft.meds.prn[p2[0]];
       renderLog();
+      // a rescue dose is worth a snapshot: what it was like at the moment you
+      // reached for it is the thing you can't reconstruct later
+      const med = (CFG.medList || []).find(x => x.id === p2[0]);
+      if (med && +p2[1] > 0 && med.ask !== false) openSpike(med);
       return; }
     if (t.dataset.s) { series[t.dataset.s] = !series[t.dataset.s]; drawMain(); return; }
     if (t.dataset.ctl != null && t.closest("#ctlSeg")) {
@@ -5251,6 +5480,9 @@ function init() {
   };
   $("#connHide").onclick = () => { $("#connBar").classList.remove("on");
     STATE.connHidden = todayISO(); saveState(); };
+  $("#flagClear").onclick = () => clearFlagBanner(false);
+  $("#flagMore").onclick = () => { clearFlagBanner(true); show("pat");
+    setTimeout(() => { const c = $("#flags"); if (c) c.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60); };
   $("#planBarClose").onclick = () => {
     $("#planBar").classList.remove("on");
     STATE.planHidden = todayISO(); saveState();
@@ -5393,6 +5625,7 @@ function init() {
   });
   setInterval(refreshDue, 60000);
   maybeOfferPlan();
+  try { renderFlags(daily(0)); showFlagBanner(); } catch (e) {}
   refreshConn();
   setInterval(refreshConn, 120000);
   $("#buildTag").textContent = "b" + BUILD;
