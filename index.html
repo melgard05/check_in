@@ -868,11 +868,17 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <input type="text" id="cfKey" placeholder="leave blank if you haven't set one"
                autocapitalize="off" spellcheck="false"></label>
 
+      <div class="mini" style="margin-top:6px">Saving with this box empty leaves the key as it is.
+        It's also kept in a second place on this device, so a reconnect link or a restore can't
+        quietly take it with them.</div>
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm" id="cfSave">Save and connect</button>
         <button class="btn sm" id="cfTest">Send a test push</button>
         <button class="btn sm" id="cfOff">Disconnect</button>
+        <button class="btn sm dang" id="cfForget">Forget key</button>
       </div>
+      <div class="eyebrow" style="margin-top:14px">What's happened to the key</div>
+      <div id="credLog" class="mini" style="margin-top:0"></div>
       <div class="sw" style="margin-top:6px"><div><div class="t">Sticky push reminders</div>
         <div class="d">Worker re-sends every <span id="nagLbl">20</span> min until the check-in is closed.</div></div>
         <button class="tog" id="togPush" aria-pressed="false"></button></div>
@@ -1195,7 +1201,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 54;
+const BUILD = 55;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1420,8 +1426,56 @@ async function load() {
   const cutoff = Date.now() - 30 * 86400000;
   Object.keys(STATE.gone).forEach(k => { if ((STATE.gone[k] || 0) < cutoff) delete STATE.gone[k]; });
   if (!STATE.dirty) STATE.dirty = {};
+  if (!Array.isArray(STATE.credLog)) STATE.credLog = [];
+
+  // The config may have come back without the key. If the sidecar still holds one
+  // for this same worker, put it back rather than sitting there silently unable to sync.
+  const cred = await credBackup();
+  if (!cred && CFG.cloud.key) await credMirror();     // an install that predates the sidecar
+  if (cred && cred.key) {
+    if (!CFG.cloud.url && cred.url) CFG.cloud.url = cred.url;
+    if (!CFG.cloud.account && cred.account) CFG.cloud.account = cred.account;
+    if (!CFG.cloud.uid && cred.uid) CFG.cloud.uid = cred.uid;
+    if (!CFG.cloud.key && !cred.forgot && (!cred.url || cred.url === CFG.cloud.url)) {
+      CFG.cloud.key = cred.key;
+      STATE.credLog = STATE.credLog.concat([{ at: new Date().toISOString(),
+        what: "key was missing at startup — restored from the backup copy" }]).slice(-24);
+      await saveState();
+      await Store.set(K_CFG, JSON.stringify(CFG));   // direct: credMirror has nothing to add here
+    }
+  }
 }
-const saveCfg   = () => Store.set(K_CFG, JSON.stringify(CFG));
+const saveCfg   = () => Store.set(K_CFG, JSON.stringify(CFG)).then(r => { credMirror(); return r; });
+
+/* ---------- the access key gets a second home ----------
+   It lives inside the config blob, so anything that rewrites that blob takes
+   the key with it: a reconnect link made before the key existed, a Save with
+   the field left blank, a restore from a snapshot. It goes quietly, because
+   the worker URL survives — so the app still looks connected while every call
+   comes back 401 and reads as "offline". A sidecar copy and a written record
+   of every change turn that into something you can see. */
+const K_CRED = "baseline:cred";
+async function credBackup() {
+  try { return JSON.parse(await Store.get(K_CRED) || "null"); } catch (e) { return null; }
+}
+function credNote(what) {
+  STATE.credLog = (STATE.credLog || []).concat([{ at: new Date().toISOString(), what }]).slice(-24);
+  saveState(); renderCredLog();
+}
+async function credMirror() {
+  const c = CFG.cloud || {};
+  if (!c.key && !c.url) return;
+  const prev = await credBackup();
+  if (prev && prev.key && !c.key) return;      // a blank never overwrites a good key
+  if (prev && prev.key === c.key && prev.url === c.url && prev.account === c.account) return;
+  await Store.set(K_CRED, JSON.stringify({ url: c.url || "", uid: c.uid || "",
+    account: c.account || "", key: c.key || "", at: Date.now(),
+    forgot: c.key ? false : !!(prev && prev.forgot) }));
+}
+async function credForget() {
+  await Store.set(K_CRED, JSON.stringify({ url: CFG.cloud.url || "", uid: CFG.cloud.uid || "",
+    account: CFG.cloud.account || "", key: "", at: Date.now(), forgot: true }));
+}
 const saveEnt   = () => Store.set(K_ENT, JSON.stringify(ENTRIES));
 const saveState = () => Store.set(K_STATE, JSON.stringify(STATE));
 
@@ -4472,6 +4526,7 @@ function renderCfg() {
   $("#cfUid").value = CFG.cloud.uid || "";
   $("#cfAcct").value = CFG.cloud.account || "";
   $("#cfKey").value = CFG.cloud.key || "";
+  renderCredLog();
   $("#togPush").setAttribute("aria-pressed", CFG.cloud.push ? "true" : "false");
   $("#togSync").setAttribute("aria-pressed", CFG.cloud.sync ? "true" : "false");
   $("#nagSel").value = String(CFG.nagMins || 20);
@@ -4648,6 +4703,7 @@ function scheduleNotifs() {
    ============================================================ */
 let swReg = null;
 const cloudBase = () => (CFG.cloud.url || "").trim().replace(/\/+$/, "");
+let authFail = 0;                     // when the worker last refused us
 function cloudLog(msg, keep) {
   const el = $("#cfLog"); if (!el) return;
   const line = new Date().toLocaleTimeString() + "  " + msg;
@@ -4666,6 +4722,13 @@ async function api(path, opts) {
   if (!base) throw new Error("no worker url");
   if (CFG.cloud.key) path += (path.indexOf("?") > -1 ? "&" : "?") + "key=" + encodeURIComponent(CFG.cloud.key);
   const r = await fetch(base + path, Object.assign({ cache: "no-store" }, opts || {}));
+  if (r.status === 401 || r.status === 403) {
+    // being turned away is not the same as being offline, and it needs saying out loud
+    if (!authFail) credNote("worker refused the key (HTTP " + r.status + ")");
+    authFail = Date.now(); refreshConn();
+    throw new Error("HTTP " + r.status + " — worker rejected the access key");
+  }
+  if (r.ok) authFail = 0;
   if (!r.ok) throw new Error("HTTP " + r.status);
   const ct = r.headers.get("content-type") || "";
   return ct.indexOf("json") > -1 ? r.json() : r.text();
@@ -4890,8 +4953,8 @@ async function cloudSync(quiet) {
   let pulled = { added: 0, updated: 0 }, cfgChanged = false;
   try {
     const o = await api("/backup?uid=" + encodeURIComponent(acct));
-    if (o && Array.isArray(o.entries)) {
-      pulled = mergeEntries(o.entries);
+    if (o) {
+      if (Array.isArray(o.entries)) pulled = mergeEntries(o.entries);
       if (o.state) {
         // tombstones first, so a deletion made anywhere wins the merge below
         Object.keys(o.state.gone || {}).forEach(k => {
@@ -4902,6 +4965,7 @@ async function cloudSync(quiet) {
         });
         mergeSuggestions(o.state.suggestions);
         mergeSpikes(o.state.spikes);
+        renderSug(); renderSpikeCount();      // or they sit in storage unseen until a reload
       }
       // a real entry always beats a skip for the same slot
       Object.keys(STATE.skipped).forEach(k => {
@@ -4996,12 +5060,23 @@ function connState() {
   if (!cloudBase() || !acctId()) return { level: "setup",
     msg: "Not connected to your worker. Check-ins are saving on this device only \u2014 " +
          "no reminders, and nothing shared with your other device." };
+  if (authFail && Date.now() - authFail < 6 * 3600000) return { level: "key",
+    msg: "Your worker is refusing this device \u2014 the access key is missing or wrong, so nothing " +
+         "is syncing. Everything logged here is safe. Data \u2192 Cloudflare to paste it back." };
   if (!("Notification" in window)) return { level: "ok" };
   if (Notification.permission === "denied") return { level: "perm",
     msg: "Notifications are blocked for this site, so reminders can't reach you here." };
   if (!workerHandlesPush) return { level: "push",
     msg: "Reminders aren't set up on this device. They'll only appear while the app is open." };
   return { level: "ok" };
+}
+function renderCredLog() {
+  const el = $("#credLog"); if (!el) return;
+  const l = (STATE.credLog || []).slice().reverse();
+  el.innerHTML = l.length
+    ? l.slice(0, 8).map(x => '<div style="font-family:var(--mono);font-size:11px;padding:2px 0">' +
+        esc(new Date(x.at).toLocaleString()) + " &middot; " + esc(x.what) + "</div>").join("")
+    : "No changes recorded. If it goes missing again, it gets written down here with the time.";
 }
 function refreshConn() {
   const bar = $("#connBar"); if (!bar) return;
@@ -5132,7 +5207,9 @@ async function addSug(text) {
   STATE.suggestions.push({ id: "s" + Date.now().toString(36), at: new Date().toISOString(),
     text, done: false, build: BUILD });
   await saveState(); renderSug();
-  if (CFG.cloud.sync) cloudUpload(true);
+  // this only ever pushed to Cloudflare, so on a Firebase-only setup a suggestion
+  // sat on the phone until some unrelated save happened to trigger a sync
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
 }
 
 /* ---------- new build ----------
@@ -5211,7 +5288,10 @@ async function applySetup(enc) {
   CFG.cloud.url = String(o.u).replace(/\/+$/, "");
   CFG.cloud.account = String(o.a || "").replace(/[^A-Za-z0-9_-]/g, "");
   CFG.cloud.uid = String(o.d || o.a || "device1").replace(/[^A-Za-z0-9_-]/g, "");
-  CFG.cloud.key = String(o.k || "");
+  // A link built before the key existed carries no k. That is an absence, not an
+  // instruction to forget the key already on this device — which is how a bookmarked
+  // reconnect link quietly wiped it on every open.
+  if (o.k) CFG.cloud.key = String(o.k);
   if (o.fu) { CFG.fb.url = String(o.fu).replace(/\/+$/, ""); CFG.fb.apiKey = String(o.fk || "");
     CFG.fb.email = String(o.fe || ""); }
   await saveCfg();
@@ -5312,6 +5392,8 @@ async function fbSync(quiet) {
       });
       mergeSuggestions(Object.keys(st.suggestions || {}).map(k => st.suggestions[k]));
       mergeSpikes(Object.keys(st.spikes || {}).map(k => st.spikes[k]));
+      await saveState();                      // the pull is worth keeping even if no entries moved
+      renderSug(); renderSpikeCount();
     }
     Object.keys(STATE.skipped).forEach(k => {
       const p = k.split("|");
@@ -5659,7 +5741,9 @@ function init() {
     }
     const sd = ev.target.closest("[data-sugdone]");
     if (sd) { const s = (STATE.suggestions || []).find(x => x.id === sd.dataset.sugdone);
-      if (s) { s.done = !s.done; saveState(); renderSug(); } return; }
+      if (s) { s.done = !s.done; renderSug();
+        saveState().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }); }
+      return; }
     const sx = ev.target.closest("[data-sugdel]");
     if (sx) {
       const id = sx.dataset.sugdel;
@@ -6118,7 +6202,12 @@ function init() {
     CFG.cloud.url = u.replace(/\/+$/, "");
     CFG.cloud.uid = ($("#cfUid").value.trim() || "").replace(/[^A-Za-z0-9_-]/g, "") || "device1";
     CFG.cloud.account = ($("#cfAcct").value.trim() || "").replace(/[^A-Za-z0-9_-]/g, "") || CFG.cloud.uid;
-    CFG.cloud.key = $("#cfKey").value.trim();
+    const typedKey = $("#cfKey").value.trim();
+    if (typedKey && typedKey !== CFG.cloud.key) { CFG.cloud.key = typedKey; credNote("key entered by hand"); }
+    else if (!typedKey && CFG.cloud.key) {
+      $("#cfKey").value = CFG.cloud.key;              // blank is not an instruction to forget it
+      cloudLog("kept the existing access key — use Forget key to clear it on purpose", true);
+    }
     $("#cfUrl").value = CFG.cloud.url; $("#cfUid").value = CFG.cloud.uid;
     $("#cfAcct").value = CFG.cloud.account;
     await saveCfg();
@@ -6141,6 +6230,16 @@ function init() {
                                      : "rejected (" + r.status + ")"), true);
       toast(r.ok ? "Test push sent" : "Push service said " + r.status, !r.ok);
     } catch (e) { cloudLog("test failed: " + e.message, true); toast("Test failed", true); }
+  };
+  $("#cfForget").onclick = async () => {
+    if (!CFG.cloud.key) { toast("No key stored"); return; }
+    if (!confirm("Forget the access key on this device?\n\nSyncing stops until you paste it back. " +
+      "Your entries stay where they are.")) return;
+    CFG.cloud.key = "";
+    await credForget();
+    await Store.set(K_CFG, JSON.stringify(CFG));
+    credNote("key cleared deliberately with Forget key");
+    renderCfg(); refreshConn(); toast("Key forgotten");
   };
   $("#cfOff").onclick = async () => { await pushDisable();
     $("#togPush").setAttribute("aria-pressed", "false"); toast("Disconnected"); };
