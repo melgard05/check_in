@@ -157,6 +157,10 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .chip.dose small{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
   opacity:.7;margin-left:6px}
 .missall{margin-left:auto;flex:0 0 auto;padding:5px 11px;font-size:12px}
+.wrow{display:flex;gap:9px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.wrow:last-child{border-bottom:0}
+.wname{flex:1;font-size:14px;min-width:0;overflow-wrap:anywhere}
+.wn{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);flex:0 0 auto}
 .sumrow{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line)}
 .sumrow:last-child{border-bottom:0}
 .sumk{flex:0 0 92px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
@@ -1018,8 +1022,13 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm pri" id="fbLinkGo">Finish sign-in</button>
       </div>
       <div class="mini">One-time setup: in the Firebase console under Authentication &rarr; Sign-in
-        method, switch on <b>Email link (passwordless sign-in)</b>. Email/Password has to stay on as well.
-        The link expires, so use it soon after it arrives.</div>
+        method, switch on <b>Email link (passwordless sign-in)</b> &mdash; Email/Password has to stay on
+        as well &mdash; and add this page's address under Authentication &rarr; Settings &rarr;
+        Authorised domains. With that done, clicking the link signs you straight in.<br><br>
+        If clicking gives you a Firebase page saying <b>&ldquo;Continue URL is required&rdquo;</b>, the
+        domain isn't authorised yet. Nothing is broken and the code is still good: copy the address out
+        of that error page, or right-click the link in the email and copy the link address, and paste
+        it above. Links expire, so use one soon after it arrives.</div>
       <div class="sw" style="margin-top:6px"><div><div class="t">Keep Firebase in step</div>
         <div class="d">Writes each check-in as you save it, and pulls anything new on open.</div></div>
         <button class="tog" id="togFb" aria-pressed="false"></button></div>
@@ -1100,6 +1109,25 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     </div>
 
     <div class="card">
+      <h2>What set it off</h2>
+      <p class="sub">The trigger chips offered when you log a spike, or an as-needed dose. These
+        shipped as a guess at what sets people off &mdash; they're yours to replace. Edit one by typing
+        over it; clear the box to remove it. Anything already logged keeps the words it was logged with.</p>
+      <div id="trigEditor"></div>
+      <div class="row" style="gap:8px;margin-top:9px">
+        <input type="text" id="trigNew" placeholder="One trigger at a time" style="flex:1 1 190px">
+        <button class="btn sm" id="trigAdd">Add</button>
+        <button class="btn sm gho" id="trigReset">Reset to the defaults</button>
+      </div>
+      <div class="mini" id="trigNote"></div>
+
+      <div class="eyebrow" style="margin-top:18px">Written in, not on the list</div>
+      <p class="sub">Everything you've typed into Other. This is the list rebuilding itself out of what
+        actually happens to you rather than what the app guessed. Add the ones that keep coming back.</p>
+      <div id="trigWritten"></div>
+    </div>
+
+    <div class="card">
       <h2>Quick spike check</h2>
       <p class="sub">What the spike button asks about, and what you're asked when you log an as-needed
         dose. Pick whatever your own spikes actually look like. Two things that spike together for some
@@ -1174,8 +1202,15 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <label class="fld" style="flex:0 1 140px"><span>Time</span><input type="time" id="spikeAt"></label>
       <div style="flex:1 1 150px;align-self:end;padding-bottom:9px" class="mini">Defaults to now.</div>
     </div>
-    <p class="sub" style="margin:12px 0 8px">What set it off, if you know.</p>
+    <p class="sub" style="margin:12px 0 8px" id="spikeWhat">What set it off, if you know.</p>
     <div class="chips" id="spikeTags"></div>
+    <div id="spikeOtherWrap" style="display:none;margin-top:10px">
+      <label class="fld"><span>In your own words &mdash; needed</span>
+        <input type="text" id="spikeOther" placeholder="What actually set it off"
+          autocapitalize="sentences" spellcheck="true"></label>
+      <div class="mini" style="margin-top:5px">Anything you write in here gets collected up under
+        Data &rarr; What set it off, so the list can be rebuilt out of what actually happens.</div>
+    </div>
     <label class="fld" style="margin-top:12px"><span>Note</span>
       <textarea id="spikeNote" rows="2" placeholder="Anything worth remembering about it."></textarea></label>
     <div class="row" style="margin-top:13px;gap:8px">
@@ -1301,6 +1336,8 @@ const CRASH = ["Irritable / short fuse", "Exhausted, hit a wall", "Foggy, can't 
 
 const SPIKE_TRIGGERS = ["Phone call", "Interruption", "Conflict", "Running late", "Noise / crowd",
   "Bad news", "Something broke", "Waiting", "Too many demands", "Hungry", "Tired", "Came out of nowhere"];
+const triggerList = () => (CFG.spikeTriggers && CFG.spikeTriggers.length)
+  ? CFG.spikeTriggers : SPIKE_TRIGGERS;
 
 const TAGS = ["Conflict","Deadline / pressure","Travel","Missed meds","Poor sleep","Skipped meals",
   "Alcohol","Illness","Money stress","Big social event","Good news","Time outside","Overstimulated",
@@ -1309,7 +1346,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 57;
+const BUILD = 60;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1325,6 +1362,7 @@ const DEFAULT_CFG = {
   quick: true,                // short check-in by default, everything else behind a tap
   goodRight: true,            // symptom sliders run severe-left to none-right
   spikeItems: ["anxiety", "irrit", "manic"],
+  spikeTriggers: SPIKE_TRIGGERS.slice(),   // editable: one person's trigger list is not another's
   needNote: true,             // a core rating far from your usual won't save unexplained
   needNoteAt: 3,              // how far from usual counts as far
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
@@ -1350,7 +1388,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1495,6 +1533,8 @@ async function load() {
   if (!Array.isArray(CFG.spikeItems) || !CFG.spikeItems.length)
     CFG.spikeItems = ["anxiety", "irrit", "manic"];
   if (typeof CFG.cfgAt !== "number") CFG.cfgAt = 0;
+  if (!Array.isArray(CFG.spikeTriggers)) CFG.spikeTriggers = SPIKE_TRIGGERS.slice();
+  CFG.spikeTriggers = CFG.spikeTriggers.map(t => String(t || "").trim()).filter(Boolean);
   if (typeof CFG.needNote !== "boolean") CFG.needNote = true;
   if (!(+CFG.needNoteAt >= 1)) CFG.needNoteAt = 3;
   // migrate the old newline-separated med list into scheduled entries
@@ -4943,6 +4983,44 @@ function printSummary() {
    ============================================================ */
 /* The spike list was locked to anxiety / irritability / elevated, which assumes
    everyone's spikes are the same shape. Offer every item that's switched on. */
+function renderTriggers() {
+  const el = $("#trigEditor"); if (!el) return;
+  const l = CFG.spikeTriggers || [];
+  el.innerHTML = l.length
+    ? l.map((t, i) => '<div class="pnote"><input type="text" data-trig="' + i + '" value="' +
+        esc(t) + '"><button data-trigdel="' + i + '" aria-label="Remove">&times;</button></div>').join("")
+    : '<div class="mini" style="padding:4px 0">Nothing listed, so no chips are offered. ' +
+      "Add the ones that actually apply, or reset to the defaults.</div>";
+  $("#trigNote").textContent = l.length
+    ? l.length + " offered, plus Other. Shared with your other device."
+    : "Only Other is offered.";
+}
+function writtenTriggers() {
+  const by = {};
+  (STATE.spikes || []).forEach(x => {
+    const w = (x && x.write || "").trim();
+    if (!w) return;
+    const k = w.toLowerCase();
+    if (!by[k]) by[k] = { text: w, n: 0, last: "" };
+    by[k].n++;
+    if (x.date > by[k].last) by[k].last = x.date;
+  });
+  const on = (CFG.spikeTriggers || []).map(t => t.toLowerCase());
+  return Object.keys(by).map(k => by[k])
+    .filter(w => on.indexOf(w.text.toLowerCase()) < 0)     // already promoted, nothing to do
+    .sort((a, b) => (b.n - a.n) || (a.last < b.last ? 1 : -1));
+}
+function renderWritten() {
+  const el = $("#trigWritten"); if (!el) return;
+  const l = writtenTriggers();
+  el.innerHTML = l.length
+    ? l.slice(0, 30).map(w => '<div class="wrow"><span class="wname">' + esc(w.text) + "</span>" +
+        '<span class="wn">' + w.n + "\u00d7 &middot; " + esc(fmtDate(w.last)) + "</span>" +
+        '<button class="btn sm" data-trigadd="' + esc(w.text) + '">Add to the list</button></div>').join("")
+    : '<div class="mini" style="padding:4px 0">Nothing typed into Other yet. Pick <b>Other\u2026</b> ' +
+      "when you log a spike or an as-needed dose and it has to be filled in \u2014 what you write " +
+      "collects here.</div>";
+}
 function renderSpikePick() {
   if (!$("#spikePick")) return;
   $("#spikePick").innerHTML = ITEMS.filter(i => isOn(i.key) && i.grp !== "sleep").map(i =>
@@ -5006,6 +5084,8 @@ function renderCfg() {
     : alt.length === 7 ? '<span style="color:var(--warn)">Every day selected — the M&ndash;F times are never used.</span>'
     : "Second schedule on " + alt.map(i => DAYS[i]).join(", ") + ". Everything else uses the first.";
   renderSpikePick();
+  renderTriggers();
+  renderWritten();
   $("#togNeedNote").setAttribute("aria-pressed", CFG.needNote ? "true" : "false");
   $("#needNoteSel").value = String(CFG.needNoteAt || 3);
   $("#needNoteSel").disabled = !CFG.needNote;
@@ -5651,6 +5731,7 @@ function maybeOfferPlan() {
    A scheduled rating catches the average; this catches the peak. */
 let spikeDraft = null;
 function openSpike(med) {
+  if (!med || typeof med.name !== "string") med = null;   // never trust the caller's argument
   const now = new Date();
   spikeDraft = { tags: [], note: "", med: med ? med.id : "", medName: med ? med.name : "",
     at: pad(now.getHours()) + ":" + pad(now.getMinutes()) };
@@ -5661,8 +5742,17 @@ function openSpike(med) {
   $("#spikeAt").value = spikeDraft.at;
   $("#spikeNote").value = "";
   renderSpikeItems();
-  $("#spikeTags").innerHTML = SPIKE_TRIGGERS.map(t =>
-    '<button class="chip ev" data-sptag="' + esc(t) + '" aria-pressed="false">' + esc(t) + "</button>").join("");
+  const tl = triggerList();
+  $("#spikeWhat").textContent = med
+    ? "What led to reaching for it, if you know."
+    : "What set it off, if you know.";
+  $("#spikeTags").innerHTML = tl.map(t =>
+      '<button class="chip ev" data-sptag="' + esc(t) + '" aria-pressed="false">' +
+      esc(t) + "</button>").join("") +
+    '<button class="chip ev" data-spother="1" aria-pressed="false">Other\u2026</button>';
+  spikeDraft.other = false;
+  $("#spikeOther").value = "";
+  $("#spikeOtherWrap").style.display = "none";
   $("#spikeSheet").classList.add("on");
 }
 function spikeKeys() { return (CFG.spikeItems || []).filter(k => ITEM[k]); }
@@ -5677,10 +5767,21 @@ async function saveSpike() {
   if (!spikeKeys().some(k => spikeDraft[k] != null)) {
     toast("Rate at least one of them", true); return;
   }
+  const other = ($("#spikeOther").value || "").trim();
+  if (spikeDraft.other && !other) {
+    $("#spikeOtherWrap").style.display = "";
+    $("#spikeOther").focus();
+    toast("Say what it was, or unpick Other", true); return;
+  }
   spikeDraft.note = $("#spikeNote").value.trim();
   spikeDraft.at = $("#spikeAt").value || spikeDraft.at;
+  // written-in triggers ride along as ordinary tags, so every count, split and
+  // export downstream picks them up without knowing they were typed
+  const tags = spikeDraft.tags.slice();
+  if (other && tags.indexOf(other) < 0) tags.push(other);
   const rec = { id: "sp" + Date.now().toString(36), date: todayISO(), at: spikeDraft.at,
-    ts: new Date().toISOString(), tags: spikeDraft.tags.slice(), note: spikeDraft.note,
+    ts: new Date().toISOString(), tags: tags, note: spikeDraft.note,
+    write: other || "",                     // kept flagged so it can be promoted onto the list
     med: spikeDraft.med || "", medName: spikeDraft.medName || "" };
   spikeKeys().forEach(k => { rec[k] = spikeDraft[k]; });
   STATE.spikes = (STATE.spikes || []).concat([rec]);
@@ -5688,6 +5789,7 @@ async function saveSpike() {
   $("#spikeSheet").classList.remove("on");
   spikeDraft = null;
   renderSpikeCount();
+  renderWritten();
   if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
   toast("Logged");
 }
@@ -5937,28 +6039,37 @@ async function fbSendLink(email) {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     return { ok: r.ok, j: await r.json().catch(() => ({})) };
   };
+  const here = /^https:/.test(location.protocol) ? location.origin + location.pathname : "";
   try {
-    // no continueUrl first: then no domain of ours needs to be on the authorised list
-    let res = await ask({ requestType: "EMAIL_SIGNIN", email });
-    const msg = () => ((res.j.error && res.j.error.message) || "").toUpperCase();
-    if (!res.ok && /CONTINUE_URI|MISSING_CONTINUE/.test(msg()) && /^https:/.test(location.origin)) {
-      res = await ask({ requestType: "EMAIL_SIGNIN", email,
-        continueUrl: location.origin + location.pathname, canHandleCodeInApp: true });
+    // Ask for a link that lands back on this page. Without a continueUrl the mail still
+    // sends, but Firebase's own handler refuses the link the moment it's clicked.
+    let res = here
+      ? await ask({ requestType: "EMAIL_SIGNIN", email, continueUrl: here, canHandleCodeInApp: true })
+      : await ask({ requestType: "EMAIL_SIGNIN", email });
+    let msg = ((res.j.error && res.j.error.message) || "").toUpperCase();
+    let pasteOnly = !here;
+    if (!res.ok && here && /UNAUTHORIZED_DOMAIN|INVALID_CONTINUE_URI|INVALID_DYNAMIC_LINK/.test(msg)) {
+      // this page isn't on the authorised list, so the link can't come home by itself
+      res = await ask({ requestType: "EMAIL_SIGNIN", email });
+      msg = ((res.j.error && res.j.error.message) || "").toUpperCase();
+      pasteOnly = true;
     }
     if (!res.ok) {
-      const m = msg();
-      fbLog(/OPERATION_NOT_ALLOWED/.test(m)
+      fbLog(/OPERATION_NOT_ALLOWED/.test(msg)
         ? "Firebase says email-link sign-in is switched off — turn on \u201cEmail link " +
           "(passwordless sign-in)\u201d under Authentication \u2192 Sign-in method"
-        : /INVALID_EMAIL/.test(m) ? "that email isn't valid"
-        : /UNAUTHORIZED_DOMAIN|INVALID_CONTINUE_URI/.test(m)
-          ? "Firebase rejected this page's address — add it under Authentication \u2192 Settings " +
-            "\u2192 Authorised domains, or open the app from your own domain"
-        : m || "could not send the link", true);
+        : /INVALID_EMAIL/.test(msg) ? "that email isn't valid"
+        : msg || "could not send the link", true);
       return false;
     }
     CFG.fb.email = email; await saveCfg();
-    fbLog("sign-in link sent to " + email + " — copy the whole link into the box below", true);
+    fbLog(pasteOnly
+      ? "link sent to " + email + " — don't click it, it'll land on a Firebase error page. " +
+        "Copy the link address out of the email and paste it below." +
+        (here ? " (To make clicking work, add " + location.hostname + " under Authentication " +
+          "\u2192 Settings \u2192 Authorised domains.)" : "")
+      : "link sent to " + email + " — click it and it will sign you in here. Pasting it below " +
+        "works too.", true);
     return true;
   } catch (e) { fbLog("could not send the link: " + e.message, true); return false; }
 }
@@ -6393,12 +6504,37 @@ function init() {
       renderWakes(); pushSleep();
       return;
     }
+    const ta = ev.target.closest("[data-trigadd]");
+    if (ta) {
+      const v = ta.dataset.trigadd;
+      if (!(CFG.spikeTriggers || []).some(t => t.toLowerCase() === v.toLowerCase()))
+        CFG.spikeTriggers = (CFG.spikeTriggers || []).concat([v]);
+      touchCfg().then(() => { renderTriggers(); renderWritten(); toast("Added to the list");
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
+    const td = ev.target.closest("[data-trigdel]");
+    if (td) {
+      CFG.spikeTriggers.splice(+td.dataset.trigdel, 1);
+      touchCfg().then(() => { renderTriggers();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
     const pd = ev.target.closest("[data-pnotedel]");
     if (pd) {
       CFG.plan.notes.splice(+pd.dataset.pnotedel, 1);
       CFG.plan.updated = Date.now();
       renderPlanNotes();                       // reflect it immediately
       touchCfg().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
+    const so = ev.target.closest("[data-spother]");
+    if (so && spikeDraft) {
+      spikeDraft.other = !spikeDraft.other;
+      so.setAttribute("aria-pressed", spikeDraft.other ? "true" : "false");
+      $("#spikeOtherWrap").style.display = spikeDraft.other ? "" : "none";
+      if (spikeDraft.other) { const b = $("#spikeOther"); if (b) b.focus(); }
+      else $("#spikeOther").value = "";
       return;
     }
     const sp = ev.target.closest("[data-sptag]");
@@ -6759,6 +6895,29 @@ function init() {
     clearTimeout(window.__medT);
     window.__medT = setTimeout(() => { touchCfg(); renderLog(); }, 500);
   });
+  const addTrigger = async text => {
+    text = (text || "").trim(); if (!text) return;
+    if ((CFG.spikeTriggers || []).some(t => t.toLowerCase() === text.toLowerCase())) {
+      toast("Already on the list", true); return;
+    }
+    CFG.spikeTriggers = (CFG.spikeTriggers || []).concat([text]);
+    await touchCfg(); renderTriggers();
+    if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  };
+  $("#trigAdd").onclick = async () => {
+    const box = $("#trigNew"), v = box.value;
+    box.value = ""; await addTrigger(v); box.value = ""; box.focus();
+  };
+  $("#trigNew").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); $("#trigAdd").click(); }
+  });
+  $("#trigReset").onclick = async () => {
+    if (!confirm("Put the twelve default triggers back?\n\nYour own list is replaced. " +
+      "Spikes already logged keep the words they were logged with.")) return;
+    CFG.spikeTriggers = SPIKE_TRIGGERS.slice();
+    await touchCfg(); renderTriggers(); toast("Defaults restored");
+    if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  };
   $("#themeWin").onchange = () => { themeWin = +$("#themeWin").value; themeOpen = ""; renderThemes(); };
   $("#missMedSel").onchange   = () => { missMed = $("#missMedSel").value; renderMissed(); };
   $("#missOrderSel").onchange = () => { missOrder = $("#missOrderSel").value; renderMissed(); };
@@ -6926,6 +7085,31 @@ function init() {
     const due = dueWindows(todayISO());
     if (due.length) setDraft(todayISO(), due[0].id);
   }
+  // Firebase's handler bounces the code back to us on the query string, so a clicked
+  // link should just work. Do it before anything else touches the address bar.
+  const oobParam = (location.search.match(/[?&]oobCode=([^&]+)/) || [])[1];
+  const modeParam = (location.search.match(/[?&]mode=([^&]+)/) || [])[1] || "";
+  if (oobParam && (!modeParam || /signin/i.test(decodeURIComponent(modeParam)))) {
+    (async () => {
+      let email = (CFG.fb.email || "").trim();
+      if (!email) email = (prompt("Signing in. Which email was the link sent to?") || "").trim();
+      const clean = () => { try { history.replaceState(null, "", location.pathname); } catch (e) {} };
+      if (!email) { clean(); show("data"); toast("Need the email the link was sent to", true); return; }
+      const ok = await fbSignInLink(email, decodeURIComponent(oobParam));
+      clean();                                  // a used code should not sit in history
+      if (ok) {
+        CFG.fb.on = true; await saveCfg();
+        $("#togFb").setAttribute("aria-pressed", "true");
+        await fbSync(false); renderCfg(); refreshConn();
+        toast("Signed in — no password needed");
+      } else {
+        show("data"); renderCfg();
+        setTimeout(() => { const c = $("#fbLog");
+          if (c && c.scrollIntoView) c.scrollIntoView({ block: "center", behavior: "smooth" }); }, 80);
+        toast("That link didn't work — see the Firebase log", true);
+      }
+    })();
+  }
   const setupParam = (location.search.match(/[?&]setup=([^&]+)/) || [])[1];
   if (setupParam) {
     applySetup(setupParam).then(async (okSetup) => {
@@ -6969,6 +7153,18 @@ function init() {
     if (e.key === "Enter") { e.preventDefault(); $("#planNoteAdd").click(); }
   });
   document.addEventListener("input", ev => {
+    const ti = ev.target.dataset && ev.target.dataset.trig;
+    if (ti != null) {
+      const v = ev.target.value.trim();
+      if (v) CFG.spikeTriggers[+ti] = v;
+      clearTimeout(window.__trigT);
+      window.__trigT = setTimeout(() => {
+        // an emptied box means "drop this one", but only once the typing stops
+        CFG.spikeTriggers = CFG.spikeTriggers.map(x => String(x || "").trim()).filter(Boolean);
+        touchCfg().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      }, 700);
+      return;
+    }
     const i = ev.target.dataset && ev.target.dataset.pnote;
     if (i == null || !CFG.plan.notes) return;
     CFG.plan.notes[+i] = ev.target.value;
@@ -7013,7 +7209,7 @@ function init() {
   };
 
   /* ---- spikes ---- */
-  $("#spikeBtn").onclick = openSpike;
+  $("#spikeBtn").onclick = () => openSpike();
   $("#spikeCancel").onclick = () => { $("#spikeSheet").classList.remove("on"); spikeDraft = null; };
   $("#spikeSave").onclick = saveSpike;
   $("#spikeAt").onchange = () => { if (spikeDraft) spikeDraft.at = $("#spikeAt").value; };
