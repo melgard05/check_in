@@ -930,6 +930,24 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm" id="fbSyncBtn">Sync now</button>
         <button class="btn sm" id="fbOut">Sign out</button>
       </div>
+
+      <div class="eyebrow" style="margin-top:18px">Sign in without the password</div>
+      <p class="sub">Firebase emails you a one-time link. Copy the whole link out of the email and paste
+        it below &mdash; you don't need to open it, and there's no password to remember. It signs you
+        into the same account, so your entries are where you left them.</p>
+      <div class="row" style="gap:8px">
+        <button class="btn sm" id="fbLinkSend">Email me a sign-in link</button>
+      </div>
+      <label class="fld" style="margin-top:9px"><span>Paste the link from the email</span>
+        <textarea id="fbLinkIn" rows="2" placeholder="https://your-project.firebaseapp.com/__/auth/action?mode=signIn&amp;oobCode=..."
+          autocapitalize="off" autocorrect="off" spellcheck="false"
+          style="font-family:var(--mono);font-size:11.5px"></textarea></label>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button class="btn sm pri" id="fbLinkGo">Finish sign-in</button>
+      </div>
+      <div class="mini">One-time setup: in the Firebase console under Authentication &rarr; Sign-in
+        method, switch on <b>Email link (passwordless sign-in)</b>. Email/Password has to stay on as well.
+        The link expires, so use it soon after it arrives.</div>
       <div class="sw" style="margin-top:6px"><div><div class="t">Keep Firebase in step</div>
         <div class="d">Writes each check-in as you save it, and pulls anything new on open.</div></div>
         <button class="tog" id="togFb" aria-pressed="false"></button></div>
@@ -1201,7 +1219,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 55;
+const BUILD = 56;
 
 const DEFAULT_CFG = {
   windows: [
@@ -5060,6 +5078,10 @@ function connState() {
   if (!cloudBase() || !acctId()) return { level: "setup",
     msg: "Not connected to your worker. Check-ins are saving on this device only \u2014 " +
          "no reminders, and nothing shared with your other device." };
+  if (fbAuthLost && CFG.fb.on) return { level: "fbauth",
+    msg: "Your Firebase sign-in has been lost, so the durable copy isn't being written. " +
+         "Everything logged here is safe on this device. Data \u2192 Firebase to sign back in " +
+         "\u2014 there's an email-link option that needs no password." };
   if (authFail && Date.now() - authFail < 6 * 3600000) return { level: "key",
     msg: "Your worker is refusing this device \u2014 the access key is missing or wrong, so nothing " +
          "is syncing. Everything logged here is safe. Data \u2192 Cloudflare to paste it back." };
@@ -5310,20 +5332,58 @@ function fbLog(msg, keep) {
   el.textContent = keep ? (line + "\n" + el.textContent).split("\n").slice(0, 14).join("\n") : line;
 }
 let fbTok = { id: "", exp: 0 };
+let fbAuthLost = false;                 // the session went, and nothing said so
+
+/* The Firebase session is one string in storage. Lose it and the app asks for a
+   password that was deliberately never written down — which is a bad trade for
+   something that never expires on its own. So it gets a backup copy too, and
+   signing out is recorded as a decision rather than inferred from an absence. */
+const K_FBREF = "baseline:fbrefresh", K_FBREF2 = "baseline:fbsession";
+async function fbSetRefresh(tok) {
+  await Store.set(K_FBREF, tok || "");
+  await Store.set(K_FBREF2, JSON.stringify(tok
+    ? { tok, uid: CFG.fb.uid || "", email: CFG.fb.email || "", at: Date.now(), forgot: false }
+    : { tok: "", at: Date.now(), forgot: true }));
+}
+async function fbGetRefresh() {
+  const live = await Store.get(K_FBREF);
+  if (live) return live;
+  let back = null;
+  try { back = JSON.parse(await Store.get(K_FBREF2) || "null"); } catch (e) {}
+  if (back && back.tok && !back.forgot) {
+    await Store.set(K_FBREF, back.tok);
+    if (!CFG.fb.uid && back.uid) CFG.fb.uid = back.uid;
+    if (!CFG.fb.email && back.email) CFG.fb.email = back.email;
+    credNote("Firebase session was missing — restored from the backup copy");
+    fbLog("session restored from the backup copy — no sign-in needed", true);
+    return back.tok;
+  }
+  return "";
+}
 
 async function fbToken() {
   if (fbTok.id && Date.now() < fbTok.exp - 60000) return fbTok.id;
-  const refresh = await Store.get("baseline:fbrefresh");
-  if (!refresh || !CFG.fb.apiKey) return "";
+  const refresh = await fbGetRefresh();
+  if (!refresh || !CFG.fb.apiKey) {
+    if (CFG.fb.on && !refresh) { fbAuthLost = true; refreshConn(); }
+    return "";
+  }
   const r = await fetch("https://securetoken.googleapis.com/v1/token?key=" + encodeURIComponent(CFG.fb.apiKey), {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(refresh)
   });
-  if (!r.ok) { setDot("#dFbAuth", "bad"); fbLog("session expired — sign in again", true); return ""; }
+  if (!r.ok) {
+    setDot("#dFbAuth", "bad");
+    fbAuthLost = true; refreshConn();
+    credNote("Firebase refused the stored session — sign-in needed");
+    fbLog("session no longer accepted — use the email link below to sign in again", true);
+    return "";
+  }
   const j = await r.json();
   fbTok = { id: j.id_token, exp: Date.now() + (+j.expires_in || 3600) * 1000 };
-  if (j.refresh_token) await Store.set("baseline:fbrefresh", j.refresh_token);
+  if (j.refresh_token) await fbSetRefresh(j.refresh_token);
   CFG.fb.uid = j.user_id || CFG.fb.uid; await saveCfg();
+  fbAuthLost = false;
   setDot("#dFbAuth", "ok");
   return fbTok.id;
 }
@@ -5343,16 +5403,115 @@ async function fbSignIn(email, password) {
       setDot("#dFbAuth", "bad"); return false;
     }
     fbTok = { id: j.idToken, exp: Date.now() + (+j.expiresIn || 3600) * 1000 };
-    await Store.set("baseline:fbrefresh", j.refreshToken);   // only the refresh token is kept
     CFG.fb.uid = j.localId; CFG.fb.email = email; await saveCfg();
+    await fbSetRefresh(j.refreshToken);                      // only the refresh token is kept
+    fbAuthLost = false;
+    credNote("signed in to Firebase with a password");
     setDot("#dFbAuth", "ok");
     fbLog("signed in as " + email, true);
     return true;
   } catch (e) { fbLog("sign-in error: " + e.message, true); setDot("#dFbAuth", "bad"); return false; }
 }
+/* ---------- signing in without a password ----------
+   Firebase mails a one-time code inside a link. The REST endpoint takes that code
+   directly, so the link never has to be opened or its domain authorised — pasting
+   it back here is enough. */
+const IDT = "https://identitytoolkit.googleapis.com/v1/accounts:";
+
+function oobFrom(text) {
+  const t = String(text || "").trim();
+  if (!t) return "";
+  let m = t.match(/[?&]oobCode=([^&#\s"']+)/);
+  if (m) return decodeURIComponent(m[1]);
+  // some mail clients wrap the real link inside a tracking or continue url
+  m = t.match(/[?&](?:link|continueUrl|url)=([^&#\s"']+)/);
+  if (m) {
+    const inner = decodeURIComponent(m[1]);
+    const m2 = inner.match(/[?&]oobCode=([^&#\s"']+)/);
+    if (m2) return decodeURIComponent(m2[1]);
+  }
+  if (/^[A-Za-z0-9_.\-]{20,}$/.test(t)) return t;      // just the code, pasted on its own
+  return "";
+}
+
+async function fbSendLink(email) {
+  if (!CFG.fb.apiKey) { fbLog("add your Web API key first", true); return false; }
+  if (!email) { fbLog("put your email in the box first", true); return false; }
+  const ask = async body => {
+    const r = await fetch(IDT + "sendOobCode?key=" + encodeURIComponent(CFG.fb.apiKey), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    return { ok: r.ok, j: await r.json().catch(() => ({})) };
+  };
+  try {
+    // no continueUrl first: then no domain of ours needs to be on the authorised list
+    let res = await ask({ requestType: "EMAIL_SIGNIN", email });
+    const msg = () => ((res.j.error && res.j.error.message) || "").toUpperCase();
+    if (!res.ok && /CONTINUE_URI|MISSING_CONTINUE/.test(msg()) && /^https:/.test(location.origin)) {
+      res = await ask({ requestType: "EMAIL_SIGNIN", email,
+        continueUrl: location.origin + location.pathname, canHandleCodeInApp: true });
+    }
+    if (!res.ok) {
+      const m = msg();
+      fbLog(/OPERATION_NOT_ALLOWED/.test(m)
+        ? "Firebase says email-link sign-in is switched off — turn on \u201cEmail link " +
+          "(passwordless sign-in)\u201d under Authentication \u2192 Sign-in method"
+        : /INVALID_EMAIL/.test(m) ? "that email isn't valid"
+        : /UNAUTHORIZED_DOMAIN|INVALID_CONTINUE_URI/.test(m)
+          ? "Firebase rejected this page's address — add it under Authentication \u2192 Settings " +
+            "\u2192 Authorised domains, or open the app from your own domain"
+        : m || "could not send the link", true);
+      return false;
+    }
+    CFG.fb.email = email; await saveCfg();
+    fbLog("sign-in link sent to " + email + " — copy the whole link into the box below", true);
+    return true;
+  } catch (e) { fbLog("could not send the link: " + e.message, true); return false; }
+}
+
+async function fbSignInLink(email, pasted) {
+  const oob = oobFrom(pasted);
+  if (!oob) { fbLog("couldn't find a code in that — paste the whole link from the email", true); return false; }
+  if (!email) { fbLog("put the email the link was sent to in the box above", true); return false; }
+  const priorUid = CFG.fb.uid || "";
+  try {
+    const r = await fetch(IDT + "signInWithEmailLink?key=" + encodeURIComponent(CFG.fb.apiKey), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, oobCode: oob }) });
+    const j = await r.json();
+    if (!r.ok) {
+      const m = ((j.error && j.error.message) || "").toUpperCase();
+      fbLog(/EXPIRED_OOB_CODE/.test(m) ? "that link has expired — send a fresh one"
+        : /INVALID_OOB_CODE/.test(m) ? "that link has already been used, or isn't the newest one"
+        : /INVALID_EMAIL|EMAIL_NOT_FOUND/.test(m) ? "that email doesn't match the link"
+        : m || "sign-in failed", true);
+      setDot("#dFbAuth", "bad"); return false;
+    }
+    fbTok = { id: j.idToken, exp: Date.now() + (+j.expiresIn || 3600) * 1000 };
+    CFG.fb.uid = j.localId; CFG.fb.email = email; await saveCfg();
+    await fbSetRefresh(j.refreshToken);
+    fbAuthLost = false;
+    setDot("#dFbAuth", "ok");
+    credNote("signed in to Firebase with an email link");
+    // A different uid means a different tree in the database — the old entries are
+    // still there, but under the old id, and this session cannot see them.
+    if (priorUid && j.localId !== priorUid) {
+      fbLog("signed in, but as a NEW account (" + j.localId + "), not the old one (" + priorUid +
+        "). Your entries live under the old id — sign out before syncing.", true);
+      alert("Signed in — but Firebase made this a new account, not the one your entries are under.\n\n" +
+        "Nothing on this device has changed. Don't turn syncing on yet: sign out, check the email " +
+        "address matches the original exactly, and try again.");
+      return true;
+    }
+    fbLog("signed in as " + email + " — no password needed", true);
+    return true;
+  } catch (e) { fbLog("sign-in error: " + e.message, true); setDot("#dFbAuth", "bad"); return false; }
+}
+
 async function fbSignOut() {
   fbTok = { id: "", exp: 0 };
-  await Store.set("baseline:fbrefresh", "");
+  await fbSetRefresh("");
+  fbAuthLost = false;                    // chosen, not lost
+  credNote("signed out of Firebase deliberately");
   CFG.fb.on = false; await saveCfg();
   setDot("#dFbAuth", ""); setDot("#dFbDb", "");
   fbLog("signed out", true);
@@ -6472,6 +6631,29 @@ function init() {
       await fbSync(false);
       renderCfg();
     }
+  };
+  $("#fbLinkSend").onclick = async () => {
+    await fbSave();
+    if (!CFG.fb.apiKey) { toast("Web API key needed first", true); return; }
+    if (!CFG.fb.email) { toast("Put your email in the box first", true); return; }
+    fbLog("asking Firebase to send a link…");
+    const ok = await fbSendLink(CFG.fb.email);
+    toast(ok ? "Link sent — check " + CFG.fb.email : "Couldn't send it — see the log", !ok);
+  };
+  $("#fbLinkGo").onclick = async () => {
+    await fbSave();
+    const pasted = $("#fbLinkIn").value;
+    if (!pasted.trim()) { toast("Paste the link from the email first", true); return; }
+    fbLog("checking the link…");
+    const ok = await fbSignInLink(CFG.fb.email, pasted);
+    if (ok) {
+      $("#fbLinkIn").value = "";                   // a code is only good once
+      CFG.fb.on = true; await saveCfg();
+      $("#togFb").setAttribute("aria-pressed", "true");
+      await fbSync(false);
+      renderCfg(); refreshConn();
+      toast("Signed in");
+    } else toast("Sign-in failed — see the log", true);
   };
   $("#fbSyncBtn").onclick = async () => { await fbSave(); fbSync(false); };
   $("#fbOut").onclick = async () => {
