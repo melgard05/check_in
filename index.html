@@ -570,6 +570,29 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
+    <div id="screenBlock" style="display:none">
+      <div class="eyebrow">Screen time</div>
+      <div class="card">
+        <p class="sub" style="margin-bottom:10px">Today's total, off your phone's own figure if you have
+          one. It's here because it moves with sleep and focus more reliably than most things you can
+          actually control.</p>
+        <div class="wheelwrap" style="margin-top:4px">
+          <div class="wcol"><div class="wcap">hours</div>
+            <div class="wheel" id="wSH"><div class="wsel"></div></div>
+            <div class="wstep"><button type="button" data-wstep="wSH:-1" aria-label="One hour less">&minus;</button><button type="button" data-wstep="wSH:1" aria-label="One hour more">+</button></div>
+          </div>
+          <div class="wcol"><div class="wcap">minutes</div>
+            <div class="wheel" id="wSM"><div class="wsel"></div></div>
+            <div class="wstep"><button type="button" data-wstep="wSM:-1" aria-label="Five minutes less">&minus;</button><button type="button" data-wstep="wSM:1" aria-label="Five minutes more">+</button></div>
+          </div>
+        </div>
+        <div class="wtotal" id="screenTotal">&mdash;</div>
+        <div class="row" style="margin-top:11px;gap:8px">
+          <button class="btn sm gho" id="screenNone">Didn't check / skip</button>
+        </div>
+      </div>
+    </div>
+
     <div id="napBlock" style="display:none">
       <div class="eyebrow">Daytime sleep</div>
       <div class="card">
@@ -1109,6 +1132,20 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     </div>
 
     <div class="card">
+      <h2>Screen time</h2>
+      <p class="sub">One total a day, copied off whatever your phone already tells you. It gets tested
+        against mood the same day, and against that night's sleep and the next day &mdash; which is the
+        direction that actually tells you something.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Ask for a daily total</div>
+        <div class="d">Skippable on any given day without holding up the check-in.</div></div>
+        <button class="tog" id="togScreen" aria-pressed="true"></button></div>
+      <div class="sw"><div style="flex:1"><div class="t">Which check-in asks</div>
+        <div class="d">The day's total only exists at the end of it.</div></div>
+        <select id="screenWinSel" style="flex:0 0 132px"></select></div>
+      <div class="mini" id="screenNote"></div>
+    </div>
+
+    <div class="card">
       <h2>What set it off</h2>
       <p class="sub">The trigger chips offered when you log a spike, or an as-needed dose. These
         shipped as a guess at what sets people off &mdash; they're yours to replace. Edit one by typing
@@ -1346,7 +1383,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 60;
+const BUILD = 61;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1356,6 +1393,8 @@ const DEFAULT_CFG = {
   ],
   weekend: false,
   napWins: ["mid", "pm"],     // which check-ins ask about daytime sleep
+  screenOn: true,             // ask for a daily screen-time total
+  screenWin: "",              // "" = the last check-in of the day
   medWin: "pm",               // and about medication wearing off
   cycle: false,               // track cycle day
   sched: {},                  // per-item overrides: { key: { wins:[], days:[] } }
@@ -1388,7 +1427,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers", "screenOn", "screenWin"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1523,6 +1562,8 @@ async function load() {
   if (typeof CFG.plan.updated !== "number") CFG.plan.updated = 0;
   if (!Array.isArray(CFG.altDays)) CFG.altDays = [0, 6];
   if (!Array.isArray(CFG.napWins)) CFG.napWins = CFG.napWin ? [CFG.napWin] : ["mid", "pm"];
+  if (typeof CFG.screenOn !== "boolean") CFG.screenOn = true;
+  if (typeof CFG.screenWin !== "string") CFG.screenWin = "";
   if (typeof CFG.medWin !== "string") CFG.medWin = "pm";
   if (typeof CFG.cycle !== "boolean") CFG.cycle = false;
   if (typeof CFG.quick !== "boolean") CFG.quick = true;
@@ -1642,7 +1683,7 @@ function newDraft(date, winId) {
     ctx: (earlier && earlier.ctx) || "",
     medoff: { st: "", at: "", crashAt: "", crashEnd: "", fx: [] },
     recall: false, period: false,
-    sleep: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "" };
+    sleep: null, screen: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "" };
 }
 function fixDraft(d) {                       // older records, and anything Firebase handed back
   if (!d || typeof d !== "object") return newDraft(todayISO(), (CFG.windows[0] || {}).id || "am");
@@ -1673,6 +1714,8 @@ function fixDraft(d) {                       // older records, and anything Fire
   d.nap.m = +d.nap.m || 0;
   if (typeof d.nap.start !== "string") d.nap.start = d.nap.start == null ? "" : String(d.nap.start);
   // meds used to be { 0:true, 1:false } against the old index list
+  if (d.screen != null && (typeof d.screen !== "object" || Array.isArray(d.screen))) d.screen = null;
+  if (d.screen && d.screen.h == null && d.screen.m == null) d.screen = null;
   if (!d.meds || typeof d.meds !== "object" || Array.isArray(d.meds)) d.meds = {};
   if (!d.meds.taken || typeof d.meds.taken !== "object") {
     const legacy = {};
@@ -2157,6 +2200,11 @@ function pushSleep() {
    toward that day. A nap in the evening comes out of the night ahead, so it
    counts toward tomorrow — the morning when that night gets logged. */
 const lastWinId = () => (CFG.windows.length ? CFG.windows[CFG.windows.length - 1].id : null);
+// the day's total only exists at the end of it, so this defaults to the last check-in
+const screenWinId = () => {
+  const w = CFG.screenWin && CFG.windows.some(x => x.id === CFG.screenWin) ? CFG.screenWin : lastWinId();
+  return w;
+};
 const napRollsForward = winId => winId === lastWinId();
 function addDays(dateISO, n) {
   const p = String(dateISO).split("-");
@@ -2245,6 +2293,28 @@ function medOffHint() {
       (diff < 0 ? "earlier" : "later") + " than usual (" + usual + ").</span>";
 }
 
+let lastScreen = { h: 0, m: 0 };
+function pushScreen(skip) {
+  if (!draft) return;
+  const el = $("#screenTotal"); if (!el) return;
+  if (skip) { draft.screen = null; el.innerHTML = '<span style="color:var(--ink-3)">not recorded</span>'; return; }
+  const h = wheelVal($("#wSH")), m = wheelVal($("#wSM"));
+  draft.screen = { h, m };
+  const tot = h + m / 60;
+  // compared against your own fortnight, not against anybody's idea of a healthy number
+  const past = daily(15).map(r => r.screen).filter(v => v != null);
+  const avg = past.length >= 4 ? past.reduce((a, b) => a + b, 0) / past.length : null;
+  let tail = "";
+  if (avg != null) {
+    const d = tot - avg;
+    tail = Math.abs(d) < 0.5
+      ? '  <span style="color:var(--ink-3)">about your usual</span>'
+      : '  <span style="color:' + (d > 0 ? "var(--high-1)" : "var(--base)") + '">' +
+        (d > 0 ? "+" : "\u2212") + hm(Math.round(Math.abs(d) * 60)) + " on your usual " +
+        avg.toFixed(1) + "h</span>";
+  }
+  el.innerHTML = (tot ? hm(h * 60 + m) : "none") + tail;
+}
 function pushNap() {
   if (!draft) return;
   const h = wheelVal($("#wNH")), m = wheelVal($("#wNM"));
@@ -2349,6 +2419,14 @@ function renderLog() {
   }
 
   // naps
+  const wantScreen = CFG.screenOn && draft.win === screenWinId();
+  $("#screenBlock").style.display = wantScreen ? "" : "none";
+  if (wantScreen) {
+    setWheel($("#wSH"), draft.screen && draft.screen.h != null ? draft.screen.h : 0);
+    setWheel($("#wSM"), draft.screen && draft.screen.m != null ? draft.screen.m : 0);
+    pushScreen(draft.screen == null);
+    $("#screenNone").textContent = draft.screen == null ? "Enter it after all" : "Didn't check / skip";
+  }
   const wantNap = (CFG.napWins || []).indexOf(draft.win) > -1;
   $("#napBlock").style.display = wantNap ? "" : "none";
   if (wantNap) {
@@ -2617,11 +2695,13 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0 };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
     });
+    const sc = es.find(e => e.screen && (e.screen.h != null || e.screen.m != null));
+    if (sc) row.screen = (sc.screen.h || 0) + (sc.screen.m || 0) / 60;
     const se = es.find(e => e.sleep && (e.sleep.h != null));
     if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake,
       wakes: (se.sleep.wakes || []).slice(), awakeMins: wakeMins(se.sleep) };
@@ -2752,6 +2832,7 @@ function seriesVal(r, k) {
   if (k === "sleep") return r.sleep ? r.sleep.hours : null;
   if (k === "nap") return r.nap ? r.nap.hours : (r.n ? 0 : null);
   if (k === "total") return r.total || null;
+  if (k === "screen") return r.screen;
   if (k === "medoff") return r.medoff ? r.medoff.mins : null;
   if (k === "day") return r.day;
   if (k === "worked") return r.worked == null ? null : (r.worked ? 1 : 0);
@@ -2780,6 +2861,7 @@ function pair(rows, ka, kb, lag) {
     const a = ka === "sleep" ? (rows[i].sleep ? rows[i].sleep.hours : null)
             : ka === "nap"   ? (rows[i].nap ? rows[i].nap.hours : (rows[i].n ? 0 : null))
             : ka === "total" ? (rows[i].total || null)
+            : ka === "screen" ? rows[i].screen
             : ka === "medoff" ? (rows[i].medoff ? rows[i].medoff.mins : null)
             : ka === "day" ? rows[i].day : rows[i].v[ka];
     const b = kb === "sleep" ? (rows[i + lag].sleep ? rows[i + lag].sleep.hours : null)
@@ -3102,6 +3184,7 @@ function readoutFor(i) {
     esc(r.medoff.crashAt) + "</b>" +
     (r.medoff.crashLen != null ? " for <b>" + hm(r.medoff.crashLen) + "</b>" : "") +
     (r.medoff.fx.length ? " · " + esc(r.medoff.fx.join(", ").toLowerCase()) : "") + "</span>");
+  if (r.screen != null) bits.push("screen <b>" + hm(Math.round(r.screen * 60)) + "</b>");
   if (r.medoff && r.medoff.st) bits.push("meds " + (r.medoff.st === "still" ? "<b>lasted all day</b>"
     : r.medoff.st === "none" ? "<b>unclear</b>" : "off at <b>" + esc(r.medoff.at) + "</b>"));
   if (r.nap) bits.push('<span style="color:#9b7fd4">napped <b>' + Math.floor(r.nap.hours) + "h " +
@@ -3578,6 +3661,17 @@ function renderSummary(rows, corr, cut) {
     : "Nothing has separated itself from chance yet.", !held.length, "corrSame");
   // spikes
   const sp = (STATE.spikes || []).filter(x => x.date >= addDays(todayISO(), -7));
+  push("screen time", (function () {
+    const sc7 = rows.slice(-7).map(r => r.screen).filter(v => v != null);
+    const scPv = rows.slice(-14, -7).map(r => r.screen).filter(v => v != null);
+    if (!sc7.length) return "Nothing logged this week.";
+    const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+    const a = avg(sc7), d = scPv.length ? a - avg(scPv) : null;
+    return "<b>" + a.toFixed(1) + " h</b> a day across <b>" + sc7.length + "</b> logged days" +
+      (d == null ? "." : Math.abs(d) >= 0.5
+        ? ", " + (d > 0 ? "up" : "down") + " <b>" + Math.abs(d).toFixed(1) + " h</b> on the week before."
+        : ", level with the week before.");
+  })(), !rows.slice(-7).some(r => r.screen != null), "corrLag");
   push("spikes", sp.length
     ? "<b>" + sp.length + "</b> logged in the last week \u2014 the moments the daily averages flatten out."
     : "None logged this week.", !sp.length, "");
@@ -3619,13 +3713,15 @@ function renderPatterns() {
   const MIN = 8;
   // same day vs mood
   const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key)
-    .concat(["sleep", "nap", "total", "medoff", "day"]);
+    .concat(["sleep", "nap", "total", "medoff", "day", "screen"]);
   let list = [];
   cands.forEach(k => {
     const p = pair(rows, k, "mood", 0);
     if (p.r != null && p.n >= MIN) list.push({ k, r: p.r, n: p.n,
-      label: k === "medoff" ? "When meds wore off" : k === "sleep" ? "Hours slept at night" : k === "nap" ? "Nap hours"
-        : k === "total" ? "Total sleep, naps included" : k === "day" ? "Daylight hours" : ITEM[k].label });
+      label: k === "screen" ? "Screen time"
+        : k === "medoff" ? "When meds wore off" : k === "sleep" ? "Hours slept at night" : k === "nap" ? "Nap hours"
+        : k === "total" ? "Total sleep, naps included" : k === "day" ? "Daylight hours"
+        : k === "screen" ? "Screen time" : ITEM[k] ? ITEM[k].label : k });
   });
   if (corrCtl) {
     list = list.filter(x => x.k !== corrCtl).map(x => {
@@ -3674,10 +3770,20 @@ function renderPatterns() {
       if (q.r != null && q.n >= MIN) lag.push({ L, r: q.r, n: q.n, k });
     });
   });
+  // today's screen time against tonight's sleep, and against tomorrow, is the direction
+  // worth knowing: the same-day number can't tell you which way it ran
+  [0, 1].forEach(L => {
+    const q = pair(rows, "screen", "mood", L);
+    if (q.r != null && q.n >= MIN) lag.push({ L, r: q.r, n: q.n, k: "_scmood" });
+    const q2 = pair(rows, "screen", "sleep", L);
+    if (q2.r != null && q2.n >= MIN) lag.push({ L, r: q2.r, n: q2.n, k: "_scsleep" });
+  });
   lag.forEach(x => { x.p = corrP(x.r, x.n); });
   const lagCut = bhThreshold(lag.map(x => x.p), 0.10);
   $("#corrLag").innerHTML = lag.length
-    ? lag.map(x => corrRow((x.k === "_total" ? "Total sleep → mood" : "Sleep → " +
+    ? lag.map(x => corrRow((x.k === "_scmood" ? "Screen time → mood"
+        : x.k === "_scsleep" ? "Screen time → hours slept"
+        : x.k === "_total" ? "Total sleep → mood" : "Sleep → " +
         (x.k && x.k !== "_total" ? ITEM[x.k].label.toLowerCase() : "mood")) +
         (x.L ? ", " + x.L + " day" + (x.L > 1 ? "s" : "") + " later" : ", same day"),
         x.r, x.n, "", x.p, lagCut)).join("")
@@ -3730,7 +3836,8 @@ function digestText() {
   keys.concat(["sleep"]).forEach(k => {
     const a = mean(wk, k), c = mean(pv, k);
     if (a == null) return;
-    const nm = k === "sleep" ? "sleep" : ITEM[k].label.toLowerCase();
+    const nm = k === "sleep" ? "sleep" : k === "screen" ? "screen time"
+      : ITEM[k] ? ITEM[k].label.toLowerCase() : k;
     if (c == null) { moves.push(nm + " " + a.toFixed(1)); return; }
     const d = a - c;
     moves.push(nm + " " + a.toFixed(1) + (Math.abs(d) >= 0.4
@@ -3784,7 +3891,7 @@ function renderPlain(rows) {
   }
   // the single strongest link, stated as a sentence
   const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key)
-    .concat(["sleep", "nap", "total", "medoff", "day"]);
+    .concat(["sleep", "nap", "total", "medoff", "day", "screen"]);
   let best = null;
   cands.forEach(k => {
     const pr = pair(rows, k, "mood", 0);
@@ -3796,7 +3903,8 @@ function renderPlain(rows) {
   if (best) {
     const nm = best.k === "sleep" ? "how long you slept" : best.k === "medoff" ? "when your meds wore off"
       : best.k === "total" ? "total sleep" : best.k === "nap" ? "napping"
-      : best.k === "day" ? "daylight" : ITEM[best.k].label.toLowerCase();
+      : best.k === "day" ? "daylight" : best.k === "screen" ? "screen time"
+      : ITEM[best.k] ? ITEM[best.k].label.toLowerCase() : best.k;
     lines.push({ icon: "\u2194", t: "Of everything tracked, " + nm + " moves with your mood most" +
       " (" + (best.r > 0 ? "together" : "opposite directions") + ", across " + best.n + " days)." });
   }
@@ -3969,7 +4077,8 @@ function renderCtxSplit(rows) {
     "</tr>" +
     keys.concat(["sleep"]).map(k => {
       const bv = best(k);
-      return "<tr><td>" + esc(k === "sleep" ? "Hours slept" : ITEM[k].label) + "</td>" +
+      return "<tr><td>" + esc(k === "sleep" ? "Hours slept" : k === "screen" ? "Screen time"
+        : ITEM[k] ? ITEM[k].label : k) + "</td>" +
         used.map(u => { const m = mean(u.set, k);
           const hi = m != null && bv != null && Math.abs(m - bv) < 0.05;
           return '<td' + (hi ? ' style="color:var(--base);font-weight:600"' : "") + ">" +
@@ -4030,7 +4139,8 @@ function renderWorkSplit(rows) {
     const a = mean(on, k), c = mean(off, k);
     if (a == null || c == null) return null;
     return { k, a, c, d: a - c,
-      label: k === "sleep" ? "Hours slept" : k === "total" ? "Total sleep" : ITEM[k].label };
+      label: k === "sleep" ? "Hours slept" : k === "total" ? "Total sleep"
+        : k === "screen" ? "Screen time" : ITEM[k] ? ITEM[k].label : k };
   }).filter(Boolean).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
 
   // things that get worse when higher shouldn't read as "better" when they rise
@@ -4463,7 +4573,7 @@ function buildExport(kind) {
       "nap_hours", "nap_start", "nap_carried_from_prev_evening", "total_sleep_hours",
       "med_wore_off", "med_wore_off_time", "crash_time", "crash_end", "crash_minutes", "crash_effects",
       "from_memory", "med_adherence", "med_taken_am", "med_taken_pm", "prn_doses",
-      "spike_count", "spike_times", "daylight_hours"]
+      "screen_hours", "spike_count", "spike_times", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
       .concat(noted.map(i => i.key + "_note"))
@@ -4487,6 +4597,7 @@ function buildExport(kind) {
       r.recall ? "yes" : "no",
       r.meds == null ? "" : r.meds.toFixed(2),
       r.medAt.am || "", r.medAt.pm || "", r.prn || "",
+      r.screen == null ? "" : r.screen.toFixed(2),
       r.spikes.length || "", r.spikes.map(x => x.at).join("; "),
       r.day.toFixed(2)]
       .concat(on.map(i => r.v[i.key] == null ? "" : r.v[i.key].toFixed(2)))
@@ -4767,7 +4878,8 @@ function printWorkReport() {
 
   const keys = ITEMS.filter(i => (i.grp === "core" || i.key === "pain") && isOn(i.key)).map(i => i.key);
   const badHigh = { irrit:1, anxiety:1, pain:1, spend:1, fog:1, calls:1, binge:1 };
-  const label = k => k === "sleep" ? "Hours slept" : k === "total" ? "Total sleep" : ITEM[k].label;
+  const label = k => k === "sleep" ? "Hours slept" : k === "total" ? "Total sleep"
+    : k === "screen" ? "Screen time" : ITEM[k] ? ITEM[k].label : k;
   const esc2 = x => esc(x);
   const f1 = v => v == null ? "\u2014" : v.toFixed(1);
 
@@ -4902,11 +5014,13 @@ function printSummary() {
     (rows[e.start] ? ", " + fmtDate(rows[e.start].date) + " to " + fmtDate(rows[e.end].date) : "") + "</li>").join("");
 
   const cands = ITEMS.filter(i => i.key !== "mood" && isOn(i.key)).map(i => i.key)
-    .concat(["sleep", "nap", "total", "medoff", "day"]);
+    .concat(["sleep", "nap", "total", "medoff", "day", "screen"]);
   let cor = cands.map(k => { const p = pair(rows, k, "mood", 0);
     return p.r == null || p.n < 8 ? null : { k, r: p.r, n: p.n, p: corrP(p.r, p.n),
-      label: k === "sleep" ? "Hours slept" : k === "nap" ? "Nap hours" : k === "total" ? "Total sleep"
-        : k === "medoff" ? "Medication wear-off time" : k === "day" ? "Daylight hours" : ITEM[k].label };
+      label: k === "screen" ? "Screen time"
+        : k === "sleep" ? "Hours slept" : k === "nap" ? "Nap hours" : k === "total" ? "Total sleep"
+        : k === "medoff" ? "Medication wear-off time" : k === "day" ? "Daylight hours"
+        : k === "screen" ? "Screen time" : ITEM[k] ? ITEM[k].label : k };
   }).filter(Boolean);
   const cut = bhThreshold(cor.map(x => x.p), 0.10);
   const kept = cor.filter(x => x.p != null && cut > 0 && x.p <= cut)
@@ -5086,6 +5200,18 @@ function renderCfg() {
   renderSpikePick();
   renderTriggers();
   renderWritten();
+  $("#togScreen").setAttribute("aria-pressed", CFG.screenOn ? "true" : "false");
+  $("#screenWinSel").innerHTML = CFG.windows.map(w =>
+    '<option value="' + esc(w.id) + '"' + (screenWinId() === w.id ? " selected" : "") + ">" +
+    esc(w.label) + "</option>").join("");
+  $("#screenWinSel").disabled = !CFG.screenOn;
+  const scR = daily(30).map(r => r.screen).filter(v => v != null);
+  $("#screenNote").textContent = !CFG.screenOn
+    ? "Off — not asked. Anything already logged is kept."
+    : scR.length
+      ? scR.length + " days logged in the last 30, averaging " +
+        (scR.reduce((a, b) => a + b, 0) / scR.length).toFixed(1) + " h."
+      : "Nothing logged yet. Eight days and it starts appearing in the correlations.";
   $("#togNeedNote").setAttribute("aria-pressed", CFG.needNote ? "true" : "false");
   $("#needNoteSel").value = String(CFG.needNoteAt || 3);
   $("#needNoteSel").disabled = !CFG.needNote;
@@ -6337,8 +6463,9 @@ function commit(skip, reason) {
     const anyCtx = !!draft.ctx;
     const anyMedOff = draft.medoff && !!draft.medoff.st;
     const anyPeriod = !!draft.period;
+    const anyScreen = !!draft.screen;
     if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap && !anyCtx && !anyMedOff && !anyPeriod &&
-        !draft.tags.length && !draft.warns.length && !draft.note) {
+        !anyScreen && !draft.tags.length && !draft.warns.length && !draft.note) {
       toast("Nothing filled in yet", true); return;
     }
     // A reading a long way from your usual is the one worth having words against.
@@ -6367,6 +6494,9 @@ function commit(skip, reason) {
         draft.medoff.crashEnd = $("#crashEnd").value || "";
       } else { draft.medoff.crashAt = ""; draft.medoff.crashEnd = ""; draft.medoff.fx = []; }
     }
+    if (CFG.screenOn && draft.win === screenWinId() && draft.screen) {
+      draft.screen = { h: wheelVal($("#wSH")), m: wheelVal($("#wSM")) };
+    } else if (draft.win !== screenWinId()) { /* another check-in: leave whatever is there */ }
     if ((CFG.napWins || []).indexOf(draft.win) > -1 && draft.nap && draft.nap.on) {
       draft.nap = { on: true, h: wheelVal($("#wNH")), m: wheelVal($("#wNM")),
         start: $("#napStart").value || "" };
@@ -6404,6 +6534,8 @@ function init() {
   fillWinSelect();
   buildWheel($("#wH"), 14, 1, pushSleep);
   buildWheel($("#wM"), 55, 5, pushSleep);
+  buildWheel($("#wSH"), 16, 1, () => pushScreen(false));
+  buildWheel($("#wSM"), 55, 5, () => pushScreen(false));
   buildWheel($("#wNH"), 5, 1, pushNap);
   buildWheel($("#wNM"), 55, 5, pushNap);
   bindSliders($("#v-log"));   // delegated, so every slider group is covered
@@ -6433,6 +6565,16 @@ function init() {
       if (e && e.scrollIntoView) e.scrollIntoView({ block: "start", behavior: "smooth" }); }, 40); };
   $("#togRecall").onclick = () => { draft.recall = !draft.recall;
     $("#togRecall").setAttribute("aria-pressed", draft.recall ? "true" : "false"); };
+  $("#screenNone").onclick = () => {
+    if (draft.screen != null) {
+      lastScreen = { h: draft.screen.h || 0, m: draft.screen.m || 0 };
+      pushScreen(true);
+    } else {
+      setWheel($("#wSH"), lastScreen.h); setWheel($("#wSM"), lastScreen.m);
+      pushScreen(false);
+    }
+    $("#screenNone").textContent = draft.screen == null ? "Enter it after all" : "Didn't check / skip";
+  };
   $("#togNapped").onclick = () => {
     draft.nap = draft.nap || { on: false, h: 0, m: 0, start: "" };
     draft.nap.on = !draft.nap.on;
@@ -6823,6 +6965,10 @@ function init() {
   });
 
   $("#togQuick").onclick = () => { CFG.quick = !CFG.quick; showAll = false;
+    touchCfg(); renderCfg(); renderLog(); };
+  $("#togScreen").onclick = () => { CFG.screenOn = !CFG.screenOn;
+    touchCfg(); renderCfg(); renderLog(); };
+  $("#screenWinSel").onchange = () => { CFG.screenWin = $("#screenWinSel").value;
     touchCfg(); renderCfg(); renderLog(); };
   $("#togNeedNote").onclick = () => { CFG.needNote = !CFG.needNote;
     touchCfg(); renderCfg(); renderLog(); };
