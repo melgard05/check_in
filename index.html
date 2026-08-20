@@ -70,6 +70,16 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .flagbar .btn{padding:5px 10px;font-size:12px;flex:0 0 auto}
 .spikebtn{margin-top:4px;background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
 .spikebtn:hover{background:#332618}
+.starbtn{margin-top:8px;background:#2a2415;border-color:#c9a227;color:#e0c453;font-weight:600}
+.starbtn:hover{background:#332c19}
+#starSheet .gatebox{max-width:440px;border-color:#c9a227}
+.starq{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px}
+.strow{display:flex;gap:9px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--line)}
+.strow:last-child{border-bottom:0}
+.stwhat{flex:1;font-size:14px;min-width:0;overflow-wrap:anywhere}
+.stwhen{font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:0 0 auto}
+.stdel{background:none;border:0;color:var(--ink-3);font-size:16px;cursor:pointer;padding:0 2px;line-height:1}
+.stdel:hover{color:var(--bad)}
 .updbar span{flex:1;color:var(--ink)}
 .updbar .btn{padding:5px 11px;font-size:12.5px}
 
@@ -630,6 +640,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       like an ordinary day. This is what keeps the bad twenty minutes on the record.</div>
     <div class="mini" style="text-align:center;margin:2px 0 4px" id="spikeCount"></div>
 
+    <button class="btn full starbtn" id="starBtn">&#9733;&nbsp; Gold star for something good</button>
+    <div class="mini" style="text-align:center;margin:7px 0 2px">
+      The same idea pointed the other way. Everything else here is looking for what's wrong, and a
+      record made only of symptoms is not an honest record of a life.</div>
+    <div class="mini" style="text-align:center;margin:2px 0 4px" id="starCount"></div>
+
     <div class="eyebrow" id="ebCore">Core</div>
     <div class="card" id="coreItems"></div>
 
@@ -790,6 +806,14 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="row" style="margin-top:12px">
         <button class="btn sm" id="sumOpen">Open the full report</button>
       </div>
+    </div>
+
+    <div class="card" id="starCard">
+      <h2>Gold stars</h2>
+      <p class="sub">Every good thing you've marked, newest first. Kept separately from the ratings
+        because a 6 out of 10 day with one genuinely good hour in it is not the same as a flat 6,
+        and only one of those is worth reading back on a bad day.</p>
+      <div id="starList"></div>
     </div>
 
     <div class="card" id="themeCard">
@@ -1132,6 +1156,34 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     </div>
 
     <div class="card">
+      <h2>Tell someone about dose changes</h2>
+      <p class="sub">When you log a dose change, the app writes the message and hands it to your own
+        Messages or Mail app. You read it and press send &mdash; nothing goes anywhere on its own, and
+        nothing about your health leaves this phone without you seeing it first.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Offer to tell someone</div>
+        <div class="d">Asked once, when you log the change.</div></div>
+        <button class="tog" id="togTell" aria-pressed="false"></button></div>
+      <label class="fld" style="margin-top:9px"><span>Their name</span>
+        <input type="text" id="tellName" placeholder="Stacie" autocapitalize="words"></label>
+      <div class="seg" id="tellHow" style="margin-top:11px">
+        <button data-tellhow="sms" aria-pressed="true">Text message</button>
+        <button data-tellhow="email" aria-pressed="false">Email</button>
+      </div>
+      <label class="fld" style="margin-top:9px" id="tellSmsWrap"><span>Mobile number</span>
+        <input type="tel" id="tellSms" placeholder="+1 555 123 4567" autocapitalize="off"
+               spellcheck="false"></label>
+      <label class="fld" style="margin-top:9px;display:none" id="tellEmailWrap"><span>Email address</span>
+        <input type="text" id="tellEmail" placeholder="stacie@example.com" autocapitalize="off"
+               spellcheck="false"></label>
+      <div class="row" style="margin-top:11px;gap:8px">
+        <button class="btn sm" id="tellPreview">Preview the message</button>
+        <button class="btn sm gho" id="tellTest">Send a test now</button>
+      </div>
+      <div class="mini" id="tellNote"></div>
+      <div class="log" id="tellBox" style="display:none;white-space:pre-wrap"></div>
+    </div>
+
+    <div class="card">
       <h2>Screen time</h2>
       <p class="sub">One total a day, copied off whatever your phone already tells you. It gets tested
         against mood the same day, and against that night's sleep and the next day &mdash; which is the
@@ -1229,6 +1281,46 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   <button data-v="pat" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="8" r="2.4"/><circle cx="17" cy="16" r="2.4"/><path d="M9 9.6l6 5"/><path d="M4 20h3M17 4h3" opacity=".5"/></svg>Patterns</button>
   <button data-v="data" aria-current="false"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="M8 11l4 4 4-4"/><path d="M4 19h16"/></svg>Data</button>
 </nav>
+
+<div class="gate" id="tellSheet">
+  <div class="gatebox">
+    <div class="k">dose change</div>
+    <h3 style="margin-bottom:6px" id="tellHead">Tell Stacie?</h3>
+    <p class="sub">Change what it says if you like. It opens in your own app &mdash;
+      nothing is sent until you press send there.</p>
+    <label class="fld" style="margin-top:4px"><span>What changed</span>
+      <input type="text" id="tellWhat" placeholder="e.g. lamotrigine up to 150mg"
+        autocapitalize="sentences"></label>
+    <label class="fld" style="margin-top:10px"><span>Message</span>
+      <textarea id="tellMsg" rows="5" style="font-size:13.5px"></textarea></label>
+    <div class="row" style="margin-top:13px;gap:8px">
+      <button class="btn pri" style="flex:2 1 150px" id="tellSend">Open Messages</button>
+      <button class="btn gho" style="flex:1 1 100px" id="tellSkip">Not this time</button>
+    </div>
+  </div>
+</div>
+
+<div class="gate" id="starSheet">
+  <div class="gatebox">
+    <div class="k" style="color:#e0c453">gold star</div>
+    <h3 style="margin-bottom:10px">What was good</h3>
+    <label class="fld"><span>What happened &mdash; needed</span>
+      <input type="text" id="starWhat" placeholder="However small. Small ones count."
+        autocapitalize="sentences" spellcheck="true"></label>
+    <p class="sub" style="margin:13px 0 7px">Was it something you did, or something that happened?</p>
+    <div class="starq" id="starKinds"></div>
+    <div class="row" style="margin-top:13px">
+      <label class="fld" style="flex:0 1 140px"><span>Time</span><input type="time" id="starAt"></label>
+      <div style="flex:1 1 150px;align-self:end;padding-bottom:9px" class="mini">Defaults to now.</div>
+    </div>
+    <label class="fld" style="margin-top:11px"><span>Anything else</span>
+      <textarea id="starNote" rows="2" placeholder="Worth remembering on a worse day."></textarea></label>
+    <div class="row" style="margin-top:13px;gap:8px">
+      <button class="btn pri" style="flex:2 1 150px" id="starSave">Save</button>
+      <button class="btn gho" style="flex:1 1 100px" id="starCancel">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <div class="gate" id="spikeSheet">
   <div class="gatebox" style="border-color:var(--warn);max-width:440px">
@@ -1383,7 +1475,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 61;
+const BUILD = 62;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1393,6 +1485,9 @@ const DEFAULT_CFG = {
   ],
   weekend: false,
   napWins: ["mid", "pm"],     // which check-ins ask about daytime sleep
+  // someone to tell when a dose changes. Nothing sends by itself: the app writes
+  // the message and hands it to your own Messages or Mail app to send.
+  tellWho: { name: "", sms: "", email: "", on: false, how: "sms" },
   screenOn: true,             // ask for a daily screen-time total
   screenWin: "",              // "" = the last check-in of the day
   medWin: "pm",               // and about medication wearing off
@@ -1427,7 +1522,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers", "screenOn", "screenWin"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers", "screenOn", "screenWin", "tellWho"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1562,6 +1657,12 @@ async function load() {
   if (typeof CFG.plan.updated !== "number") CFG.plan.updated = 0;
   if (!Array.isArray(CFG.altDays)) CFG.altDays = [0, 6];
   if (!Array.isArray(CFG.napWins)) CFG.napWins = CFG.napWin ? [CFG.napWin] : ["mid", "pm"];
+  if (!CFG.tellWho || typeof CFG.tellWho !== "object" || Array.isArray(CFG.tellWho))
+    CFG.tellWho = { name: "", sms: "", email: "", on: false, how: "sms" };
+  ["name", "sms", "email", "how"].forEach(k => {
+    if (typeof CFG.tellWho[k] !== "string") CFG.tellWho[k] = k === "how" ? "sms" : ""; });
+  if (["sms", "email"].indexOf(CFG.tellWho.how) < 0) CFG.tellWho.how = "sms";
+  if (typeof CFG.tellWho.on !== "boolean") CFG.tellWho.on = false;
   if (typeof CFG.screenOn !== "boolean") CFG.screenOn = true;
   if (typeof CFG.screenWin !== "string") CFG.screenWin = "";
   if (typeof CFG.medWin !== "string") CFG.medWin = "pm";
@@ -1611,6 +1712,7 @@ async function load() {
   if (!STATE.skipped) STATE.skipped = {};
   if (!Array.isArray(STATE.suggestions)) STATE.suggestions = [];
   if (!Array.isArray(STATE.spikes)) STATE.spikes = [];
+  if (!Array.isArray(STATE.stars)) STATE.stars = [];
   // ids of things deliberately removed, so a sync can't resurrect them
   if (!STATE.gone || typeof STATE.gone !== "object") STATE.gone = {};
   if (!Array.isArray(STATE.flagLog)) STATE.flagLog = [];      // what was raised, and when
@@ -2536,6 +2638,7 @@ function renderLog() {
 
   renderSug();
   renderSpikeCount();
+  renderStarCount();
   markNeeded();
 
   const existing = ENTRIES.some(x => x.date === draft.date && x.win === draft.win);
@@ -2679,6 +2782,7 @@ function dayList(days) {
   const dates = {};
   ENTRIES.forEach(e => dates[e.date] = 1);
   (STATE.spikes || []).forEach(x => { if (x && x.date) dates[x.date] = 1; });
+  (STATE.stars || []).forEach(x => { if (x && x.date) dates[x.date] = 1; });
   let keys = Object.keys(dates).sort();
   if (!keys.length) return [];
   const end = new Date(), out = [];
@@ -2695,7 +2799,7 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -2760,6 +2864,7 @@ function daily(days) {
     if (doses.length && es.some(e => e.meds && e.meds.taken))
       row.meds = doses.filter(k => takenToday[k] || takenToday[k.split("@")[0]]).length / doses.length;
     row.spikes = (STATE.spikes || []).filter(x => x.date === date);
+    row.stars = (STATE.stars || []).filter(x => x.date === date);
     row.day = dayLength(date, CFG.lat);
     return row;
   });
@@ -3029,6 +3134,16 @@ function drawMain() {
          '" fill="' + (anyManic ? "#c25a4a" : "#d9a03c") + '" opacity=".85"/>';
   });
 
+  // gold stars along the bottom — the spikes sit along the top, and having both
+  // on one chart is the whole point of keeping them
+  rows.forEach((r, i) => {
+    if (!r.stars || !r.stars.length) return;
+    const x = xAt(i, n), y = H - bot - 4;
+    for (let j = 0; j < Math.min(r.stars.length, 3); j++)
+      g += '<text x="' + x.toFixed(1) + '" y="' + (y - j * 8) + '" fill="#e0c453" font-size="9" ' +
+           'text-anchor="middle" opacity=".9">\u2605</text>';
+  });
+
   // med-change markers
   rows.forEach((r, i) => { if (r.tags.indexOf("Med change") > -1) {
     const x = xAt(i, n);
@@ -3193,6 +3308,8 @@ function readoutFor(i) {
   if (r.v.pain != null) s += '<br><span style="color:var(--high-2)">pain <b>' + r.v.pain.toFixed(1) + "</b>" +
     (r.sites.length ? " · " + esc(r.sites.join(", ").toLowerCase()) : "") +
     (r.kinds.length ? " · " + esc(r.kinds.join(", ").toLowerCase()) : "") + "</span>";
+  if (r.stars && r.stars.length) s += '<br><span style="color:#e0c453">\u2605 ' +
+    esc(r.stars.map(x => x.what).join(" · ")) + "</span>";
   if (r.spikes && r.spikes.length) s += '<br><span style="color:var(--warn)">' + r.spikes.length +
     " spike" + (r.spikes.length > 1 ? "s" : "") + ": " +
     esc(r.spikes.map(x => x.at + (x.tags.length ? " (" + x.tags[0].toLowerCase() + ")" : "")).join(", ")) + "</span>";
@@ -3528,6 +3645,105 @@ function hiQuote(text, term) {
   return out.length > 320 ? out.slice(0, 320) + "…" : out;
 }
 
+/* ---------- telling someone a dose changed ----------
+   No server is involved and none should be: this is health information about one
+   person going to one other person. The app composes it and hands it to the phone's
+   own Messages or Mail app, where it sits as a draft until she presses send. */
+function tellMessage(what) {
+  const who = CFG.tellWho || {};
+  const meds = (CFG.medList || []).filter(m => (m.name || "").trim());
+  const d = new Date();
+  const when = d.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+  const lines = [];
+  lines.push((who.name ? "Hi " + who.name.split(" ")[0] + " — " : "") +
+    "medication change today (" + when + ").");
+  if (what && what.trim()) lines.push("", what.trim());
+  if (meds.length) {
+    lines.push("", "Currently on:");
+    meds.forEach(m => {
+      const w = (m.whens || [m.when]).map(x =>
+        x === "am" ? "morning" : x === "pm" ? "evening" : "as needed").join(" + ");
+      lines.push("  \u2022 " + m.name + " (" + w + ")");
+    });
+  }
+  lines.push("", "Sent from my check-in app.");
+  return lines.join("\n");
+}
+function tellLink(msg) {
+  const who = CFG.tellWho || {};
+  if (who.how === "email") {
+    const to = (who.email || "").trim();
+    return "mailto:" + to.replace(/\s+/g, "") +
+      "?subject=" + encodeURIComponent("Medication change — " + todayISO()) +
+      "&body=" + encodeURIComponent(msg);
+  }
+  // iOS wants ?body= after an &, Android is happy either way; ?& works on both
+  const num = (who.sms || "").replace(/[^\d+]/g, "");
+  return "sms:" + num + (/iPhone|iPad|Macintosh/.test(navigator.userAgent) ? "&" : "?") +
+    "body=" + encodeURIComponent(msg);
+}
+function tellReady() {
+  const w = CFG.tellWho || {};
+  return !!(w.on && (w.how === "email" ? (w.email || "").trim() : (w.sms || "").trim()));
+}
+function openTell(what) {
+  const who = CFG.tellWho || {};
+  $("#tellHead").textContent = who.name ? "Tell " + who.name.split(" ")[0] + "?" : "Tell them?";
+  $("#tellWhat").value = what || "";
+  $("#tellMsg").value = tellMessage(what || "");
+  $("#tellSend").textContent = who.how === "email" ? "Open Mail" : "Open Messages";
+  $("#tellSheet").classList.add("on");
+  setTimeout(() => { const b = $("#tellWhat"); if (b) b.focus(); }, 60);
+}
+function renderTell() {
+  if (!$("#togTell")) return;
+  const w = CFG.tellWho || {};
+  $("#togTell").setAttribute("aria-pressed", w.on ? "true" : "false");
+  if (document.activeElement !== $("#tellName")) $("#tellName").value = w.name || "";
+  if (document.activeElement !== $("#tellSms")) $("#tellSms").value = w.sms || "";
+  if (document.activeElement !== $("#tellEmail")) $("#tellEmail").value = w.email || "";
+  $$("#tellHow button").forEach(b =>
+    b.setAttribute("aria-pressed", b.dataset.tellhow === w.how ? "true" : "false"));
+  $("#tellSmsWrap").style.display = w.how === "sms" ? "" : "none";
+  $("#tellEmailWrap").style.display = w.how === "email" ? "" : "none";
+  $("#tellNote").innerHTML = !w.on
+    ? "Off \u2014 logging a dose change won't offer anything."
+    : tellReady()
+      ? "Ready. Logging a dose change will offer to " +
+        (w.how === "email" ? "email " : "text ") + esc(w.name || "them") + "."
+      : '<span style="color:var(--warn)">Needs ' +
+        (w.how === "email" ? "an email address" : "a mobile number") + " before it can offer anything.</span>";
+}
+
+function renderStars() {
+  const el = $("#starList"); if (!el) return;
+  const l = (STATE.stars || []).slice().sort((a, b) =>
+    (a.date + a.at) < (b.date + b.at) ? 1 : -1);
+  if (!l.length) {
+    el.innerHTML = '<div class="empty"><b>Nothing starred yet</b>The button is under the spike ' +
+      "button on the Log tab. The bar is meant to be low.</div>";
+    return;
+  }
+  const byDate = {};
+  l.forEach(x => { (byDate[x.date] = byDate[x.date] || []).push(x); });
+  const days = Object.keys(byDate).sort().reverse();
+  const wk = l.filter(x => x.date >= addDays(todayISO(), -6)).length;
+  el.innerHTML = '<div class="statnote"><b>' + l.length + "</b> in all, <b>" + wk +
+      "</b> in the last week, across <b>" + days.length + "</b> " +
+      (days.length === 1 ? "day" : "days") + ".</div>" +
+    days.slice(0, 60).map(d => '<div class="noteday"><div class="d">' + esc(fmtDate(d)) +
+      " &middot; " + DAYS[dowOf(d)] + " " + d.slice(0, 4) + "</div>" +
+      byDate[d].slice().reverse().map(x => '<div class="strow">' +
+        '<span class="stwhat"><span style="color:#e0c453">\u2605</span> ' + esc(x.what) +
+          (x.kinds && x.kinds.length
+            ? '<span class="stwhen"> &middot; ' + esc(x.kinds.join(", ").toLowerCase()) + "</span>" : "") +
+          (x.note ? '<div class="mini" style="margin-top:2px">' + esc(x.note) + "</div>" : "") +
+        "</span>" +
+        '<span class="stwhen">' + esc(x.at) + "</span>" +
+        '<button class="stdel" data-stardel="' + esc(x.id) + '" aria-label="Remove">&times;</button>' +
+      "</div>").join("") + "</div>").join("");
+}
+
 function renderThemes() {
   if (!$("#themeCard")) return;
   $("#themeWin").value = String(themeWin);
@@ -3661,6 +3877,14 @@ function renderSummary(rows, corr, cut) {
     : "Nothing has separated itself from chance yet.", !held.length, "corrSame");
   // spikes
   const sp = (STATE.spikes || []).filter(x => x.date >= addDays(todayISO(), -7));
+  // gold stars
+  const stw = (STATE.stars || []).filter(x => x.date >= addDays(todayISO(), -7))
+    .sort((a, b) => (a.date + a.at) < (b.date + b.at) ? -1 : 1);
+  const stDays = Object.keys(stw.reduce((a, x) => { a[x.date] = 1; return a; }, {})).length;
+  push("gold stars", stw.length
+    ? "<b>" + stw.length + "</b> this week across <b>" + stDays + "</b> " +
+      (stDays === 1 ? "day" : "days") + ". Most recent: " + esc(stw[stw.length - 1].what) + "."
+    : "None this week. Worth knowing whether that's the week or the noticing.", !stw.length, "starCard");
   push("screen time", (function () {
     const sc7 = rows.slice(-7).map(r => r.screen).filter(v => v != null);
     const scPv = rows.slice(-14, -7).map(r => r.screen).filter(v => v != null);
@@ -3708,6 +3932,7 @@ function renderSummary(rows, corr, cut) {
 
 function renderPatterns() {
   renderMissed();
+  renderStars();
   renderThemes();
   const rows = daily(0);
   const MIN = 8;
@@ -5200,6 +5425,7 @@ function renderCfg() {
   renderSpikePick();
   renderTriggers();
   renderWritten();
+  renderTell();
   $("#togScreen").setAttribute("aria-pressed", CFG.screenOn ? "true" : "false");
   $("#screenWinSel").innerHTML = CFG.windows.map(w =>
     '<option value="' + esc(w.id) + '"' + (screenWinId() === w.id ? " selected" : "") + ">" +
@@ -5652,6 +5878,14 @@ function mergeSpikes(remote) {
     .sort((a, b) => (a.date + a.at) < (b.date + b.at) ? -1 : 1);
 }
 
+function mergeStars(remote) {
+  const gone = STATE.gone || {};
+  const by = {};
+  (STATE.stars || []).forEach(x => { if (x && x.id && !gone[x.id]) by[x.id] = x; });
+  (remote || []).forEach(x => { if (!x || !x.id || gone[x.id]) return; if (!by[x.id]) by[x.id] = x; });
+  STATE.stars = Object.keys(by).map(k => by[k])
+    .sort((a, b) => (a.date + a.at) < (b.date + b.at) ? -1 : 1);
+}
 function mergeSuggestions(remote) {
   const gone = STATE.gone || {};
   const by = {};
@@ -5683,7 +5917,8 @@ async function cloudSync(quiet) {
         });
         mergeSuggestions(o.state.suggestions);
         mergeSpikes(o.state.spikes);
-        renderSug(); renderSpikeCount();      // or they sit in storage unseen until a reload
+        mergeStars(o.state.stars);
+        renderSug(); renderSpikeCount(); renderStarCount();      // or they sit in storage unseen until a reload
       }
       // a real entry always beats a skip for the same slot
       Object.keys(STATE.skipped).forEach(k => {
@@ -5919,6 +6154,55 @@ async function saveSpike() {
   if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
   toast("Logged");
 }
+/* ---------- gold stars ----------
+   The mirror of the spike button. Everything else in here hunts for what's
+   wrong, and a year of records made only of symptoms is not an honest record
+   of a life — it's also useless on the day you need evidence that good ones
+   happen at all. Deliberately one line and a tap: anything longer doesn't
+   get written down when things are going well. */
+const STAR_KINDS = ["Something I did", "Something someone did", "Just happened",
+  "Got through it", "Said no", "Asked for help", "Went outside", "Made me laugh"];
+let starDraft = null;
+let lastTell = "";                 // recoverable if the hand-off to Messages silently fails
+
+function openStar() {
+  const now = new Date();
+  starDraft = { what: "", kinds: [], note: "",
+    at: pad(now.getHours()) + ":" + pad(now.getMinutes()) };
+  $("#starWhat").value = "";
+  $("#starNote").value = "";
+  $("#starAt").value = starDraft.at;
+  $("#starKinds").innerHTML = STAR_KINDS.map(t =>
+    '<button class="chip" data-starkind="' + esc(t) + '" aria-pressed="false">' + esc(t) + "</button>").join("");
+  $("#starSheet").classList.add("on");
+  setTimeout(() => { const b = $("#starWhat"); if (b) b.focus(); }, 60);
+}
+async function saveStar() {
+  const what = ($("#starWhat").value || "").trim();
+  if (!what) { $("#starWhat").focus(); toast("Say what it was, however small", true); return; }
+  const rec = { id: "st" + Date.now().toString(36), date: todayISO(),
+    at: $("#starAt").value || starDraft.at, ts: new Date().toISOString(),
+    what, kinds: starDraft.kinds.slice(), note: ($("#starNote").value || "").trim() };
+  STATE.stars = (STATE.stars || []).concat([rec]);
+  await saveState();
+  $("#starSheet").classList.remove("on");
+  starDraft = null;
+  renderStarCount(); renderStars();
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  toast("Noted \u2014 that one counts");
+}
+function renderStarCount() {
+  const el = $("#starCount"); if (!el) return;
+  const today = (STATE.stars || []).filter(x => x.date === todayISO());
+  const wk = (STATE.stars || []).filter(x => x.date >= addDays(todayISO(), -6));
+  el.innerHTML = today.length
+    ? '<span style="color:#e0c453">' + "\u2605 ".repeat(Math.min(today.length, 6)).trim() +
+      "</span> " + today.length + " today" + (wk.length > today.length ? " · " + wk.length + " this week" : "")
+    : wk.length
+      ? '<span style="color:var(--ink-3)">' + wk.length + " this week, none today yet.</span>"
+      : '<span style="color:var(--ink-3)">Nothing yet. The bar is deliberately low.</span>';
+}
+
 function renderSpikeCount() {
   const el = $("#spikeCount"); if (!el) return;
   const today = (STATE.spikes || []).filter(x => x.date === todayISO());
@@ -6283,8 +6567,9 @@ async function fbSync(quiet) {
       });
       mergeSuggestions(Object.keys(st.suggestions || {}).map(k => st.suggestions[k]));
       mergeSpikes(Object.keys(st.spikes || {}).map(k => st.spikes[k]));
+      mergeStars(Object.keys(st.stars || {}).map(k => st.stars[k]));
       await saveState();                      // the pull is worth keeping even if no entries moved
-      renderSug(); renderSpikeCount();
+      renderSug(); renderSpikeCount(); renderStarCount();
     }
     Object.keys(STATE.skipped).forEach(k => {
       const p = k.split("|");
@@ -6312,6 +6597,7 @@ async function fbSync(quiet) {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skipped: skipOut, suggestions: sugOut, gone: STATE.gone || {},
         spikes: (STATE.spikes || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
+        stars: (STATE.stars || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
         meta: { at: new Date().toISOString(), build: BUILD, device: CFG.cloud.uid || "?" } })
     });
     await fetch(fbPath(tok, "/settings"), {
@@ -6670,6 +6956,17 @@ function init() {
       touchCfg().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return;
     }
+    const th = ev.target.closest("[data-tellhow]");
+    if (th) { CFG.tellWho.how = th.dataset.tellhow;
+      touchCfg().then(() => { renderTell(); if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return; }
+    const sk = ev.target.closest("[data-starkind]");
+    if (sk && starDraft) {
+      const v = sk.dataset.starkind, i = starDraft.kinds.indexOf(v);
+      i > -1 ? starDraft.kinds.splice(i, 1) : starDraft.kinds.push(v);
+      sk.setAttribute("aria-pressed", i > -1 ? "false" : "true");
+      return;
+    }
     const so = ev.target.closest("[data-spother]");
     if (so && spikeDraft) {
       spikeDraft.other = !spikeDraft.other;
@@ -6735,6 +7032,15 @@ function init() {
     }
     const mrg = ev.target.closest("[data-mrange]");
     if (mrg) { missRange = +mrg.dataset.mrange; renderMissed(); return; }
+    const sdl = ev.target.closest("[data-stardel]");
+    if (sdl) {
+      const id = sdl.dataset.stardel;
+      STATE.stars = (STATE.stars || []).filter(x => x.id !== id);
+      STATE.gone = STATE.gone || {}; STATE.gone[id] = Date.now();
+      renderStars(); renderStarCount();
+      saveState().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
     const sg = ev.target.closest("[data-sumgo]");
     if (sg) {
       const id = sg.dataset.sumgo;
@@ -7083,7 +7389,10 @@ function init() {
   };
   $("#medChange").onclick = () => {
     if (draft.tags.indexOf("Med change") < 0) draft.tags.push("Med change");
-    renderLog(); show("log"); toast("Tagged — save the check-in to record it"); };
+    renderLog(); show("log");
+    toast("Tagged — save the check-in to record it");
+    if (tellReady()) setTimeout(() => openTell(""), 500);
+  };
   $("#cfgLat").onchange = () => { const v = parseFloat($("#cfgLat").value);
     if (!isNaN(v) && v > -67 && v < 67) { CFG.lat = v; touchCfg(); renderCfg(); } };
 
@@ -7355,6 +7664,44 @@ function init() {
   };
 
   /* ---- spikes ---- */
+  const saveTell = () => { touchCfg().then(() => { renderTell();
+    if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }); };
+  $("#togTell").onclick = () => { CFG.tellWho.on = !CFG.tellWho.on; saveTell(); };
+  $("#tellName").oninput  = () => { CFG.tellWho.name = $("#tellName").value;
+    clearTimeout(window.__tw1); window.__tw1 = setTimeout(saveTell, 600); };
+  $("#tellSms").oninput   = () => { CFG.tellWho.sms = $("#tellSms").value;
+    clearTimeout(window.__tw2); window.__tw2 = setTimeout(saveTell, 600); };
+  $("#tellEmail").oninput = () => { CFG.tellWho.email = $("#tellEmail").value;
+    clearTimeout(window.__tw3); window.__tw3 = setTimeout(saveTell, 600); };
+  $("#tellPreview").onclick = () => {
+    const b = $("#tellBox");
+    b.style.display = b.style.display === "none" ? "" : "none";
+    b.textContent = tellMessage("lamotrigine up to 150mg   (example)");
+  };
+  $("#tellTest").onclick = () => {
+    if (!tellReady()) { toast("Add a name and a number or address first", true); return; }
+    openTell("This is a test — no actual change.");
+  };
+  $("#tellSkip").onclick = () => { $("#tellSheet").classList.remove("on"); };
+  $("#tellWhat").oninput = () => { $("#tellMsg").value = tellMessage($("#tellWhat").value); };
+  $("#tellSend").onclick = () => {
+    const msg = $("#tellMsg").value;
+    if (!msg.trim()) { toast("Nothing to send", true); return; }
+    $("#tellSheet").classList.remove("on");
+    // handing off to another app can fail silently, so leave the text recoverable
+    lastTell = msg;
+    try { location.href = tellLink(msg); }
+    catch (e) { toast("Couldn't open your messaging app", true); }
+    setTimeout(() => toast("Handed to your " +
+      (CFG.tellWho.how === "email" ? "mail" : "messages") + " app — press send there"), 400);
+  };
+  $("#starBtn").onclick = () => openStar();
+  $("#starSave").onclick = saveStar;
+  $("#starCancel").onclick = () => { $("#starSheet").classList.remove("on"); starDraft = null; };
+  $("#starAt").onchange = () => { if (starDraft) starDraft.at = $("#starAt").value; };
+  $("#starWhat").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); saveStar(); }
+  });
   $("#spikeBtn").onclick = () => openSpike();
   $("#spikeCancel").onclick = () => { $("#spikeSheet").classList.remove("on"); spikeDraft = null; };
   $("#spikeSave").onclick = saveSpike;
