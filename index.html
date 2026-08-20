@@ -171,6 +171,19 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .wrow:last-child{border-bottom:0}
 .wname{flex:1;font-size:14px;min-width:0;overflow-wrap:anywhere}
 .wn{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);flex:0 0 auto}
+/* one scrollable line rather than a wrapping block: the Data tab has sixteen
+   sections and a three-row chip wall would push the content it's meant to
+   help you reach off the screen */
+.qtabs{position:sticky;top:0;z-index:30;display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;
+  padding:9px 2px 9px;margin:0 -2px 4px;background:linear-gradient(180deg,var(--bg) 78%,rgba(11,13,16,.9));
+  border-bottom:1px solid var(--line);scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.qtabs::-webkit-scrollbar{display:none}
+.qtabs button{flex:0 0 auto;background:var(--panel-2);border:1px solid var(--line-2);border-radius:99px;
+  padding:6px 12px;font-size:12.5px;color:var(--ink-2);cursor:pointer;white-space:nowrap;
+  transition:color .12s,border-color .12s,background .12s}
+.qtabs button[aria-current="true"]{background:#1f2a30;border-color:var(--accent);color:var(--accent);
+  font-weight:600}
+body.dash .qtabs{display:none}
 .sumrow{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--line)}
 .sumrow:last-child{border-bottom:0}
 .sumk{flex:0 0 92px;font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
@@ -909,7 +922,8 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
   <!-- ============ DATA ============ -->
   <section class="view" id="v-data">
-    <div class="card" id="planCard">
+    <div class="qtabs" id="dataTabs"></div>
+    <div class="card" id="planCard" data-dsec="ds-your-plan">
       <h2>Your plan</h2>
       <p class="sub">Written now, for a version of you who has less patience for figuring things out.
         Nobody sees this but you, and it travels with your other settings.</p>
@@ -940,7 +954,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-dashboard">
       <h2>Dashboard</h2>
       <p class="sub">A wide, read-only view of the charts and patterns that refreshes itself.
         Leave it open in a pinned tab on your computer and it follows what you log on your phone.</p>
@@ -952,7 +966,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         buttons under each one.</div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-export">
       <h2>Export</h2>
       <p class="sub">CSV downloads. If your network blocks the download, use Show text and copy it.</p>
       <div class="row" style="gap:8px">
@@ -974,7 +988,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <textarea id="expBox" style="display:none;margin-top:10px;min-height:150px;font-family:var(--mono);font-size:11px"></textarea>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-cloudflare">
       <h2>Cloudflare</h2>
       <p class="sub">Point this at your Worker and reminders keep firing with the app closed.
         The Worker never sees your ratings unless you turn on snapshots below.</p>
@@ -1034,7 +1048,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="log" id="cfLog">Not connected.</div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-firebase">
       <h2>Firebase</h2>
       <p class="sub">The durable copy. Per-entry writes to your Realtime Database, locked to your
         sign-in. Use a project of its own &mdash; don't share one with company data.</p>
@@ -1101,7 +1115,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </details>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-check-in-times">
       <h2>Check-in times</h2>
       <p class="sub">Sleep is only asked at the first one.</p>
       <div class="sw"><div><div class="t">A second schedule for some days</div>
@@ -1139,7 +1153,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         plus push worker — see the note at the bottom.</div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-explain-the-outliers">
       <h2>Explain the outliers</h2>
       <p class="sub">When a core rating sits a long way from your usual, the check-in won't save until
         you've said why. Six months later the number on its own won't tell you what the day was.
@@ -1155,7 +1169,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="mini" id="needNoteNow"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-tell-someone-about-dose-changes">
       <h2>Tell someone about dose changes</h2>
       <p class="sub">When you log a dose change, the app writes the message and offers you ways to send
         it &mdash; copy it, share it, open Gmail, or hand it to a mail or messaging app if this device
@@ -1225,7 +1239,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </details>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-screen-time">
       <h2>Screen time</h2>
       <p class="sub">One total a day, copied off whatever your phone already tells you. It gets tested
         against mood the same day, and against that night's sleep and the next day &mdash; which is the
@@ -1239,7 +1253,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="mini" id="screenNote"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-what-set-it-off">
       <h2>What set it off</h2>
       <p class="sub">The trigger chips offered when you log a spike, or an as-needed dose. These
         shipped as a guess at what sets people off &mdash; they're yours to replace. Edit one by typing
@@ -1258,7 +1272,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div id="trigWritten"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-quick-spike-check">
       <h2>Quick spike check</h2>
       <p class="sub">What the spike button asks about, and what you're asked when you log an as-needed
         dose. Pick whatever your own spikes actually look like. Two things that spike together for some
@@ -1268,13 +1282,13 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="mini" id="spikeTotal" style="margin-top:4px"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-what-to-track">
       <h2>What to track</h2>
       <p class="sub">Turn off anything that's noise. Fewer, honest entries beat many guessed ones.</p>
       <div id="itemCfg"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-medication-list">
       <h2>Medication list</h2>
       <p class="sub">Set when each one is taken &mdash; pick more than one for a twice-daily dose,
         and it gets its own tick at each. As-needed doses get a count instead of a tick, so you can
@@ -1286,7 +1300,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-location">
       <h2>Location</h2>
       <p class="sub">Latitude only, used to compute daylight hours offline.</p>
       <div class="row">
@@ -1296,7 +1310,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-backup">
       <h2>Backup</h2>
       <p class="sub" id="bkWhere">Checking where your data lives&hellip;</p>
       <div class="row" style="gap:8px">
@@ -1308,7 +1322,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="row" style="margin-top:14px"><button class="btn sm dang" id="wipeBtn">Erase all entries</button></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="ds-entries">
       <h2>Entries</h2>
       <p class="sub" id="entCount"></p>
       <div class="scroll"><table class="tbl" id="entTbl"></table></div>
@@ -1518,7 +1532,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 65;
+const BUILD = 66;
 
 const DEFAULT_CFG = {
   windows: [
@@ -4001,6 +4015,67 @@ function renderTell() {
         (w.how === "email" ? "an email address" : "a mobile number") + " before it can offer anything.</span>";
 }
 
+/* ---------- quick tabs on the Data tab ----------
+   Sixteen sections and growing. The chips jump; the highlight follows the
+   scroll so the bar also answers "where am I", not just "where can I go". */
+/* Short labels only; the running order comes from the page itself, so the bar
+   can never drift out of step with the sections it points at. */
+const TAB_LABEL = {
+  planCard: "Plan", "ds-dashboard": "Dashboard", "ds-export": "Export",
+  "ds-cloudflare": "Cloudflare", "ds-firebase": "Firebase", "ds-check-in-times": "Check-in times",
+  "ds-explain-the-outliers": "Outliers", "ds-tell-someone-about-dose-changes": "Tell someone",
+  "ds-screen-time": "Screen time", "ds-what-set-it-off": "Triggers",
+  "ds-quick-spike-check": "Spike check", "ds-what-to-track": "What to track",
+  "ds-medication-list": "Medications", "ds-location": "Location",
+  "ds-backup": "Backup", "ds-entries": "Entries"
+};
+let DATA_TABS = [];
+function renderDataTabs() {
+  const bar = $("#dataTabs"); if (!bar || bar._built) return;
+  DATA_TABS = $$("#v-data > .card[id]").map(el => el.id).filter(id => TAB_LABEL[id]);
+  bar.innerHTML = DATA_TABS.map(id => '<button type="button" data-dgo="' + id +
+    '" aria-current="false">' + esc(TAB_LABEL[id]) + "</button>").join("");
+  bar._built = true;
+}
+function dataTabTo(id) {
+  const el = document.getElementById(id); if (!el) return;
+  const head = ($("header") || {}).offsetHeight || 0;
+  const bar = ($("#dataTabs") || {}).offsetHeight || 0;
+  const y = el.getBoundingClientRect().top + window.pageYOffset - head - bar - 8;
+  window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+}
+function markDataTab() {
+  const bar = $("#dataTabs"); if (!bar || !bar._built) return;
+  if (!$("#v-data").classList.contains("on")) return;
+  const head = ($("header") || {}).offsetHeight || 0;
+  const line = head + bar.offsetHeight + 24;
+  // whichever section is nearest above the line, measured — not whichever
+  // happens to come last in the list, which is only the same thing when the
+  // list is in page order and silently wrong the moment it isn't
+  let cur = "", best = -Infinity, first = "", firstTop = Infinity;
+  DATA_TABS.forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    const top = el.getBoundingClientRect().top;
+    if (top < firstTop) { firstTop = top; first = id; }
+    if (top <= line && top > best) { best = top; cur = id; }
+  });
+  if (!cur) cur = first;                       // scrolled above the first section
+  // at the very bottom the last card may never cross the line
+  if (window.innerHeight + window.pageYOffset >= document.body.scrollHeight - 4)
+    cur = DATA_TABS[DATA_TABS.length - 1] || cur;
+  $$("#dataTabs button").forEach(b => {
+    const on = b.dataset.dgo === cur;
+
+    if ((b.getAttribute("aria-current") === "true") !== on)
+      b.setAttribute("aria-current", on ? "true" : "false");
+    if (on && b.scrollIntoView) {
+      const r = b.getBoundingClientRect(), br = bar.getBoundingClientRect();
+      if (r.left < br.left + 8 || r.right > br.right - 8)
+        bar.scrollTo({ left: b.offsetLeft - bar.offsetWidth / 2 + b.offsetWidth / 2, behavior: "smooth" });
+    }
+  });
+}
+
 function renderGdoc() {
   if (!$("#togGdoc")) return;
   const g = CFG.gdoc || {};
@@ -5735,6 +5810,7 @@ function renderCfg() {
   renderWritten();
   renderTell();
   renderGdoc();
+  renderDataTabs();
   $("#togScreen").setAttribute("aria-pressed", CFG.screenOn ? "true" : "false");
   $("#screenWinSel").innerHTML = CFG.windows.map(w =>
     '<option value="' + esc(w.id) + '"' + (screenWinId() === w.id ? " selected" : "") + ">" +
@@ -7040,7 +7116,7 @@ function show(v) {
   window.scrollTo(0, 0);
   if (v === "chart") { drawMain(); drawSleep(); drawDay(); drawCoverage(); }
   if (v === "pat") { renderPatterns(); setDeep(!!STATE.deepOpen); }
-  if (v === "data") renderCfg();
+  if (v === "data") { renderCfg(); setTimeout(markDataTab, 40); }
 }
 
 function commit(skip, reason) {
@@ -7341,6 +7417,8 @@ function init() {
     }
     const mrg = ev.target.closest("[data-mrange]");
     if (mrg) { missRange = +mrg.dataset.mrange; renderMissed(); return; }
+    const dg = ev.target.closest("[data-dgo]");
+    if (dg) { dataTabTo(dg.dataset.dgo); return; }
     const sdl = ev.target.closest("[data-stardel]");
     if (sdl) {
       const id = sdl.dataset.stardel;
@@ -8262,6 +8340,11 @@ function init() {
   syncIdle();
   if (dashOn) dashInit();          // read-only view, but still tracks builds and sync
   setTimeout(checkForNewBuild, 3000);
+  let dtT = 0;
+  window.addEventListener("scroll", () => {
+    if (dtT) return;
+    dtT = requestAnimationFrame(() => { dtT = 0; markDataTab(); });
+  }, { passive: true });
   setInterval(checkForNewBuild, 4 * 60000);
   window.addEventListener("focus", checkForNewBuild);   // tabbing back counts too
 }
