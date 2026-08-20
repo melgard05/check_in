@@ -1203,12 +1203,14 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm gho" id="gdForget">Forget the Doc</button>
       </div>
       <div class="mini" id="gdNote"></div>
+      <div class="mini" id="gdFix" style="display:none;margin-top:6px"></div>
       <div class="log" id="gdLog">Not set up.</div>
       <details style="margin-top:11px">
         <summary style="cursor:pointer;font-size:13px;color:var(--ink-2)">How to set this up</summary>
         <div class="mini" style="margin-top:8px;line-height:1.6">
           <b>1.</b> Go to <b>console.cloud.google.com</b> and make a project (or pick an existing one).<br>
-          <b>2.</b> <b>APIs &amp; Services &rarr; Library</b>, search <b>Google Drive API</b>, press Enable.<br>
+          <b>2.</b> <b>APIs &amp; Services &rarr; Library</b>, search <b>Google Drive API</b>, press
+            <b>Enable</b>. This one is easy to skip and nothing works without it.<br>
           <b>3.</b> <b>APIs &amp; Services &rarr; OAuth consent screen</b>. Choose <b>Internal</b> if your
             Workspace offers it &mdash; that skips Google's review entirely. Otherwise External, and add
             yourself as a test user.<br>
@@ -1516,7 +1518,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 64;
+const BUILD = 65;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3714,6 +3716,20 @@ function gdLog(msg, keep) {
   const line = new Date().toLocaleTimeString() + "  " + msg;
   el.textContent = keep ? (line + "\n" + el.textContent).split("\n").slice(0, 12).join("\n") : line;
 }
+// the digits before the dash in a client ID are the project number, and the
+// console accepts a project number in place of the project ID
+function clientProject() {
+  const m = String((CFG.gdoc || {}).clientId || "").match(/^(\d+)-/);
+  return m ? m[1] : "";
+}
+function gdFixLink(proj) {
+  const el = $("#gdFix"); if (!el) return;
+  const url = "https://console.cloud.google.com/apis/library/drive.googleapis.com" +
+    (proj ? "?project=" + encodeURIComponent(proj) : "");
+  el.innerHTML = '<a href="' + esc(url) + '" target="_blank" rel="noopener" ' +
+    'style="color:var(--accent)">Open the Drive API page and press Enable &rarr;</a>';
+  el.style.display = "";
+}
 function gdReady() { return !!(CFG.gdoc && CFG.gdoc.on && (CFG.gdoc.clientId || "").trim()); }
 
 function gdScript() {
@@ -3851,12 +3867,27 @@ async function gdWrite(interactive) {
       }
       if (r.status === 401 || r.status === 403) {
         gdTok = { t: "", exp: 0 };
-        gdLog(/insufficient|scope/.test(m) ? "that account didn't grant file access — try again and tick the box"
-          : /disabled|admin|policy/.test(m) ? "your Workspace admin blocks this app from reaching Drive"
-          : "Google refused the request (" + r.status + ")" + (m ? ": " + m : ""), true);
+        const reason = (((j.error || {}).errors || [])[0] || {}).reason || "";
+        const said = ((j.error && j.error.message) || "").trim();
+        const apiOff = /accessnotconfigured/i.test(reason) ||
+          /has not been used in project|api is disabled|enable it by visiting/i.test(m);
+        if (apiOff) {
+          gdFixLink(clientProject());
+          gdLog("the Google Drive API isn't switched on for this project yet \u2014 " +
+            "enable it, give it a minute, then try again", true);
+        } else if (/insufficient|scope|invalid_token|unauthorized/i.test(m) || r.status === 401) {
+          gdLog("Google didn't accept the sign-in \u2014 try again and allow file access when asked", true);
+        } else if (/orgpolicy|admin|domain policy|blocked by/i.test(m)) {
+          gdLog("an administrator on that Google account blocks this app from reaching Drive", true);
+        } else {
+          gdLog("Google refused the request (" + r.status + ")", true);
+        }
+        if (said) gdLog("Google said: " + said.slice(0, 220), true);
         return null;
       }
-      gdLog("Drive said no (" + r.status + ")" + (m ? ": " + m : ""), true);
+      gdLog("Drive said no (" + r.status + ")", true);
+      if ((j.error && j.error.message)) gdLog("Google said: " +
+        String(j.error.message).slice(0, 220), true);
       return null;
     }
     CFG.gdoc.docId = j.id || id;
@@ -7953,7 +7984,9 @@ function init() {
   };
   $("#gdNow").onclick = async () => {
     if (!gdReady()) { toast("Switch it on and paste a client ID first", true); return; }
-    $("#gdNow").disabled = true; gdLog("asking Google…");
+    $("#gdNow").disabled = true;
+    const fx = $("#gdFix"); if (fx) { fx.style.display = "none"; fx.innerHTML = ""; }
+    gdLog("asking Google…");
     const url = await gdWrite(true);
     $("#gdNow").disabled = false;
     renderGdoc();
