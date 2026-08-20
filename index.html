@@ -1157,9 +1157,13 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div class="card">
       <h2>Tell someone about dose changes</h2>
-      <p class="sub">When you log a dose change, the app writes the message and hands it to your own
-        Messages or Mail app. You read it and press send &mdash; nothing goes anywhere on its own, and
-        nothing about your health leaves this phone without you seeing it first.</p>
+      <p class="sub">When you log a dose change, the app writes the message and offers you ways to send
+        it &mdash; copy it, share it, open Gmail, or hand it to a mail or messaging app if this device
+        has one. Nothing goes anywhere on its own, and nothing about your health leaves this device
+        without you seeing it first.</p>
+      <div class="mini" style="margin-top:0">On a phone, the share and Messages buttons work. On a
+        computer, copying and Gmail are the ones that reliably do &mdash; a Messages or Mail button
+        needs an app registered to handle it, which a browser-only setup doesn't have.</div>
       <div class="sw"><div style="flex:1"><div class="t">Offer to tell someone</div>
         <div class="d">Asked once, when you log the change.</div></div>
         <button class="tog" id="togTell" aria-pressed="false"></button></div>
@@ -1181,6 +1185,42 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
       <div class="mini" id="tellNote"></div>
       <div class="log" id="tellBox" style="display:none;white-space:pre-wrap"></div>
+
+      <div class="eyebrow" style="margin-top:18px">Google Doc</div>
+      <p class="sub">Keeps one <b>Medication log</b> Doc in your Drive and rewrites it whenever you log
+        a change &mdash; current medications, every change with its date, and how the taking has gone.
+        One link that's always current, so she can bookmark it once. Ratings, notes and mood never go
+        in it; only the medication record does.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Keep a Google Doc</div>
+        <div class="d">Needs the one-time setup below.</div></div>
+        <button class="tog" id="togGdoc" aria-pressed="false"></button></div>
+      <label class="fld" style="margin-top:9px"><span>OAuth client ID</span>
+        <input type="text" id="gdId" placeholder="…apps.googleusercontent.com"
+               autocapitalize="off" spellcheck="false"></label>
+      <div class="row" style="margin-top:11px;gap:8px">
+        <button class="btn sm pri" id="gdNow">Create or update it now</button>
+        <button class="btn sm" id="gdOpen">Open the Doc</button>
+        <button class="btn sm gho" id="gdForget">Forget the Doc</button>
+      </div>
+      <div class="mini" id="gdNote"></div>
+      <div class="log" id="gdLog">Not set up.</div>
+      <details style="margin-top:11px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--ink-2)">How to set this up</summary>
+        <div class="mini" style="margin-top:8px;line-height:1.6">
+          <b>1.</b> Go to <b>console.cloud.google.com</b> and make a project (or pick an existing one).<br>
+          <b>2.</b> <b>APIs &amp; Services &rarr; Library</b>, search <b>Google Drive API</b>, press Enable.<br>
+          <b>3.</b> <b>APIs &amp; Services &rarr; OAuth consent screen</b>. Choose <b>Internal</b> if your
+            Workspace offers it &mdash; that skips Google's review entirely. Otherwise External, and add
+            yourself as a test user.<br>
+          <b>4.</b> <b>Credentials &rarr; Create credentials &rarr; OAuth client ID &rarr; Web application</b>.<br>
+          <b>5.</b> Under <b>Authorised JavaScript origins</b> add exactly
+            <b id="gdOrigin">this page's address</b> &mdash; no path, no trailing slash.<br>
+          <b>6.</b> Copy the client ID that appears and paste it in the box above. There's no client
+            secret to copy; this flow doesn't use one.<br><br>
+          The app only ever asks for <b>drive.file</b>, which lets it touch files it created itself and
+          nothing else in your Drive. It cannot see anything you made.
+        </div>
+      </details>
     </div>
 
     <div class="card">
@@ -1286,16 +1326,17 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   <div class="gatebox">
     <div class="k">dose change</div>
     <h3 style="margin-bottom:6px" id="tellHead">Tell Stacie?</h3>
-    <p class="sub">Change what it says if you like. It opens in your own app &mdash;
-      nothing is sent until you press send there.</p>
+    <p class="sub">Change what it says if you like, then pick how to send it. Nothing leaves this
+      device on its own &mdash; whichever you pick, you press send yourself.</p>
     <label class="fld" style="margin-top:4px"><span>What changed</span>
       <input type="text" id="tellWhat" placeholder="e.g. lamotrigine up to 150mg"
         autocapitalize="sentences"></label>
     <label class="fld" style="margin-top:10px"><span>Message</span>
       <textarea id="tellMsg" rows="5" style="font-size:13.5px"></textarea></label>
-    <div class="row" style="margin-top:13px;gap:8px">
-      <button class="btn pri" style="flex:2 1 150px" id="tellSend">Open Messages</button>
-      <button class="btn gho" style="flex:1 1 100px" id="tellSkip">Not this time</button>
+    <div class="row" id="tellActions" style="margin-top:13px;gap:8px"></div>
+    <div class="mini" id="tellStatus"></div>
+    <div class="row" style="margin-top:11px;gap:8px">
+      <button class="btn gho full" id="tellSkip">Close</button>
     </div>
   </div>
 </div>
@@ -1475,7 +1516,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 62;
+const BUILD = 64;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1488,6 +1529,7 @@ const DEFAULT_CFG = {
   // someone to tell when a dose changes. Nothing sends by itself: the app writes
   // the message and hands it to your own Messages or Mail app to send.
   tellWho: { name: "", sms: "", email: "", on: false, how: "sms" },
+  gdoc: { clientId: "", docId: "", docUrl: "", on: false, at: 0 },
   screenOn: true,             // ask for a daily screen-time total
   screenWin: "",              // "" = the last check-in of the day
   medWin: "pm",               // and about medication wearing off
@@ -1522,7 +1564,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers", "screenOn", "screenWin", "tellWho"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers", "screenOn", "screenWin", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1663,6 +1705,12 @@ async function load() {
     if (typeof CFG.tellWho[k] !== "string") CFG.tellWho[k] = k === "how" ? "sms" : ""; });
   if (["sms", "email"].indexOf(CFG.tellWho.how) < 0) CFG.tellWho.how = "sms";
   if (typeof CFG.tellWho.on !== "boolean") CFG.tellWho.on = false;
+  if (!CFG.gdoc || typeof CFG.gdoc !== "object" || Array.isArray(CFG.gdoc))
+    CFG.gdoc = { clientId: "", docId: "", docUrl: "", on: false, at: 0 };
+  ["clientId", "docId", "docUrl"].forEach(k => {
+    if (typeof CFG.gdoc[k] !== "string") CFG.gdoc[k] = ""; });
+  if (typeof CFG.gdoc.on !== "boolean") CFG.gdoc.on = false;
+  if (typeof CFG.gdoc.at !== "number") CFG.gdoc.at = 0;
   if (typeof CFG.screenOn !== "boolean") CFG.screenOn = true;
   if (typeof CFG.screenWin !== "string") CFG.screenWin = "";
   if (typeof CFG.medWin !== "string") CFG.medWin = "pm";
@@ -3649,6 +3697,180 @@ function hiQuote(text, term) {
    No server is involved and none should be: this is health information about one
    person going to one other person. The app composes it and hands it to the phone's
    own Messages or Mail app, where it sits as a draft until she presses send. */
+/* ============================================================
+   GOOGLE DOCS — one running medication log
+   Browser-only OAuth (the token model), so there's no server and no
+   client secret. The token lives in memory for the hour it's good for
+   and is never written to storage. Drive converts uploaded HTML into a
+   native Doc, so the whole log is rewritten each time rather than
+   appended to: one link that is always current beats a pile of dated
+   fragments, and rewriting can't half-fail the way appending can.
+   ============================================================ */
+const GD_SCOPE = "https://www.googleapis.com/auth/drive.file";   // only files this app makes
+let gdTok = { t: "", exp: 0 }, gdClient = null;
+
+function gdLog(msg, keep) {
+  const el = $("#gdLog"); if (!el) return;
+  const line = new Date().toLocaleTimeString() + "  " + msg;
+  el.textContent = keep ? (line + "\n" + el.textContent).split("\n").slice(0, 12).join("\n") : line;
+}
+function gdReady() { return !!(CFG.gdoc && CFG.gdoc.on && (CFG.gdoc.clientId || "").trim()); }
+
+function gdScript() {
+  if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve(true);
+  if (window.__gdsP) return window.__gdsP;
+  window.__gdsP = new Promise(res => {
+    const sc = document.createElement("script");
+    sc.src = "https://accounts.google.com/gsi/client";
+    sc.async = true; sc.defer = true;
+    sc.onload = () => res(true);
+    sc.onerror = () => res(false);
+    document.head.appendChild(sc);
+    setTimeout(() => res(!!(window.google && google.accounts)), 8000);
+  });
+  return window.__gdsP;
+}
+
+/* Tokens last about an hour and Google requires a real click to mint one,
+   so this can never be done quietly in the background — by design. */
+async function gdToken(interactive) {
+  if (gdTok.t && Date.now() < gdTok.exp - 60000) return gdTok.t;
+  if (!interactive) return "";
+  if (!(await gdScript())) { gdLog("couldn't load Google's sign-in script — check the connection", true); return ""; }
+  const id = (CFG.gdoc.clientId || "").trim();
+  if (!id) { gdLog("no OAuth client ID set", true); return ""; }
+  return new Promise(res => {
+    try {
+      gdClient = google.accounts.oauth2.initTokenClient({
+        client_id: id, scope: GD_SCOPE,
+        callback: r => {
+          if (r && r.access_token) {
+            gdTok = { t: r.access_token, exp: Date.now() + (+r.expires_in || 3600) * 1000 };
+            res(r.access_token);
+          } else { gdLog("access wasn't granted", true); res(""); }
+        },
+        error_callback: e => {
+          const t = (e && e.type) || "";
+          gdLog(t === "popup_closed" ? "the Google window was closed before finishing"
+            : t === "popup_failed_to_open" ? "your browser blocked the Google window — allow pop-ups here"
+            : "sign-in failed" + (e && e.message ? ": " + e.message : ""), true);
+          res("");
+        }
+      });
+      gdClient.requestAccessToken();
+    } catch (e) { gdLog("sign-in error: " + e.message, true); res(""); }
+  });
+}
+
+/* The document itself. Written for someone who is not you and did not have
+   the day you had: current medications first, then every change with a date,
+   then how the taking has actually gone. No ratings, no notes, no mood —
+   this goes to another person and it should carry only what it's for. */
+function gdocHTML() {
+  const rows = daily(0);
+  const meds = (CFG.medList || []).filter(m => (m.name || "").trim());
+  const who = (CFG.tellWho || {}).name || "";
+  const esc2 = t => esc(t);
+  const whenTxt = m => (m.whens || [m.when]).map(x =>
+    x === "am" ? "morning" : x === "pm" ? "evening" : "as needed").join(" + ");
+
+  let h = "<h1>Medication log</h1>";
+  h += "<p><i>Kept by the Baseline check-in app" + (who ? " for " + esc2(who) : "") +
+       ". Last updated " + new Date().toLocaleString() + ".</i></p>";
+
+  h += "<h2>Currently taking</h2>";
+  h += meds.length
+    ? "<ul>" + meds.map(m => "<li><b>" + esc2(m.name) + "</b> &mdash; " + whenTxt(m) + "</li>").join("") + "</ul>"
+    : "<p>Nothing listed.</p>";
+
+  const changes = rows.filter(r => r.tags.indexOf("Med change") > -1);
+  h += "<h2>Changes</h2>";
+  if (changes.length) {
+    h += "<table border='1' cellpadding='6' style='border-collapse:collapse'>" +
+      "<tr><th>Date</th><th>Noted at the time</th></tr>";
+    changes.slice().reverse().forEach(r => {
+      const said = (r.notes || []).join(" ") ||
+        Object.keys(r.inotes || {}).map(k => r.inotes[k]).join(" ") || "";
+      h += "<tr><td>" + esc2(fmtDate(r.date)) + " " + r.date.slice(0, 4) + "</td><td>" +
+        (said ? esc2(said) : "<i>no note</i>") + "</td></tr>";
+    });
+    h += "</table>";
+  } else h += "<p>None recorded yet.</p>";
+
+  const adh = rows.filter(r => r.meds != null).slice(-28);
+  h += "<h2>How the taking has gone</h2>";
+  if (adh.length) {
+    const full = adh.filter(r => r.meds >= 1).length;
+    const pct = Math.round(adh.reduce((a, r) => a + r.meds, 0) / adh.length * 100);
+    h += "<p>Over the last <b>" + adh.length + "</b> logged days, every scheduled dose was ticked on <b>" +
+      full + "</b> of them. Across all doses, <b>" + pct + "%</b> were ticked.</p>";
+    const miss = adh.filter(r => r.meds < 1).slice(-10);
+    if (miss.length) h += "<p>Days with something missed: " +
+      miss.map(r => esc2(fmtDate(r.date))).join(", ") + ".</p>";
+  } else h += "<p>Not enough logged yet to say.</p>";
+
+  const prn = rows.slice(-28).reduce((a, r) => a + (r.prn || 0), 0);
+  if (prn) h += "<p>As-needed doses taken in the last 28 logged days: <b>" + prn + "</b>.</p>";
+
+  h += "<hr><p><i>Generated from the check-in app. Ratings, notes and everything else stay on the " +
+       "phone &mdash; only the medication record is shared here.</i></p>";
+  return "<html><head><meta charset='utf-8'></head><body>" + h + "</body></html>";
+}
+
+/* Drive converts the upload into a native Doc. Updating an existing file with
+   converted media replaces its whole contents, which is exactly what's wanted:
+   the same link, always current, never half-written. */
+async function gdWrite(interactive) {
+  const tok = await gdToken(interactive);
+  if (!tok) return null;
+  const html = gdocHTML();
+  const id = (CFG.gdoc.docId || "").trim();
+  const meta = { name: "Medication log", mimeType: "application/vnd.google-apps.document" };
+  const B = "baseline" + Date.now().toString(36);
+  const body =
+    "--" + B + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" +
+    JSON.stringify(id ? { name: meta.name } : meta) + "\r\n" +
+    "--" + B + "\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n" +
+    html + "\r\n--" + B + "--";
+  const url = "https://www.googleapis.com/upload/drive/v3/files" +
+    (id ? "/" + encodeURIComponent(id) : "") + "?uploadType=multipart&fields=id,webViewLink";
+  try {
+    const r = await fetch(url, {
+      method: id ? "PATCH" : "POST",
+      headers: { Authorization: "Bearer " + tok, "Content-Type": "multipart/related; boundary=" + B },
+      body
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const m = ((j.error && j.error.message) || "").toLowerCase();
+      if (r.status === 404 && id) {
+        // the doc was deleted or lives in an account we're no longer signed into
+        gdLog("the old document is gone — making a fresh one", true);
+        CFG.gdoc.docId = ""; CFG.gdoc.docUrl = ""; await touchCfg();
+        return gdWrite(interactive);
+      }
+      if (r.status === 401 || r.status === 403) {
+        gdTok = { t: "", exp: 0 };
+        gdLog(/insufficient|scope/.test(m) ? "that account didn't grant file access — try again and tick the box"
+          : /disabled|admin|policy/.test(m) ? "your Workspace admin blocks this app from reaching Drive"
+          : "Google refused the request (" + r.status + ")" + (m ? ": " + m : ""), true);
+        return null;
+      }
+      gdLog("Drive said no (" + r.status + ")" + (m ? ": " + m : ""), true);
+      return null;
+    }
+    CFG.gdoc.docId = j.id || id;
+    CFG.gdoc.docUrl = j.webViewLink || (j.id ? "https://docs.google.com/document/d/" + j.id + "/edit" : CFG.gdoc.docUrl);
+    CFG.gdoc.at = Date.now();
+    await touchCfg();
+    gdLog(id ? "updated the log" : "created the log", true);
+    return CFG.gdoc.docUrl;
+  } catch (e) {
+    gdLog("couldn't reach Drive: " + e.message, true);
+    return null;
+  }
+}
+
 function tellMessage(what) {
   const who = CFG.tellWho || {};
   const meds = (CFG.medList || []).filter(m => (m.name || "").trim());
@@ -3669,6 +3891,15 @@ function tellMessage(what) {
   lines.push("", "Sent from my check-in app.");
   return lines.join("\n");
 }
+const onPhone = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const canShare = () => typeof navigator.share === "function";
+// Gmail's compose URL works in any browser, which a mailto: handler does not
+function gmailLink(msg) {
+  const to = ((CFG.tellWho || {}).email || "").replace(/\s+/g, "");
+  return "https://mail.google.com/mail/?view=cm&fs=1&to=" + encodeURIComponent(to) +
+    "&su=" + encodeURIComponent("Medication change — " + todayISO()) +
+    "&body=" + encodeURIComponent(msg);
+}
 function tellLink(msg) {
   const who = CFG.tellWho || {};
   if (who.how === "email") {
@@ -3686,12 +3917,35 @@ function tellReady() {
   const w = CFG.tellWho || {};
   return !!(w.on && (w.how === "email" ? (w.email || "").trim() : (w.sms || "").trim()));
 }
+/* A sms: or mailto: link only goes anywhere if this device has something
+   registered to handle it. On a desktop with webmail there is usually nothing
+   at all, and the click does nothing and says nothing — so copying is offered
+   first, always works, and the sheet stays open until it's been dealt with. */
+function renderTellActions() {
+  const el = $("#tellActions"); if (!el) return;
+  const who = CFG.tellWho || {};
+  const acts = [{ k: "copy", label: "Copy the message", pri: true }];
+  if (gdReady()) acts.push({ k: "gdoc", label: CFG.gdoc.docId ? "Update the Doc" : "Make the Doc" });
+  if (CFG.gdoc && CFG.gdoc.docUrl) acts.push({ k: "gdlink", label: "Copy the Doc link" });
+  if (canShare()) acts.push({ k: "share", label: "Share\u2026" });
+  if ((who.email || "").trim()) {
+    acts.push({ k: "gmail", label: "Open in Gmail" });
+    acts.push({ k: "mailto", label: "My mail app" });
+  }
+  if ((who.sms || "").trim()) acts.push({ k: "sms", label: onPhone() ? "Messages" : "Messages (phone only)" });
+  el.innerHTML = acts.map(a => '<button class="btn sm' + (a.pri ? " pri" : "") +
+    '" data-tellact="' + a.k + '" style="flex:1 1 auto">' + esc(a.label) + "</button>").join("");
+}
 function openTell(what) {
   const who = CFG.tellWho || {};
   $("#tellHead").textContent = who.name ? "Tell " + who.name.split(" ")[0] + "?" : "Tell them?";
   $("#tellWhat").value = what || "";
   $("#tellMsg").value = tellMessage(what || "");
-  $("#tellSend").textContent = who.how === "email" ? "Open Mail" : "Open Messages";
+  $("#tellStatus").innerHTML = canShare() || onPhone()
+    ? "Copying works everywhere; the rest depend on what this device has set up."
+    : "On a computer, <b>Copy</b> then paste into wherever you actually write to her. " +
+      "The app buttons only work if this machine has a mail or messaging app set as default.";
+  renderTellActions();
   $("#tellSheet").classList.add("on");
   setTimeout(() => { const b = $("#tellWhat"); if (b) b.focus(); }, 60);
 }
@@ -3709,10 +3963,33 @@ function renderTell() {
   $("#tellNote").innerHTML = !w.on
     ? "Off \u2014 logging a dose change won't offer anything."
     : tellReady()
-      ? "Ready. Logging a dose change will offer to " +
-        (w.how === "email" ? "email " : "text ") + esc(w.name || "them") + "."
+      ? "Ready. Logging a dose change will write the message for " + esc(w.name || "them") +
+        " and offer " + (canShare() ? "sharing, copying" : "copying") +
+        ((w.email || "").trim() ? ", Gmail" : "") + " and whatever apps this device has."
       : '<span style="color:var(--warn)">Needs ' +
         (w.how === "email" ? "an email address" : "a mobile number") + " before it can offer anything.</span>";
+}
+
+function renderGdoc() {
+  if (!$("#togGdoc")) return;
+  const g = CFG.gdoc || {};
+  $("#togGdoc").setAttribute("aria-pressed", g.on ? "true" : "false");
+  if (document.activeElement !== $("#gdId")) $("#gdId").value = g.clientId || "";
+  $("#gdOpen").style.display = g.docUrl ? "" : "none";
+  $("#gdForget").style.display = g.docId ? "" : "none";
+  const org = $("#gdOrigin");
+  if (org) org.textContent = /^https?:/.test(location.protocol) ? location.origin : "(open the app over https first)";
+  $("#gdNote").innerHTML = !g.on
+    ? "Off \u2014 nothing is created and no Google account is touched."
+    : !(g.clientId || "").trim()
+      ? '<span style="color:var(--warn)">Needs a client ID before it can do anything.</span>'
+    : !/^https:/.test(location.protocol)
+      ? '<span style="color:var(--warn)">Google won\'t allow this from ' + esc(location.protocol) +
+        " \u2014 open the app over https.</span>"
+    : g.docId
+      ? "Log created" + (g.at ? ", last updated " + new Date(g.at).toLocaleString() : "") +
+        ". Logging a dose change offers to refresh it."
+      : "Ready. Press <b>Create or update it now</b> to make the Doc.";
 }
 
 function renderStars() {
@@ -5426,6 +5703,7 @@ function renderCfg() {
   renderTriggers();
   renderWritten();
   renderTell();
+  renderGdoc();
   $("#togScreen").setAttribute("aria-pressed", CFG.screenOn ? "true" : "false");
   $("#screenWinSel").innerHTML = CFG.windows.map(w =>
     '<option value="' + esc(w.id) + '"' + (screenWinId() === w.id ? " selected" : "") + ">" +
@@ -7664,6 +7942,31 @@ function init() {
   };
 
   /* ---- spikes ---- */
+  $("#togGdoc").onclick = () => { CFG.gdoc.on = !CFG.gdoc.on;
+    touchCfg().then(() => { renderGdoc(); if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }); };
+  $("#gdId").oninput = () => {
+    CFG.gdoc.clientId = $("#gdId").value.trim();
+    gdTok = { t: "", exp: 0 };                      // a new client means the old token is meaningless
+    clearTimeout(window.__gdT);
+    window.__gdT = setTimeout(() => touchCfg().then(() => { renderGdoc();
+      if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }), 700);
+  };
+  $("#gdNow").onclick = async () => {
+    if (!gdReady()) { toast("Switch it on and paste a client ID first", true); return; }
+    $("#gdNow").disabled = true; gdLog("asking Google…");
+    const url = await gdWrite(true);
+    $("#gdNow").disabled = false;
+    renderGdoc();
+    if (url) { toast("Doc updated"); window.open(url, "_blank"); }
+    else toast("Didn't work — see the log", true);
+  };
+  $("#gdOpen").onclick = () => { if (CFG.gdoc.docUrl) window.open(CFG.gdoc.docUrl, "_blank"); };
+  $("#gdForget").onclick = async () => {
+    if (!confirm("Forget the link to this Doc?\n\nThe Doc itself stays in your Drive — the app just " +
+      "stops updating it, and makes a new one next time.")) return;
+    CFG.gdoc.docId = ""; CFG.gdoc.docUrl = ""; CFG.gdoc.at = 0;
+    await touchCfg(); renderGdoc(); gdLog("forgotten — a new Doc will be made next time", true);
+  };
   const saveTell = () => { touchCfg().then(() => { renderTell();
     if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }); };
   $("#togTell").onclick = () => { CFG.tellWho.on = !CFG.tellWho.on; saveTell(); };
@@ -7684,17 +7987,78 @@ function init() {
   };
   $("#tellSkip").onclick = () => { $("#tellSheet").classList.remove("on"); };
   $("#tellWhat").oninput = () => { $("#tellMsg").value = tellMessage($("#tellWhat").value); };
-  $("#tellSend").onclick = () => {
-    const msg = $("#tellMsg").value;
-    if (!msg.trim()) { toast("Nothing to send", true); return; }
-    $("#tellSheet").classList.remove("on");
-    // handing off to another app can fail silently, so leave the text recoverable
-    lastTell = msg;
-    try { location.href = tellLink(msg); }
-    catch (e) { toast("Couldn't open your messaging app", true); }
-    setTimeout(() => toast("Handed to your " +
-      (CFG.tellWho.how === "email" ? "mail" : "messages") + " app — press send there"), 400);
+
+  const tellStatus = (html, warn) => {
+    $("#tellStatus").innerHTML = warn
+      ? '<span style="color:var(--warn)">' + html + "</span>" : html;
   };
+  $("#tellActions").addEventListener("click", async ev => {
+    const btn = ev.target.closest("[data-tellact]"); if (!btn) return;
+    const msg = ($("#tellMsg").value || "").trim();
+    if (!msg) { toast("Nothing to send", true); return; }
+    lastTell = msg;
+    const how = btn.dataset.tellact;
+
+    if (how === "copy") {
+      try { await navigator.clipboard.writeText(msg); toast("Copied");
+        tellStatus("Copied. Paste it wherever you write to her \u2014 the message stays here " +
+          "until you close this."); }
+      catch (e) {
+        const ta = $("#tellMsg"); ta.focus(); ta.select();
+        tellStatus("This browser wouldn't let the app copy for you. The message is selected " +
+          "above \u2014 press Ctrl+C (or Cmd+C).", true);
+      }
+      return;
+    }
+    if (how === "gdoc") {
+      tellStatus("Asking Google\u2026");
+      const url = await gdWrite(true);
+      if (url) {
+        // the link is the useful thing to send, so put it in the message
+        const ta = $("#tellMsg");
+        if (ta.value.indexOf(url) < 0) ta.value = ta.value.trimEnd() + "\n\nFull log: " + url;
+        renderTellActions();
+        tellStatus("Doc updated. The link is in the message above \u2014 copy or share it as usual.");
+      } else tellStatus("Couldn't update the Doc. Data \u2192 Google Doc has the log of why.", true);
+      return;
+    }
+    if (how === "gdlink") {
+      try { await navigator.clipboard.writeText(CFG.gdoc.docUrl); tellStatus("Doc link copied."); }
+      catch (e) { tellStatus("Couldn't copy \u2014 the link is " + esc(CFG.gdoc.docUrl), true); }
+      return;
+    }
+    if (how === "share") {
+      try { await navigator.share({ text: msg }); tellStatus("Handed to the share sheet."); }
+      catch (e) { if (e && e.name !== "AbortError")
+        tellStatus("Sharing isn't available here. Use Copy instead.", true); }
+      return;
+    }
+    // A window that opens and immediately closes, or never opens at all, means
+    // nothing is registered for that protocol. Say so rather than sit there.
+    const url = how === "gmail" ? gmailLink(msg)
+      : how === "mailto" ? tellLink(msg).replace(/^sms:[^?&]*[?&]body=/, "mailto:?body=")
+      : tellLink(msg);
+    if (how === "gmail") {
+      const w = window.open(url, "_blank");
+      tellStatus(w ? "Gmail should be open in a new tab with it filled in."
+        : "Your browser blocked the new tab. Allow pop-ups for this page, or use Copy.", !w);
+      return;
+    }
+    const before = Date.now();
+    try {
+      const frame = document.createElement("iframe");
+      frame.style.display = "none"; frame.src = url;
+      document.body.appendChild(frame);
+      setTimeout(() => { try { document.body.removeChild(frame); } catch (e) {} }, 1500);
+    } catch (e) {}
+    setTimeout(() => {
+      // no reliable way to detect a handler, so tell the truth about the uncertainty
+      tellStatus(Date.now() - before < 4000
+        ? "If nothing opened, this device has no " + (how === "sms" ? "messaging" : "mail") +
+          " app set as default. Use <b>Copy the message</b> instead \u2014 it always works."
+        : "Handed over. Press send in the app that opened.");
+    }, 900);
+  });
   $("#starBtn").onclick = () => openStar();
   $("#starSave").onclick = saveStar;
   $("#starCancel").onclick = () => { $("#starSheet").classList.remove("on"); starDraft = null; };
