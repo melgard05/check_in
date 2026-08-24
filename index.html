@@ -1542,7 +1542,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 68;
+const BUILD = 69;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1582,6 +1582,22 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const dowOf = d => { const p = String(d).split("-");
   return new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1).getDay(); };
 const isAltDay = d => CFG.weekend && (CFG.altDays || []).indexOf(dowOf(d)) > -1;
+/* The second schedule used to change only the times. A day off doesn't just
+   move the check-ins, it can want fewer of them — so a window can now sit out
+   the alternate days entirely. */
+const winsOn = d => CFG.windows.filter(w => !isAltDay(d) || w.alt !== false);
+const lastWinOn = d => { const l = winsOn(d); return l.length ? l[l.length - 1].id : lastWinId(); };
+const firstWinOn = d => { const l = winsOn(d); return l.length ? l[0].id : (CFG.windows[0] || {}).id; };
+const winRunsOn = (id, d) => winsOn(d).some(w => w.id === id);
+// any date that falls on the second schedule, for counting purposes
+function altSampleDay() {
+  const days = CFG.altDays || [];
+  if (!days.length) return todayISO();
+  const t = new Date();
+  for (let i = 0; i < 7; i++) { if (days.indexOf(t.getDay()) > -1) return todayISO(t);
+    t.setDate(t.getDate() + 1); }
+  return todayISO();
+}
 
 /* Chosen days get their own time when the second schedule is on. */
 function winTime(w, dateISO) {
@@ -1725,6 +1741,7 @@ async function load() {
   }
   if (typeof CFG.plan.updated !== "number") CFG.plan.updated = 0;
   if (!Array.isArray(CFG.altDays)) CFG.altDays = [0, 6];
+  CFG.windows.forEach(w => { if (typeof w.alt !== "boolean") w.alt = true; });
   if (!Array.isArray(CFG.napWins)) CFG.napWins = CFG.napWin ? [CFG.napWin] : ["mid", "pm"];
   if (!CFG.tellWho || typeof CFG.tellWho !== "object" || Array.isArray(CFG.tellWho))
     CFG.tellWho = { name: "", sms: "", email: "", on: false, how: "sms" };
@@ -2389,7 +2406,7 @@ const screenWinId = () => {
 };
 // the entry is saved on the day it was typed; the reading belongs to the day it measured
 const screenDateOf = e => (e.screen && e.screen.prev) ? addDays(e.date, -1) : e.date;
-const napRollsForward = winId => winId === lastWinId();
+const napRollsForward = winId => winId === lastWinOn((draft && draft.date) || todayISO());
 function addDays(dateISO, n) {
   const p = String(dateISO).split("-");
   const d = new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1);
@@ -2777,9 +2794,17 @@ function painSummary() {
       esc(notes.map(x => draft.n[x].trim()).join(" / ")) + "</span>" : "");
 }
 
-function fillWinSelect() {
-  $("#eWin").innerHTML = CFG.windows.map(w =>
-    '<option value="' + w.id + '">' + esc(w.label) + " · " + w.time + (w.sleep ? " (sleep)" : "") + "</option>").join("");
+function fillWinSelect(dateISO) {
+  const d = dateISO || ($("#eDate") && $("#eDate").value) || todayISO();
+  const list = winsOn(d);
+  // a check-in that doesn't run that day still has to be selectable if something
+  // was already logged against it, or the entry becomes unreachable
+  const extra = CFG.windows.filter(w => !list.some(x => x.id === w.id) &&
+    ENTRIES.some(e => e.date === d && e.win === w.id));
+  $("#eWin").innerHTML = list.concat(extra).map(w =>
+    '<option value="' + w.id + '">' + esc(w.label) + " \u00b7 " + winTime(w, d) +
+    (w.sleep ? " (sleep)" : "") + (extra.indexOf(w) > -1 ? " (not scheduled)" : "") +
+    "</option>").join("");
 }
 
 /* ---------- due logic ---------- */
@@ -2789,7 +2814,7 @@ let remoteClosed = { date: "", ids: [] };
 function dueWindows(date) {
   const today = todayISO(), out = [];
   const remote = (remoteClosed.date === date) ? remoteClosed.ids : [];
-  CFG.windows.forEach(w => {
+  winsOn(date).forEach(w => {
     if (date === today && minsOf(winTime(w, date)) > nowMins()) return;   // not yet time
     if (ENTRIES.some(x => x.date === date && x.win === w.id)) return;
     if (STATE.skipped[date + "|" + w.id]) return;
@@ -3104,12 +3129,15 @@ function itemAudit(rows) {
    The days you feel worst are the days least likely to get logged, which quietly
    tilts every average upward. This measures that rather than assuming it away. */
 function coverageAudit(days) {
-  const rows = daily(days), wins = CFG.windows.length || 1;
-  const expected = rows.length * wins;
+  const rows = daily(days);
+  // days differ now: a day off may only ask for three, and counting it out of
+  // four would report a fully-logged weekend as a gap in the record
+  const wantOn = d => winsOn(d).length || 1;
+  const expected = rows.reduce((a, r) => a + wantOn(r.date), 0);
   const got = rows.reduce((a, r) => a + r.n, 0);
   const pct = expected ? got / expected : 0;
-  const full = rows.filter(r => r.n >= wins && r.v.mood != null);
-  const partialD = rows.filter(r => r.n > 0 && r.n < wins && r.v.mood != null);
+  const full = rows.filter(r => r.n >= wantOn(r.date) && r.v.mood != null);
+  const partialD = rows.filter(r => r.n > 0 && r.n < wantOn(r.date) && r.v.mood != null);
   const mean = set => set.length ? set.reduce((a, r) => a + r.v.mood, 0) / set.length : null;
   const mFull = mean(full), mPart = mean(partialD);
   let bias = null;
@@ -3356,11 +3384,12 @@ function drawDay() {
 
 function drawCoverage() {
   const rows = daily(range), n = rows.length;
-  const exp = n * CFG.windows.length;
+  const want = d => winsOn(d).length || 1;
+  const exp = rows.reduce((a, r) => a + want(r.date), 0);
   const got = rows.reduce((a, r) => a + r.n, 0);
   const skips = Object.keys(STATE.skipped).length;
   let bars = rows.map(r => {
-    const f = CFG.windows.length ? r.n / CFG.windows.length : 0;
+    const f = r.n / want(r.date);
     const c = f >= 1 ? "var(--base)" : f > 0 ? "var(--high-1)" : "var(--line-2)";
     return '<i style="flex:1;height:' + (8 + f * 16) + 'px;background:' + c + ';border-radius:2px"></i>';
   }).join("");
@@ -5807,6 +5836,11 @@ function renderCfg() {
       "</div>" +
       '<button class="chip sm" data-wsleep="' + i + '" aria-pressed="' + (w.sleep ? "true" : "false") +
         '" title="Ask about last night here">sleep</button>' +
+      (CFG.weekend
+        ? '<button class="chip sm" data-walt="' + i + '" aria-pressed="' + (w.alt === false ? "false" : "true") +
+          '" title="Also happens on the second schedule\u2019s days">' +
+          (w.alt === false ? "weekdays only" : "S\u2013S too") + "</button>"
+        : "") +
       '<button class="btn sm dang" data-windel="' + i + '"' +
         (CFG.windows.length < 2 ? " disabled style=opacity:.4" : "") + ">&times;</button>" +
       (n ? '<div class="wnote">' + n + " entr" + (n === 1 ? "y" : "ies") + " logged here</div>" : "") +
@@ -5833,7 +5867,13 @@ function renderCfg() {
   $("#altSummary").innerHTML = !CFG.weekend ? "" :
     alt.length === 0 ? '<span style="color:var(--warn)">No days selected — every day uses the M&ndash;F times.</span>'
     : alt.length === 7 ? '<span style="color:var(--warn)">Every day selected — the M&ndash;F times are never used.</span>'
-    : "Second schedule on " + alt.map(i => DAYS[i]).join(", ") + ". Everything else uses the first.";
+    : (function () {
+        const n = winsOn(altSampleDay()).length, m = CFG.windows.length;
+        return "Second schedule on " + alt.map(i => DAYS[i]).join(", ") +
+          ". Everything else uses the first." +
+          (n !== m ? " Those days get <b>" + n + "</b> check-in" + (n === 1 ? "" : "s") +
+            " rather than " + m + "." : "");
+      })();
   renderSpikePick();
   renderTriggers();
   renderWritten();
@@ -6125,7 +6165,7 @@ function scheduleNotifs() {
   };
 
   const now = nowMins();
-  CFG.windows.forEach(w => {
+  winsOn(todayISO()).forEach(w => {
     let delta = minsOf(winTime(w, todayISO())) - now; if (delta < 0) delta += 1440;
     notifTimers.push(setTimeout(() => { fire(w); scheduleNotifs(); }, delta * 60000 + 1000));
   });
@@ -6266,6 +6306,13 @@ async function reportState() {
   const done = ENTRIES.filter(e => e.date === d).map(e => e.win);
   const skipped = Object.keys(STATE.skipped)
     .filter(k => k.indexOf(d + "|") === 0).map(k => k.split("|")[1]);
+  // the worker was handed one schedule and can't know a check-in sits out today,
+  // so report the ones that aren't running as already dealt with — otherwise it
+  // nags all weekend for a check-in the app isn't even offering
+  CFG.windows.forEach(w => {
+    if (!winRunsOn(w.id, d) && skipped.indexOf(w.id) < 0 && done.indexOf(w.id) < 0)
+      skipped.push(w.id);
+  });
   syncBusy();
   try {
     await api("/state", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -7336,7 +7383,7 @@ function commit(skip, reason) {
 
 function init() {
   dashOn = /[?&]dash=1/.test(location.search);
-  fillWinSelect();
+  fillWinSelect(todayISO());
   buildWheel($("#wH"), 14, 1, pushSleep);
   buildWheel($("#wM"), 55, 5, pushSleep);
   buildWheel($("#wSH"), 16, 1, () => pushScreen(false));
@@ -7362,7 +7409,12 @@ function init() {
 
   $$("nav button").forEach(b => b.onclick = () => show(b.dataset.v));
 
-  $("#eDate").onchange = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
+  $("#eDate").onchange = () => {
+    const d = $("#eDate").value || todayISO();
+    fillWinSelect(d);                                  // a day off may offer fewer
+    const want = winRunsOn($("#eWin").value, d) ? $("#eWin").value : firstWinOn(d);
+    setDraft(d, want);
+  };
   $("#eWin").onchange  = () => setDraft($("#eDate").value || todayISO(), $("#eWin").value);
   $("#togPeriod").onclick = () => { draft.period = !draft.period; renderLog(); };
   $("#moreBtn").onclick = () => { showAll = true; renderLog();
@@ -7840,6 +7892,18 @@ function init() {
       CFG.windows.splice(i, 1);
       sortWindows();
       touchCfg().then(() => { renderCfg(); fillWinSelect(); refreshDue(); renderLog();
+        if (CFG.cloud.push) pushEnable(); });
+      return;
+    }
+    const wa = ev.target.closest("[data-walt]");
+    if (wa) {
+      const i = +wa.dataset.walt, w = CFG.windows[i];
+      const on = w.alt !== false;
+      if (on && winsOn(altSampleDay()).length <= 1) {
+        toast("Keep at least one check-in on those days", true); return;
+      }
+      w.alt = !on;
+      touchCfg().then(() => { renderCfg(); fillWinSelect(); refreshDue(); scheduleNotifs();
         if (CFG.cloud.push) pushEnable(); });
       return;
     }
