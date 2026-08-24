@@ -1014,6 +1014,10 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <button class="btn sm" id="cfOff">Disconnect</button>
         <button class="btn sm dang" id="cfForget">Forget key</button>
       </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn sm" id="cfNewUid">Give this device its own id</button>
+      </div>
+      <div class="mini" id="uidNote"></div>
       <div class="eyebrow" style="margin-top:14px">What's happened to the key</div>
       <div id="credLog" class="mini" style="margin-top:0"></div>
       <div class="sw" style="margin-top:6px"><div><div class="t">Sticky push reminders</div>
@@ -1532,7 +1536,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 66;
+const BUILD = 67;
 
 const DEFAULT_CFG = {
   windows: [
@@ -5855,6 +5859,13 @@ function renderCfg() {
   $("#cfUid").value = CFG.cloud.uid || "";
   $("#cfAcct").value = CFG.cloud.account || "";
   $("#cfKey").value = CFG.cloud.key || "";
+  const un = $("#uidNote");
+  if (un) un.innerHTML = uidLooksShared()
+    ? '<span style="color:var(--warn)">This device id (<b>' + esc(CFG.cloud.uid || "") + "</b>) is a " +
+      "generic one. If your other device uses the same, only whichever subscribed last gets " +
+      "notifications \u2014 give this one its own id.</span>"
+    : "This device is <b>" + esc(CFG.cloud.uid || "\u2014") + "</b>. Each device needs its own; " +
+      "the account is what they share.";
   renderCredLog();
   $("#togPush").setAttribute("aria-pressed", CFG.cloud.push ? "true" : "false");
   $("#togSync").setAttribute("aria-pressed", CFG.cloud.sync ? "true" : "false");
@@ -5969,10 +5980,28 @@ let notifTimers = [];
    twice and the local copy can fire from stale knowledge. */
 let workerHandlesPush = false;
 
+/* Throw the local subscription away and make a fresh one, then hand it to the
+   worker. Used when the push service says the stored one is gone. */
+async function pushRepair() {
+  try {
+    const reg = swReg || await swRegister();
+    if (!reg) return false;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) { try { await sub.unsubscribe(); } catch (e) {} }
+    return await pushEnable();
+  } catch (e) { cloudLog("repair failed: " + e.message, true); return false; }
+}
+
 async function verifyPush() {
   workerHandlesPush = false;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
   try {
+    // A local subscription existing was taken as proof the worker could reach us,
+    // which it isn't. The endpoint can be rotated by the browser, overwritten by
+    // another device sharing our id, or invalidated wholesale if the worker's
+    // VAPID keys were ever regenerated — and every one of those looked healthy
+    // from here. Re-registering once a session costs two requests and makes the
+    // worker's copy true, whatever went stale.
     const reg = swReg || await navigator.serviceWorker.getRegistration();
     const sub = reg && await reg.pushManager.getSubscription();
     workerHandlesPush = !!(sub && cloudBase() && CFG.cloud.uid);
@@ -6094,7 +6123,11 @@ async function pushEnable() {
   let sub = await reg.pushManager.getSubscription();
   if (sub) {
     const cur = b64url(sub.options && sub.options.applicationServerKey);
-    if (cur && cur !== pub) { await sub.unsubscribe(); sub = null; }   // key rotated
+    if (cur && cur !== pub) {
+      cloudLog("the worker's VAPID key has changed since this device subscribed — " +
+        "every device needs re-subscribing, doing this one now", true);
+      await sub.unsubscribe(); sub = null;
+    }
   }
   if (!sub) {
     sub = await reg.pushManager.subscribe({
@@ -6163,6 +6196,17 @@ async function reportState() {
 /* Snapshots belong to the person, not the device, or two devices would keep
    two separate backups and neither would ever see the other. */
 const acctId = () => CFG.cloud.account || CFG.cloud.uid || "";
+const uidTail = () => Math.random().toString(36).slice(2, 6);
+function freshUid(base) {
+  const b = String(base || "device").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 20) || "device";
+  return b + "-" + uidTail();
+}
+// a device id shared with another device is the commonest reason one of them
+// silently stops getting notifications, and nothing on screen would say so
+const uidLooksShared = () => {
+  const u = (CFG.cloud.uid || "").trim();
+  return !!u && (u === (CFG.cloud.account || "").trim() || /^(device1|device|phone|desktop)$/i.test(u));
+};
 
 /* Ask the worker what's already been closed today on any device. Cheap, and it
    carries no ratings — safe to run even with snapshots turned off. */
@@ -6690,7 +6734,9 @@ function b64urlDec(str) {
   return decodeURIComponent(escape(atob(str.replace(/-/g, "+").replace(/_/g, "/") + pad2)));
 }
 function setupLink(includeFb) {
-  const o = { u: CFG.cloud.url, a: CFG.cloud.account || CFG.cloud.uid, d: CFG.cloud.uid };
+  // deliberately no device id: each device needs its own, or their push
+  // subscriptions overwrite one another on the worker
+  const o = { u: CFG.cloud.url, a: CFG.cloud.account || CFG.cloud.uid };
   if (CFG.cloud.key) o.k = CFG.cloud.key;
   if (includeFb && CFG.fb.url) { o.fu = CFG.fb.url; o.fk = CFG.fb.apiKey; o.fe = CFG.fb.email; }
   return location.origin + location.pathname + "?setup=" + b64urlEnc(JSON.stringify(o));
@@ -6701,7 +6747,12 @@ async function applySetup(enc) {
   if (!o || !o.u) { toast("That setup link is missing the worker address", true); return false; }
   CFG.cloud.url = String(o.u).replace(/\/+$/, "");
   CFG.cloud.account = String(o.a || "").replace(/[^A-Za-z0-9_-]/g, "");
-  CFG.cloud.uid = String(o.d || o.a || "device1").replace(/[^A-Za-z0-9_-]/g, "");
+  // The link carries the account, which is meant to be shared. The device id is
+  // not: the worker stores one push subscription per device id, so two devices
+  // wearing the same one overwrite each other and only the last to subscribe
+  // ever gets a notification. Keep whatever this device already had, and give a
+  // brand-new device an id of its own.
+  if (!CFG.cloud.uid) CFG.cloud.uid = freshUid(o.d || o.a);
   // A link built before the key existed carries no k. That is an absence, not an
   // instruction to forget the key already on this device — which is how a bookmarked
   // reconnect link quietly wiped it on every open.
@@ -7864,14 +7915,48 @@ function init() {
         $("#togPush").setAttribute("aria-pressed", ok ? "true" : "false"); }
     } catch (e) { setDot("#dCloud", "bad"); cloudLog("cannot reach worker: " + e.message, true); }
   };
+  const sendTest = async () => api("/test", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ uid: CFG.cloud.uid }) });
   $("#cfTest").onclick = async () => {
     if (!CFG.cloud.push) { toast("Connect push first", true); return; }
-    try { const r = await api("/test", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uid: CFG.cloud.uid }) });
-      cloudLog("test push " + (r.ok ? "accepted (" + r.status + ") — it should appear on this device within a few seconds"
-                                     : "rejected (" + r.status + ")"), true);
-      toast(r.ok ? "Test push sent" : "Push service said " + r.status, !r.ok);
+    $("#cfTest").disabled = true;
+    try {
+      let r = await sendTest();
+      // 410 Gone / 404 mean the push service has retired that subscription. It is
+      // never coming back and no amount of retrying helps — a new one is needed.
+      if (!r.ok && (r.status === 410 || r.status === 404)) {
+        cloudLog("the stored subscription is dead (" + r.status + ") — building a new one", true);
+        const fixed = await pushRepair();
+        if (fixed) { r = await sendTest();
+          cloudLog(r.ok ? "re-subscribed and the test went through" : "re-subscribed, but the test still failed (" +
+            r.status + ")", true); }
+        else cloudLog("couldn't re-subscribe on this device", true);
+      } else {
+        cloudLog("test push " + (r.ok ? "accepted (" + r.status + ") — it should appear on this device within a few seconds"
+                                      : "rejected (" + r.status + ")"), true);
+      }
+      toast(r.ok ? "Test push sent" : "Push failed (" + r.status + ") — see the log", !r.ok);
+      if (!r.ok && uidLooksShared()) cloudLog("this device's id is \"" + CFG.cloud.uid +
+        "\", which looks like one your other device may also be using. Press \u201cGive this device " +
+        "its own id\u201d below.", true);
     } catch (e) { cloudLog("test failed: " + e.message, true); toast("Test failed", true); }
+    $("#cfTest").disabled = false;
+  };
+  $("#cfNewUid").onclick = async () => {
+    const old = CFG.cloud.uid || "";
+    if (!confirm("Give this device a new id?\n\nUse this when two devices share an id and only one of " +
+      "them gets notifications. This device re-subscribes under the new id; the other keeps working.\n\n" +
+      old + "  \u2192  a new one")) return;
+    if (old) { try { await api("/unsubscribe", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uid: old }) }); } catch (e) {} }   // tidy up the old row
+    CFG.cloud.uid = freshUid((CFG.cloud.account || "device").split("-")[0]);
+    await touchCfg();
+    cloudLog("device id is now " + CFG.cloud.uid + " (was " + old + ")", true);
+    const ok = await pushEnable();
+    $("#togPush").setAttribute("aria-pressed", ok ? "true" : "false");
+    renderCfg();
+    toast(ok ? "New id — re-subscribed" : "New id, but subscribing failed", !ok);
   };
   $("#cfForget").onclick = async () => {
     if (!CFG.cloud.key) { toast("No key stored"); return; }
@@ -7973,6 +8058,14 @@ function init() {
   reportState();
   // settle who owns reminders before any local timer is armed
   verifyPush().then(() => scheduleNotifs());
+  // A stored subscription can be stale in ways nothing here can see: the browser
+  // rotates the endpoint, another device with the same id overwrites it, or the
+  // worker's VAPID keys get regenerated and invalidate every subscription at once.
+  // All three looked perfectly healthy from this side. Re-register once a session.
+  if (CFG.cloud.push && cloudBase() && CFG.cloud.uid) {
+    pushEnable().then(ok => cloudLog(ok ? "re-registered this device with the worker"
+      : "couldn't re-register for push on this device", true)).catch(() => {});
+  }
 
   $("#digestCopy").onclick = async () => {
     const t = digestText().lines.join("\n");
