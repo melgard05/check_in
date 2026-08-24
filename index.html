@@ -1542,7 +1542,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 69;
+const BUILD = 70;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1583,21 +1583,30 @@ const dowOf = d => { const p = String(d).split("-");
   return new Date(+p[0], (+p[1] || 1) - 1, +p[2] || 1).getDay(); };
 const isAltDay = d => CFG.weekend && (CFG.altDays || []).indexOf(dowOf(d)) > -1;
 /* The second schedule used to change only the times. A day off doesn't just
-   move the check-ins, it can want fewer of them — so a window can now sit out
-   the alternate days entirely. */
-const winsOn = d => CFG.windows.filter(w => !isAltDay(d) || w.alt !== false);
+   move the check-ins, it can want a different set of them — so each window says
+   independently whether it runs on ordinary days, on the alternate days, or both.
+   One flag only ever allowed dropping one from the weekend; a check-in that
+   exists *only* at the weekend needs the other half of the same idea. */
+const runsWd  = w => w.wd !== false;
+const runsAlt = w => w.alt !== false;
+const winsOn = d => CFG.windows.filter(w => isAltDay(d) ? runsAlt(w) : runsWd(w))
+  .slice().sort((a, b) => minsOf(winTime(a, d)) - minsOf(winTime(b, d)));
 const lastWinOn = d => { const l = winsOn(d); return l.length ? l[l.length - 1].id : lastWinId(); };
 const firstWinOn = d => { const l = winsOn(d); return l.length ? l[0].id : (CFG.windows[0] || {}).id; };
 const winRunsOn = (id, d) => winsOn(d).some(w => w.id === id);
-// any date that falls on the second schedule, for counting purposes
-function altSampleDay() {
+// a date on each kind of day, for counting what would be left
+function sampleDay(wantAlt) {
   const days = CFG.altDays || [];
-  if (!days.length) return todayISO();
   const t = new Date();
-  for (let i = 0; i < 7; i++) { if (days.indexOf(t.getDay()) > -1) return todayISO(t);
-    t.setDate(t.getDate() + 1); }
+  for (let i = 0; i < 8; i++) {
+    const isAlt = CFG.weekend && days.indexOf(t.getDay()) > -1;
+    if (isAlt === wantAlt) return todayISO(t);
+    t.setDate(t.getDate() + 1);
+  }
   return todayISO();
 }
+const altSampleDay = () => sampleDay(true);
+const wdSampleDay  = () => sampleDay(false);
 
 /* Chosen days get their own time when the second schedule is on. */
 function winTime(w, dateISO) {
@@ -1741,7 +1750,11 @@ async function load() {
   }
   if (typeof CFG.plan.updated !== "number") CFG.plan.updated = 0;
   if (!Array.isArray(CFG.altDays)) CFG.altDays = [0, 6];
-  CFG.windows.forEach(w => { if (typeof w.alt !== "boolean") w.alt = true; });
+  CFG.windows.forEach(w => {
+    if (typeof w.alt !== "boolean") w.alt = true;
+    if (typeof w.wd !== "boolean") w.wd = true;
+    if (!w.alt && !w.wd) w.wd = true;             // a window that runs nowhere is a bug, not a setting
+  });
   if (!Array.isArray(CFG.napWins)) CFG.napWins = CFG.napWin ? [CFG.napWin] : ["mid", "pm"];
   if (!CFG.tellWho || typeof CFG.tellWho !== "object" || Array.isArray(CFG.tellWho))
     CFG.tellWho = { name: "", sms: "", email: "", on: false, how: "sms" };
@@ -5827,9 +5840,10 @@ function renderCfg() {
       '<input type="text" data-wlabel="' + i + '" value="' + esc(w.label) +
         '" placeholder="name" style="flex:1 1 110px">' +
       '<div style="display:flex;gap:5px;align-items:center;flex:0 0 auto">' +
-        (CFG.weekend ? '<span class="wklbl">M&ndash;F</span>' : "") +
-        '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="width:106px">' +
-        (CFG.weekend
+        (CFG.weekend && !runsWd(w) ? "" :
+          (CFG.weekend ? '<span class="wklbl">M&ndash;F</span>' : "") +
+          '<input type="time" data-wt="' + i + '" value="' + w.time + '" style="width:106px">') +
+        (CFG.weekend && runsAlt(w)
           ? '<span class="wklbl">S&ndash;S</span><input type="time" data-we="' + i + '" value="' +
             (w.timeWe || w.time) + '" style="width:106px">'
           : "") +
@@ -5837,9 +5851,10 @@ function renderCfg() {
       '<button class="chip sm" data-wsleep="' + i + '" aria-pressed="' + (w.sleep ? "true" : "false") +
         '" title="Ask about last night here">sleep</button>' +
       (CFG.weekend
-        ? '<button class="chip sm" data-walt="' + i + '" aria-pressed="' + (w.alt === false ? "false" : "true") +
-          '" title="Also happens on the second schedule\u2019s days">' +
-          (w.alt === false ? "weekdays only" : "S\u2013S too") + "</button>"
+        ? '<button class="chip sm" data-wday="' + i + ':wd" aria-pressed="' + (runsWd(w) ? "true" : "false") +
+          '" title="Happens on the first schedule\u2019s days">M\u2013F</button>' +
+          '<button class="chip sm" data-wday="' + i + ':alt" aria-pressed="' + (runsAlt(w) ? "true" : "false") +
+          '" title="Happens on the second schedule\u2019s days">S\u2013S</button>'
         : "") +
       '<button class="btn sm dang" data-windel="' + i + '"' +
         (CFG.windows.length < 2 ? " disabled style=opacity:.4" : "") + ">&times;</button>" +
@@ -5868,11 +5883,14 @@ function renderCfg() {
     alt.length === 0 ? '<span style="color:var(--warn)">No days selected — every day uses the M&ndash;F times.</span>'
     : alt.length === 7 ? '<span style="color:var(--warn)">Every day selected — the M&ndash;F times are never used.</span>'
     : (function () {
-        const n = winsOn(altSampleDay()).length, m = CFG.windows.length;
+        const nAlt = winsOn(altSampleDay()).length, nWd = winsOn(wdSampleDay()).length;
+        const only = CFG.windows.filter(w => runsAlt(w) && !runsWd(w)).map(w => w.label);
         return "Second schedule on " + alt.map(i => DAYS[i]).join(", ") +
           ". Everything else uses the first." +
-          (n !== m ? " Those days get <b>" + n + "</b> check-in" + (n === 1 ? "" : "s") +
-            " rather than " + m + "." : "");
+          (nAlt !== nWd ? " Those days get <b>" + nAlt + "</b> check-in" + (nAlt === 1 ? "" : "s") +
+            ", the rest get <b>" + nWd + "</b>." : "") +
+          (only.length ? " <b>" + only.map(esc).join("</b>, <b>") + "</b> " +
+            (only.length === 1 ? "happens" : "happen") + " only on those days." : "");
       })();
   renderSpikePick();
   renderTriggers();
@@ -7875,7 +7893,8 @@ function init() {
       const mins = Math.min(23 * 60 + 30, minsOf(last ? last.time : "12:00") + 180);
       CFG.windows.push({ id: "w" + Date.now().toString(36),
         label: "New check-in", time: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60),
-        timeWe: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60), sleep: false });
+        timeWe: pad(Math.floor(mins / 60)) + ":" + pad(mins % 60), sleep: false,
+        wd: true, alt: true });
       sortWindows();
       touchCfg().then(() => { renderCfg(); fillWinSelect(); refreshDue(); renderLog();
         if (CFG.cloud.push) pushEnable(); });
@@ -7895,14 +7914,18 @@ function init() {
         if (CFG.cloud.push) pushEnable(); });
       return;
     }
-    const wa = ev.target.closest("[data-walt]");
+    const wa = ev.target.closest("[data-wday]");
     if (wa) {
-      const i = +wa.dataset.walt, w = CFG.windows[i];
-      const on = w.alt !== false;
-      if (on && winsOn(altSampleDay()).length <= 1) {
-        toast("Keep at least one check-in on those days", true); return;
+      const q = wa.dataset.wday.split(":"), i = +q[0], k = q[1], w = CFG.windows[i];
+      const on = k === "wd" ? runsWd(w) : runsAlt(w);
+      if (on) {
+        // never leave the window running on no day at all, nor a day with no check-in
+        const other = k === "wd" ? runsAlt(w) : runsWd(w);
+        if (!other) { toast("It has to happen on one kind of day or the other", true); return; }
+        const day = k === "wd" ? wdSampleDay() : altSampleDay();
+        if (winsOn(day).length <= 1) { toast("Keep at least one check-in on those days", true); return; }
       }
-      w.alt = !on;
+      w[k] = !on;
       touchCfg().then(() => { renderCfg(); fillWinSelect(); refreshDue(); scheduleNotifs();
         if (CFG.cloud.push) pushEnable(); });
       return;
