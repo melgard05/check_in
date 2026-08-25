@@ -1169,6 +1169,16 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <select id="needNoteSel" style="flex:0 0 104px">
           <option value="2">2 points</option><option value="3">3 points</option>
           <option value="4">4 points</option><option value="5">5 points</option></select></div>
+      <div class="sw"><div style="flex:1"><div class="t">Worked out over</div>
+        <div class="d" id="needNoteWinHint"></div></div>
+        <select id="needNoteWinSel" style="flex:0 0 132px">
+          <option value="14">The last 14 days</option>
+          <option value="30">The last 30 days</option>
+          <option value="60">The last 60 days</option>
+          <option value="90">The last 90 days</option>
+          <option value="180">The last 6 months</option>
+          <option value="0">Everything logged</option>
+        </select></div>
       <div class="mini" id="needNoteNow"></div>
     </div>
 
@@ -1542,7 +1552,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 70;
+const BUILD = 71;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1568,6 +1578,7 @@ const DEFAULT_CFG = {
   spikeTriggers: SPIKE_TRIGGERS.slice(),   // editable: one person's trigger list is not another's
   needNote: true,             // a core rating far from your usual won't save unexplained
   needNoteAt: 3,              // how far from usual counts as far
+  needNoteWin: 60,            // how many days back "usual" is worked out over
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
   altDays: [0, 6],            // 0 Sun … 6 Sat
@@ -1616,7 +1627,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1785,6 +1796,7 @@ async function load() {
   CFG.spikeTriggers = CFG.spikeTriggers.map(t => String(t || "").trim()).filter(Boolean);
   if (typeof CFG.needNote !== "boolean") CFG.needNote = true;
   if (!(+CFG.needNoteAt >= 1)) CFG.needNoteAt = 3;
+  if (!(+CFG.needNoteWin >= 0)) CFG.needNoteWin = 60;
   // migrate the old newline-separated med list into scheduled entries
   if (!Array.isArray(CFG.medList)) CFG.medList = [];
   if (!CFG.medList.length && (CFG.meds || "").trim()) {
@@ -2047,12 +2059,14 @@ function sliderHTML(it, val, note) {
    a 3 is unremarkable if you sit at 3, and alarming if you sit at 7. Only once
    there are enough readings to know what usual is — before that, fall back to
    the scale's own anchor. */
-let usualCache = { day: "", map: {} };
+let usualCache = { day: "", win: -1, map: {} };
 function usualFor(key) {
-  const day = todayISO();
-  if (usualCache.day !== day) usualCache = { day, map: {} };
+  const day = todayISO(), win = +CFG.needNoteWin || 60;
+  if (usualCache.day !== day || usualCache.win !== win) usualCache = { day, win, map: {} };
   if (key in usualCache.map) return usualCache.map[key];
-  const vs = daily(60).map(r => r.v[key]).filter(v => v != null);
+  // a short window tracks a recent change quickly; a long one is steadier and
+  // won't quietly redefine "usual" as whatever the last bad fortnight looked like
+  const vs = daily(win).map(r => r.v[key]).filter(v => v != null);
   let out = null;
   if (vs.length >= 8) {
     const q = vs.slice().sort((a, b) => a - b);
@@ -5668,6 +5682,140 @@ function printWorkReport() {
   setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
 }
 
+/* ============================================================
+   CHARTS FOR THE PRINTOUT
+   This page gets printed, often on a mono laser, and a clinician
+   reads it in about ninety seconds. So: one hue plus grey rather
+   than a categorical palette, and every event type carries its own
+   SHAPE — a triangle, a star, a dashed rule — so nothing depends on
+   colour surviving the printer. No two-scale plots: sleep and screen
+   time get their own frames rather than being overlaid on mood,
+   because aligning two y-axes invents a correlation that isn't there.
+   ============================================================ */
+const PW = 700, PH = 190, PL = 34, PR = 10, PT = 14, PB = 26;
+const pxAt = (i, n) => PL + (n < 2 ? (PW - PL - PR) / 2 : i * (PW - PL - PR) / (n - 1));
+
+function pAxis(lo, hi, ticks, fmt) {
+  let g = "";
+  ticks.forEach(t => {
+    const y = PH - PB - (t - lo) / (hi - lo) * (PH - PB - PT);
+    g += '<line x1="' + PL + '" x2="' + (PW - PR) + '" y1="' + y.toFixed(1) + '" y2="' + y.toFixed(1) +
+         '" stroke="#e3e3e3" stroke-width="1"/>' +
+         '<text x="' + (PL - 6) + '" y="' + (y + 3.5).toFixed(1) + '" text-anchor="end" ' +
+         'font-size="9" fill="#767676">' + (fmt ? fmt(t) : t) + "</text>";
+  });
+  return g;
+}
+function pDates(rows) {
+  const n = rows.length; let g = "";
+  const step = Math.max(1, Math.round(n / 8));
+  rows.forEach((r, i) => {
+    if (i % step && i !== n - 1) return;
+    g += '<text x="' + pxAt(i, n).toFixed(1) + '" y="' + (PH - 8) + '" text-anchor="middle" ' +
+         'font-size="9" fill="#767676">' + esc(fmtDate(r.date)) + "</text>";
+  });
+  return g;
+}
+
+/* mood, with the events a clinician is actually scanning for */
+function chartMood(rows) {
+  const n = rows.length; if (n < 2) return "";
+  const yAt = v => PH - PB - (v - 1) / 9 * (PH - PB - PT);
+  let g = pAxis(1, 10, [1, 3, 5, 7, 10]);
+  // the stated baseline, drawn once and labelled
+  g += '<line x1="' + PL + '" x2="' + (PW - PR) + '" y1="' + yAt(5).toFixed(1) + '" y2="' + yAt(5).toFixed(1) +
+       '" stroke="#b0b0b0" stroke-width="1" stroke-dasharray="2 3"/>' +
+       '<text x="' + (PW - PR) + '" y="' + (yAt(5) - 4).toFixed(1) + '" text-anchor="end" ' +
+       'font-size="8.5" fill="#8a8a8a">stated baseline</text>';
+
+  // med changes first, behind everything
+  rows.forEach((r, i) => {
+    if (r.tags.indexOf("Med change") < 0) return;
+    const x = pxAt(i, n);
+    g += '<line x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + PT + '" y2="' + (PH - PB) +
+         '" stroke="#555" stroke-width="1" stroke-dasharray="4 3"/>' +
+         '<text x="' + (x + 3).toFixed(1) + '" y="' + (PT + 8) + '" font-size="8.5" fill="#555">med</text>';
+  });
+
+  // raw daily readings recede; the 5-day average is the line to read
+  let dots = "", path = "", started = false;
+  rows.forEach((r, i) => {
+    const v = r.v.mood; if (v == null) return;
+    dots += '<circle cx="' + pxAt(i, n).toFixed(1) + '" cy="' + yAt(v).toFixed(1) +
+            '" r="1.8" fill="#b4b4b4"/>';
+  });
+  const roll = rows.map((r, i) => {
+    const w = rows.slice(Math.max(0, i - 4), i + 1).map(x => x.v.mood).filter(v => v != null);
+    return w.length >= 3 ? w.reduce((a, b) => a + b, 0) / w.length : null;
+  });
+  roll.forEach((v, i) => {
+    if (v == null) { started = false; return; }
+    path += (started ? "L" : "M") + pxAt(i, n).toFixed(1) + " " + yAt(v).toFixed(1) + " ";
+    started = true;
+  });
+  g += dots + '<path d="' + path + '" fill="none" stroke="#1a1a1a" stroke-width="2" ' +
+       'stroke-linejoin="round" stroke-linecap="round"/>';
+
+  // events, each its own shape so the printer can't flatten them together
+  rows.forEach((r, i) => {
+    const x = pxAt(i, n);
+    if (r.spikes && r.spikes.length)
+      g += '<path d="M' + x.toFixed(1) + " " + (PT + 1) + "l4.5 8h-9z" +
+           '" fill="#1a1a1a"/>';
+    if (r.stars && r.stars.length)
+      g += '<text x="' + x.toFixed(1) + '" y="' + (PH - PB - 2) + '" text-anchor="middle" ' +
+           'font-size="11" fill="#1a1a1a">\u2605</text>';
+  });
+  return '<svg viewBox="0 0 ' + PW + " " + PH + '" width="100%" role="img" ' +
+    'aria-label="Self-rated mood over time with a five-day average">' + g + pDates(rows) + "</svg>";
+}
+
+/* one measure, its own frame, its own scale — never stacked onto mood */
+function chartBars(rows, get, label, unit) {
+  const n = rows.length; if (n < 2) return "";
+  const vals = rows.map(get);
+  const has = vals.filter(v => v != null);
+  if (has.length < 3) return "";
+  const raw = Math.max.apply(null, has);
+  const step = raw <= 4 ? 0.5 : raw <= 12 ? 1 : 2;          // headroom, on a round number
+  const hi = Math.max(step, Math.ceil((raw * 1.12) / step) * step);
+  const yAt = v => PH - PB - (v / hi) * (PH - PB - PT);
+  const bw = Math.max(1.5, Math.min(10, (PW - PL - PR) / n - 2));
+  let g = pAxis(0, hi, [0, hi / 2, hi], t => (Math.round(t * 10) / 10));
+  vals.forEach((v, i) => {
+    if (v == null) return;
+    const x = pxAt(i, n), y = yAt(v);
+    g += '<rect x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+         '" height="' + Math.max(0.8, PH - PB - y).toFixed(1) + '" rx="1.5" fill="#5a5a5a"/>';
+  });
+  const mean = has.reduce((a, b) => a + b, 0) / has.length;
+  g += '<line x1="' + PL + '" x2="' + (PW - PR) + '" y1="' + yAt(mean).toFixed(1) + '" y2="' +
+       yAt(mean).toFixed(1) + '" stroke="#1a1a1a" stroke-width="1.5" stroke-dasharray="5 3"/>' +
+       '<text x="' + (PW - PR) + '" y="' + (yAt(mean) - 4).toFixed(1) + '" text-anchor="end" ' +
+       'font-size="8.5" fill="#1a1a1a">mean ' + mean.toFixed(1) + (unit || "") + "</text>";
+  return '<svg viewBox="0 0 ' + PW + " " + PH + '" width="100%" role="img" aria-label="' +
+    esc(label) + '">' + g + pDates(rows) + "</svg>";
+}
+
+function sparkline(vals) {
+  const v = vals.filter(x => x != null);
+  if (v.length < 3) return "";
+  const W2 = 74, H2 = 18, lo = 1, hi = 10;
+  let d = "", started = false;
+  vals.forEach((x, i) => {
+    if (x == null) { started = false; return; }
+    const px = 1 + i * (W2 - 2) / Math.max(1, vals.length - 1);
+    const py = H2 - 2 - (x - lo) / (hi - lo) * (H2 - 4);
+    d += (started ? "L" : "M") + px.toFixed(1) + " " + py.toFixed(1) + " ";
+    started = true;
+  });
+  const midY = H2 - 2 - (5 - lo) / (hi - lo) * (H2 - 4);
+  return '<svg width="' + W2 + '" height="' + H2 + '" viewBox="0 0 ' + W2 + " " + H2 + '" ' +
+    'aria-hidden="true"><line x1="0" x2="' + W2 + '" y1="' + midY.toFixed(1) + '" y2="' + midY.toFixed(1) +
+    '" stroke="#e0e0e0" stroke-width="1"/><path d="' + d +
+    '" fill="none" stroke="#1a1a1a" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+}
+
 function printSummary() {
   const rows = daily(90).filter(r => r.n);
   const w = window.open("", "_blank");
@@ -5705,6 +5853,50 @@ function printSummary() {
   const kept = cor.filter(x => x.p != null && cut > 0 && x.p <= cut)
     .sort((a, b) => Math.abs(b.r) - Math.abs(a.r)).slice(0, 8);
 
+  /* Every core reading that sat far enough from this person's own usual to be
+     asked about, with whatever they said at the time. This is the part a
+     clinician can actually act on — a number with a reason attached. */
+  const outMap = {};
+  ENTRIES.filter(e => e.date >= addDays(todayISO(), -90)).forEach(e => {
+    Object.keys(e.v || {}).forEach(k => {
+      const it = ITEM[k];
+      if (!it || it.grp !== "core" || !isOn(k)) return;
+      if (!deviates(k, e.v[k])) return;
+      // three check-ins can all record the same bad afternoon; that is one finding,
+      // not three, and printing it three times buries the ones that aren't repeats
+      const id = e.date + "|" + k, u = usualFor(k);
+      const note = (e.n && e.n[k] || "").trim();
+      const cur = outMap[id];
+      if (!cur) {
+        outMap[id] = { date: e.date, key: k, label: it.label, v: e.v[k], usual: u, note, n: 1 };
+      } else {
+        cur.n++;
+        if (u == null ? Math.abs(e.v[k] - 5) > Math.abs(cur.v - 5)
+                      : Math.abs(e.v[k] - u) > Math.abs(cur.v - u)) cur.v = e.v[k];
+        if (note && cur.note.indexOf(note) < 0) cur.note = cur.note ? cur.note + " \u00b7 " + note : note;
+      }
+    });
+  });
+  const outliers = Object.keys(outMap).map(k => outMap[k])
+    .sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+  const outBy = {};
+  outliers.forEach(o => { outBy[o.label] = (outBy[o.label] || 0) + 1; });
+  const outSaid = outliers.filter(o => o.note).length;
+  const outDays = Object.keys(outliers.reduce((a, o) => { a[o.date] = 1; return a; }, {})).length;
+
+  const stars90 = (STATE.stars || []).filter(x => x.date >= addDays(todayISO(), -90))
+    .sort((a, b) => (a.date + a.at) < (b.date + b.at) ? 1 : -1);
+  const starWeeks = {};
+  stars90.forEach(x => {
+    const d = new Date(x.date + "T00:00:00");
+    d.setDate(d.getDate() - d.getDay());
+    const k = todayISO(d);
+    starWeeks[k] = (starWeeks[k] || 0) + 1;
+  });
+
+  const corpus90 = noteCorpus(90);
+  const themes90 = corpus90.length ? themesFrom(corpus90, 90).slice(0, 12) : [];
+
   const mo = rows.filter(r => r.medoff && r.medoff.mins != null);
   let moLine = "";
   if (mo.length >= 6) {
@@ -5724,7 +5916,13 @@ function printSummary() {
     'letter-spacing:.08em}.m{font-family:ui-monospace,monospace}.sm{color:#555;font-size:11px}' +
     'ul{margin:4px 0 0 18px;padding:0}li{margin:2px 0}.box{border:1px solid #ddd;border-left:3px solid #888;' +
     'padding:7px 10px;margin:0 0 7px;font-size:12px}.box b{display:block}' +
-    '@media print{body{margin:12mm}}</style>' +
+    'figure{margin:0 0 14px}figcaption{font-size:10.5px;color:#555;margin-top:2px}' +
+    '.q{border-left:2px solid #ccc;padding:1px 0 1px 8px;margin:3px 0;color:#333;font-size:11.5px}' +
+    '.key{font-size:10.5px;color:#555;margin:2px 0 10px}' +
+    '.key i{font-style:normal;margin-right:4px}' +
+    'svg{display:block}' +
+    '@media print{body{margin:12mm}h2{page-break-after:avoid}figure,table{page-break-inside:avoid}}' +
+    "</style>" +
     "<h1>Baseline \u2014 tracking summary</h1>" +
     '<div class="sm">' + new Date().toLocaleDateString() + " \u00b7 last 90 days \u00b7 " +
       rows.length + " days with entries \u00b7 " + Math.round(cov.pct * 100) + "% of check-ins completed</div>" +
@@ -5734,10 +5932,43 @@ function printSummary() {
       "Partially logged days average " + Math.abs(cov.bias).toFixed(1) +
       " lower on mood than fully logged ones, so averages here likely understate the harder days.</div>" : "") +
 
-    "<h2>Averages</h2><table><tr>" + on.map(i => "<th>" + esc2(i.label) + "</th>").join("") +
-    "<th>Sleep</th></tr><tr>" + on.map(i => '<td class="m">' + avg(i.key) + "</td>").join("") +
-    '<td class="m">' + slAvg + "h</td></tr></table>" +
+    "<h2>Averages and direction</h2>" +
+    "<table><tr><th>Item</th><th>Mean</th><th>Usual</th><th>Last 90 days</th></tr>" +
+    on.map(i => {
+      const u = usualFor(i.key);
+      const spark = sparkline(rows.map(r => r.v[i.key]));
+      return "<tr><td>" + esc2(i.label) + '</td><td class="m">' + avg(i.key) + "</td>" +
+        '<td class="m">' + (u == null ? "\u2014" : (Math.round(u * 10) / 10)) + "</td>" +
+        "<td>" + (spark || '<span class="sm">too few readings</span>') + "</td></tr>";
+    }).join("") +
+    '<tr><td>Sleep</td><td class="m">' + slAvg + 'h</td><td class="m">\u2014</td>' +
+    '<td class="sm">charted below, on its own scale</td></tr></table>' +
+    '<div class="sm">&ldquo;Usual&rdquo; is this person\u2019s own median over ' +
+    (+CFG.needNoteWin ? "the last " + CFG.needNoteWin + " days" : "everything logged") +
+    ", which is what outliers below are measured against. Sparklines share a 1\u201310 scale " +
+    "with a rule at 5.</div>" +
     (moLine ? '<div class="sm" style="margin-top:7px">' + moLine + "</div>" : "") +
+
+    (rows.length >= 2
+      ? "<h2>Mood over time</h2>" +
+        '<figure>' + chartMood(rows) +
+        '<figcaption>Grey dots are individual days; the solid line is a five-day average. ' +
+        "Dashed rule is the stated baseline of 5.</figcaption></figure>" +
+        '<div class="key"><i>\u25B2</i>a spike was logged that day &nbsp;&nbsp; ' +
+        "<i>\u2605</i>something good was logged &nbsp;&nbsp; " +
+        "<i>\u2506</i>medication change</div>"
+      : "") +
+    (rows.filter(r => r.sleep).length >= 3
+      ? "<h2>Sleep</h2><figure>" +
+        chartBars(rows, r => (r.sleep ? r.sleep.hours : null), "Hours slept per night", "h") +
+        "<figcaption>Hours slept at night. Shown separately from mood on purpose: " +
+        "two measures on one pair of axes invites a correlation the data may not support.</figcaption></figure>"
+      : "") +
+    (rows.filter(r => r.screen != null).length >= 3
+      ? "<h2>Screen time</h2><figure>" +
+        chartBars(rows, r => r.screen, "Screen time hours per day", "h") +
+        "<figcaption>Self-reported daily total, read off the phone's own figure.</figcaption></figure>"
+      : "") +
 
     (eps ? "<h2>Sustained runs</h2><ul>" + eps + "</ul>" +
       '<div class="sm">Based on a 5-day rolling average of self-rated mood.</div>' : "") +
@@ -5752,6 +5983,66 @@ function printSummary() {
 
     (flagsHTML ? "<h2>Flagged</h2>" + flagsHTML.replace(/class="flag[^"]*"/g, 'class="box"')
       .replace(/<div class="mini"[\s\S]*?<\/div>/g, "") : "") +
+
+    // readings a long way from this person's own usual, with what they said at the time
+    (outliers.length
+      ? "<h2>Readings far from baseline</h2>" +
+        '<div class="sm" style="margin-bottom:6px"><b>' + outliers.length + "</b> reading" +
+        (outliers.length === 1 ? "" : "s") + " across <b>" + outDays + "</b> day" +
+        (outDays === 1 ? "" : "s") + " sat " + (CFG.needNoteAt || 3) + " or more points from usual" +
+        (Object.keys(outBy).length
+          ? ", most often " + Object.keys(outBy).sort((a, b) => outBy[b] - outBy[a]).slice(0, 3)
+              .map(k => esc2(k.toLowerCase()) + " (" + outBy[k] + ")").join(", ")
+          : "") + ". <b>" + outSaid + "</b> carried an explanation.</div>" +
+        "<table><tr><th>Date</th><th>Item</th><th>Read</th><th>Usual</th><th>What was said</th></tr>" +
+        outliers.slice(0, 30).map(o => "<tr><td>" + o.date + "</td><td>" + esc2(o.label) +
+          (o.n > 1 ? ' <span class="sm">\u00d7' + o.n + "</span>" : "") +
+          '</td><td class="m">' + o.v + '</td><td class="m">' +
+          (o.usual == null ? "\u2014" : Math.round(o.usual * 10) / 10) + "</td>" +
+          '<td class="sm">' + (o.note ? esc2(o.note) : "<i>not given</i>") + "</td></tr>").join("") +
+        "</table>" +
+        (outliers.length > 30 ? '<div class="sm">Showing the 30 most recent of ' +
+          outliers.length + ".</div>" : "") +
+        '<div class="sm">A day is listed once per item, however many check-ins recorded it; ' +
+        "\u00d7n marks how many did. " +
+        "The app asks for an explanation whenever a core rating lands this far out, " +
+        "so most of these carry the person\u2019s own words from that moment rather than a later " +
+        "reconstruction.</div>"
+      : "") +
+
+    // the other half of the record, which a symptom log otherwise loses entirely
+    (stars90.length
+      ? "<h2>Logged as going well</h2>" +
+        '<div class="sm" style="margin-bottom:6px"><b>' + stars90.length + "</b> in 90 days, across <b>" +
+        Object.keys(starWeeks).length + "</b> separate weeks. Recorded in the moment, by the same " +
+        "person, on the same scale of effort as everything else here.</div>" +
+        "<table><tr><th>Date</th><th>What</th><th>Kind</th></tr>" +
+        stars90.slice(0, 25).map(x => "<tr><td>" + x.date + "</td><td>" + esc2(x.what) +
+          '</td><td class="sm">' + esc2((x.kinds || []).join(", ").toLowerCase()) + "</td></tr>").join("") +
+        "</table>" +
+        (stars90.length > 25 ? '<div class="sm">Showing the 25 most recent.</div>' : "")
+      : "") +
+
+    // what keeps coming back in their own words, counted rather than interpreted
+    (themes90.length
+      ? "<h2>Recurring in their own words</h2>" +
+        '<div class="sm" style="margin-bottom:6px">From <b>' + corpus90.length +
+        "</b> free-text notes over 90 days. A term appears only if it came back on separate days. " +
+        "The mood column is the average on days the term was used against the average on the rest " +
+        "\u2014 association, not cause.</div>" +
+        "<table><tr><th>Term</th><th>Days</th><th>Mood on those days</th></tr>" +
+        themes90.map(t => "<tr><td>" + esc2(t.label) + '</td><td class="m">' + t.days + "</td>" +
+          '<td class="m">' + (t.delta == null ? "\u2014"
+            : t.moodIn.toFixed(1) + " vs " + t.moodOut.toFixed(1) +
+              " (" + (t.delta > 0 ? "+" : "") + t.delta.toFixed(1) + ")") + "</td></tr>").join("") +
+        "</table>" +
+        (themes90[0] && themes90[0].samples && themes90[0].samples.length
+          ? '<div class="sm" style="margin-top:6px">Most frequent term, in context:</div>' +
+            themes90[0].samples.slice(0, 3).map(nx =>
+              '<div class="q">' + esc2(nx.text) + " <span class=\"sm\">\u2014 " +
+              esc2(fmtDate(nx.date)) + "</span></div>").join("")
+          : "")
+      : "") +
 
     "<h2>Daily detail</h2><table><tr><th>Date</th><th>Ctx</th><th>Sleep</th>" +
     on.map(i => "<th>" + esc2(i.label.slice(0, 6)) + "</th>").join("") +
@@ -5921,6 +6212,13 @@ function renderCfg() {
   $("#togNeedNote").setAttribute("aria-pressed", CFG.needNote ? "true" : "false");
   $("#needNoteSel").value = String(CFG.needNoteAt || 3);
   $("#needNoteSel").disabled = !CFG.needNote;
+  $("#needNoteWinSel").value = String(CFG.needNoteWin);
+  $("#needNoteWinSel").disabled = !CFG.needNote;
+  $("#needNoteWinHint").textContent = (+CFG.needNoteWin
+    ? "Your usual is the middle of the last " + CFG.needNoteWin + " days"
+    : "Your usual is the middle of everything you've logged") +
+    ". A shorter span follows a real change faster; a longer one won't let a bad " +
+    "stretch quietly become the new normal.";
   $("#needNoteHint").textContent = "A core rating " + (CFG.needNoteAt || 3) +
     " or more away from your usual asks for words.";
   const core = ITEMS.filter(i => i.grp === "core" && isOn(i.key));
@@ -7876,7 +8174,10 @@ function init() {
   $("#togNeedNote").onclick = () => { CFG.needNote = !CFG.needNote;
     touchCfg(); renderCfg(); renderLog(); };
   $("#needNoteSel").onchange = () => { CFG.needNoteAt = +$("#needNoteSel").value || 3;
-    usualCache = { day: "", map: {} };
+    usualCache = { day: "", win: -1, map: {} };
+    touchCfg(); renderCfg(); renderLog(); };
+  $("#needNoteWinSel").onchange = () => { CFG.needNoteWin = +$("#needNoteWinSel").value;
+    usualCache = { day: "", win: -1, map: {} };
     touchCfg(); renderCfg(); renderLog(); };
   $("#togCycle").onclick = () => { CFG.cycle = !CFG.cycle;
     touchCfg(); renderCfg(); renderLog(); renderPatterns(); };
