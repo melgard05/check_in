@@ -128,6 +128,8 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
   transition:background .12s}
 .track.unset .knob{background:var(--ink-3);width:16px;height:16px;top:13px;margin-left:-8px}
 .track.unset .fill{display:none}
+.item.pre .ival{color:var(--ink-3);font-weight:400}
+.item.pre .knob{background:var(--ink-3)}
 .pw{font-family:var(--mono);font-size:11px;color:var(--ink-3);font-weight:400;letter-spacing:.02em}
 .notebtn{display:inline-flex;align-items:center;gap:5px;background:none;border:0;padding:4px 0 2px;
   font-size:12px;color:var(--ink-3);cursor:pointer;font-family:var(--mono);letter-spacing:.04em}
@@ -161,6 +163,9 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
   padding-top:6px;line-height:1.35;letter-spacing:.04em}
 .missdate b{display:block;font-size:12.5px;color:var(--ink-2);font-weight:600;letter-spacing:0}
 .missdoses{flex:1;display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-width:0}
+.chip.allmed{border-style:dashed;color:var(--ink-2)}
+.chip.allmed[aria-pressed="true"]{border-style:solid;background:#1f2a30;border-color:var(--accent);
+  color:var(--accent)}
 .chip.dose{padding:5px 11px;font-size:12.5px}
 .chip.dose[aria-pressed="false"]{background:#1b1211;border-color:#4a2724;color:#e0857a}
 .chip.dose[aria-pressed="true"]{background:#16241f;border-color:var(--base);color:#84c2a1}
@@ -1161,6 +1166,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <p class="sub">When a core rating sits a long way from your usual, the check-in won't save until
         you've said why. Six months later the number on its own won't tell you what the day was.
         &ldquo;Usual&rdquo; means your own median once there are eight readings to go on, not a fixed 5.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Every scale starts at 5</div>
+        <div class="d" id="startAtHint"></div></div>
+        <button class="tog" id="togStart5" aria-pressed="true"></button></div>
       <div class="sw"><div style="flex:1"><div class="t">Require a note on outliers</div>
         <div class="d">Blocks saving. Skipping the check-in entirely still works.</div></div>
         <button class="tog" id="togNeedNote" aria-pressed="true"></button></div>
@@ -1482,9 +1490,9 @@ const ITEMS = [
   { key:"mood",     label:"Mood",            low:"Deep depression", high:"Elevated / manic", grp:"core", anchor:"center", note:true },
   { key:"irrit",    label:"Irritability",    low:"Easy-going",      high:"Ready to snap",    grp:"core", anchor:"center", note:true },
   { key:"energy",   label:"Energy / drive",  low:"Flat, no motor",  high:"Wired, can't sit", grp:"core", anchor:"center", note:true },
-  { key:"anxiety",  label:"Anxiety",         low:"Calm",            high:"Panicked",         grp:"core", anchor:"low",    note:true },
+  { key:"anxiety",  label:"Anxiety",         low:"Calm",            high:"Panicked",         grp:"core", anchor:"low",    mid:true, note:true },
   { key:"focus",    label:"Focus",           low:"Can't hold a thought", high:"Locked in",   grp:"core", anchor:"center", note:true },
-  { key:"fog",      label:"Brain fog",       low:"Clear",           high:"Thick fog",        grp:"core", anchor:"low",    note:true },
+  { key:"fog",      label:"Brain fog",       low:"Clear",           high:"Thick fog",        grp:"core", anchor:"low",    mid:true, note:true },
   { key:"confid",   label:"Confidence",      low:"Doubting everything", high:"Invincible",   grp:"core", anchor:"center", note:true },
   { key:"initiate", label:"Task initiation", low:"Frozen, can't start", high:"Starting easily", grp:"core", anchor:"center", note:true },
   // body & behavior
@@ -1495,13 +1503,13 @@ const ITEMS = [
   { key:"calls",    label:"Phone calls",     low:"Fine, made them",  high:"Couldn't face them", grp:"body", anchor:"low", note:true,
     wins:["mid","pm"], days:[1,2,3,4,5] },
   { key:"social",   label:"Wanting people",  low:"Hiding from everyone", high:"Very social", grp:"body", anchor:"center", note:true },
-  { key:"spend",    label:"Spending urge",   low:"None",             high:"Hard to resist",  grp:"body", anchor:"low",    note:true },
+  { key:"spend",    label:"Spending urge",   low:"None",             high:"Hard to resist",  grp:"body", anchor:"low",    mid:true, note:true },
   { key:"medeff",   label:"Meds felt right", low:"Did nothing",      high:"Worked well",     grp:"body", anchor:"center", note:true },
   { key:"caffeine", label:"Caffeine",        low:"None",             high:"A lot",           grp:"body", anchor:"low",    note:true, off:true },
   { key:"binge",    label:"Binge eating",    low:"None",             high:"Lost control",    grp:"body", anchor:"low",    note:true },
   { key:"thc",      label:"THC / nicotine",  low:"None",             high:"A lot",           grp:"body", anchor:"low",    note:true, off:true },
   { key:"exercise", label:"Movement",        low:"Sedentary",        high:"Hard workout",    grp:"body", anchor:"low",    note:true },
-  { key:"outside",  label:"Time outside",    low:"None",             high:"Hours",           grp:"body", anchor:"low",    note:true },
+  { key:"outside",  label:"Time outside",    low:"None",             high:"Hours",           grp:"body", anchor:"low",    mid:true, note:true },
   { key:"cycle",    label:"Cycle symptoms",  low:"None",             high:"Strong",          grp:"body", anchor:"low",    note:true, off:true },
   // pain — its own section, anchored low
   { key:"pain",     label:"Pain right now",  low:"None",             high:"Worst imaginable", grp:"pain", anchor:"low",   note:true },
@@ -1552,7 +1560,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 72;
+const BUILD = 74;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1579,6 +1587,7 @@ const DEFAULT_CFG = {
   needNote: true,             // a core rating far from your usual won't save unexplained
   needNoteAt: 3,              // how far from usual counts as far
   needNoteWin: 60,            // how many days back "usual" is worked out over
+  startAt5: true,             // every rating opens at 5, so you adjust from a baseline
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
   altDays: [0, 6],            // 0 Sun … 6 Sat
@@ -1627,7 +1636,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1797,6 +1806,7 @@ async function load() {
   if (typeof CFG.needNote !== "boolean") CFG.needNote = true;
   if (!(+CFG.needNoteAt >= 1)) CFG.needNoteAt = 3;
   if (!(+CFG.needNoteWin >= 0)) CFG.needNoteWin = 60;
+  if (typeof CFG.startAt5 !== "boolean") CFG.startAt5 = true;
   // migrate the old newline-separated med list into scheduled entries
   if (!Array.isArray(CFG.medList)) CFG.medList = [];
   if (!CFG.medList.length && (CFG.meds || "").trim()) {
@@ -1903,7 +1913,8 @@ function newDraft(date, winId) {
     ctx: (earlier && earlier.ctx) || "",
     medoff: { st: "", at: "", crashAt: "", crashEnd: "", fx: [] },
     recall: false, period: false,
-    sleep: null, screen: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "" };
+    sleep: null, screen: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "",
+    tch: {} };
 }
 function fixDraft(d) {                       // older records, and anything Firebase handed back
   if (!d || typeof d !== "object") return newDraft(todayISO(), (CFG.windows[0] || {}).id || "am");
@@ -1911,6 +1922,7 @@ function fixDraft(d) {                       // older records, and anything Fire
   // entry can come back missing any of these. Rebuild the whole shape.
   if (!d.v    || typeof d.v !== "object" || Array.isArray(d.v)) d.v = {};
   if (!d.n    || typeof d.n !== "object" || Array.isArray(d.n)) d.n = {};
+  if (!d.tch  || typeof d.tch !== "object" || Array.isArray(d.tch)) d.tch = null;
   if (!d.pain || typeof d.pain !== "object") d.pain = {};
   if (!Array.isArray(d.pain.sites)) d.pain.sites = d.pain.sites ? [].concat(d.pain.sites) : [];
   if (!Array.isArray(d.pain.kinds)) d.pain.kinds = d.pain.kinds ? [].concat(d.pain.kinds) : [];
@@ -1978,6 +1990,13 @@ function setDraft(date, winId) {
    SLIDERS — fill outward from the baseline notch
    ============================================================ */
 const BASEPCT = ((5 - 1) / 9) * 100;
+/* "mid" means: rest the knob at 5 and fill outward from there, so a reading
+   reads as up or down rather than as a distance from nothing. It is kept
+   separate from "anchor" on purpose — anchor decides which way the scale runs
+   and how it's coloured, and flipping a scale someone uses three times a day
+   would quietly turn their own habit into wrong data. */
+const midOf = it => !!(it && it.mid);
+const midPct = it => pctOf(it, 5);
 /* Low-anchored items measure a symptom: 1 is none, 10 is bad. Those are the
    ones worth reversing, so "further right" always means "better". Centred
    items have a bad end on both sides, so reversing them would mean nothing. */
@@ -1995,10 +2014,15 @@ function lcol(v) {
   if (v <= 6) return "var(--high-1)";
   return "var(--high-2)";
 }
-const icol = (it, v) => it.anchor === "low" ? lcol(v) : vcol(v);
+const icol = (it, v) => midOf(it) ? vcol(v) : it.anchor === "low" ? lcol(v) : vcol(v);
 
 function fillGeom(it, val) {
   const pct = pctOf(it, val);
+  if (midOf(it)) {
+    const b = midPct(it);
+    if (val === 5) return { left: b, width: 0, dot: true };
+    return { left: Math.min(pct, b), width: Math.abs(pct - b), dot: false };
+  }
   if (it.anchor === "low") {
     // fill from whichever end represents "none"
     return isRev(it) ? { left: pct, width: 100 - pct, dot: pct > 99 }
@@ -2009,11 +2033,19 @@ function fillGeom(it, val) {
 }
 
 function sliderHTML(it, val, note) {
-  const has = val != null;
-  const pct = has ? pctOf(it, val) : (it.anchor === "low" ? (isRev(it) ? 100 : 0) : BASEPCT);
-  const col = icol(it, val);
+  const real = val != null;
+  // Opening at the far end asks "how much of this bad thing", which is a harder
+  // question than "up or down from your normal". Every scale now rests at 5 and
+  // shows it — greyed until touched, so an answer given is still distinguishable
+  // from one merely left alone.
+  const pre = !real && CFG.startAt5;
+  const shown = real ? val : (pre ? 5 : null);
+  const has = shown != null;
+  const pct = has ? pctOf(it, shown)
+    : midOf(it) ? midPct(it) : (it.anchor === "low" ? (isRev(it) ? 100 : 0) : BASEPCT);
+  const col = real ? icol(it, shown) : "var(--ink-3)";
   let fill = "";
-  if (has) {
+  if (real) {
     const g = fillGeom(it, val);
     fill = g.dot
       ? '<div class="fill" style="left:calc(' + g.left + '% - 3px);width:6px;background:' + col + '"></div>'
@@ -2021,24 +2053,25 @@ function sliderHTML(it, val, note) {
   }
   let ticks = "";
   for (let i = 1; i <= 10; i++)
-    ticks += '<i class="' + (i === 5 && it.anchor !== "low" ? "mid" : "") +
+    ticks += '<i class="' + (i === 5 && (midOf(it) || it.anchor !== "low") ? "mid" : "") +
       '" style="left:' + pctOf(it, i) + '%"></i>';
 
   const hasNote = !!(note && note.trim());
   const open = noteOpen[it.key] || hasNote;
   const words = it.grp === "pain" && has ? ' <span class="pw">' + esc(PAIN_WORDS[val] || "") + "</span>" : "";
 
-  return '<div class="item" data-k="' + it.key + '">' +
+  return '<div class="item' + (pre ? " pre" : "") + '" data-k="' + it.key + '">' +
     '<div class="ihead"><span class="ilabel">' + esc(it.label) + words + "</span>" +
-      '<span class="ival' + (has ? "" : " unset") + '" style="' + (has ? "color:" + col : "") + '">' +
-        (has ? val : "–") + "</span></div>" +
+      '<span class="ival' + (real ? "" : " unset") + '" style="' + (real ? "color:" + col : "") + '">' +
+        (has ? shown : "\u2013") + "</span></div>" +
     '<div class="iends">' + (isRev(it)
       ? "<span>" + esc(it.high) + " · 10</span><span>1 · " + esc(it.low) + "</span>"
       : "<span>1 · " + esc(it.low) + "</span><span>" + esc(it.high) + " · 10</span>") + "</div>" +
-    '<div class="track' + (has ? "" : " unset") + '" role="slider" tabindex="0" aria-label="' + esc(it.label) +
+    '<div class="track' + (real ? "" : " unset") + '" role="slider" tabindex="0" aria-label="' + esc(it.label) +
       '" aria-valuemin="1" aria-valuemax="10" aria-valuenow="' + (has ? val : 5) + '">' +
       '<div class="rail">' + fill + "</div>" +
-      (it.anchor === "low" ? "" : '<div class="spine" style="left:' + BASEPCT + '%"></div>') +
+      (midOf(it) ? '<div class="spine" style="left:' + midPct(it).toFixed(2) + '%"></div>'
+        : it.anchor === "low" ? "" : '<div class="spine" style="left:' + BASEPCT + '%"></div>') +
       '<div class="ticks">' + ticks + "</div>" +
       '<div class="knob" style="left:' + pct + "%" + (has ? ";background:" + col : "") + '"></div>' +
     "</div>" +
@@ -2065,8 +2098,19 @@ function usualFor(key) {
   if (usualCache.day !== day || usualCache.win !== win) usualCache = { day, win, map: {} };
   if (key in usualCache.map) return usualCache.map[key];
   // a short window tracks a recent change quickly; a long one is steadier and
-  // won't quietly redefine "usual" as whatever the last bad fortnight looked like
-  const vs = daily(win).map(r => r.v[key]).filter(v => v != null);
+  // won't quietly redefine "usual" as whatever the last bad fortnight looked like.
+  // Readings left at the opening 5 are excluded: they are the absence of an
+  // answer, and letting them count would drag every baseline toward the middle
+  // and stop real outliers registering as outliers.
+  const from = win > 0 ? addDays(todayISO(), -(win - 1)) : "0000-00-00";
+  const vs = [];
+  ENTRIES.forEach(e => {
+    if (!e.date || e.date < from) return;
+    const v = e.v ? e.v[key] : null;
+    if (v == null) return;
+    if (e.tch && !e.tch[key]) return;                 // shown, left alone, not an answer
+    vs.push(v);
+  });
   let out = null;
   if (vs.length >= 8) {
     const q = vs.slice().sort((a, b) => a - b);
@@ -2081,7 +2125,7 @@ function deviates(key, v) {
   const T = +CFG.needNoteAt || 3;
   const u = usualFor(key);
   if (u != null) return Math.abs(v - u) >= T;
-  return it.anchor === "low" ? v >= 4 + T : Math.abs(v - 5) >= T;
+  return (it.anchor === "low" && !midOf(it)) ? v >= 4 + T : Math.abs(v - 5) >= T;
 }
 function needsNote(key, v) {
   const it = ITEM[key];
@@ -2142,6 +2186,8 @@ function valFromX(track, clientX, it) {
 function applyVal(item, v) {
   const key = item.dataset.k, it = ITEM[key];
   draft.v[key] = v;
+  if (draft.tch) draft.tch[key] = 1; else draft.tch = { [key]: 1 };
+  item.classList.remove("pre");
   const col = icol(it, v), pct = pctOf(it, v);
   const track = item.querySelector(".track"), rail = item.querySelector(".rail");
   const knob = item.querySelector(".knob"), ival = item.querySelector(".ival");
@@ -2737,12 +2783,21 @@ function renderLog() {
     let h = "";
     groups.forEach(g => {
       if (!g.show) return;
+      const inG = list.filter(m => inGroup(m, g.k));
+      const allOn = inG.length > 0 && inG.every(m => draft.meds.taken[m.id + "@" + g.k]);
       h += '<div class="eyebrow" style="margin:' + (h ? "16px" : "0") + ' 0 8px">' + g.label + "</div>" +
-        '<div class="chips">' + list.filter(m => inGroup(m, g.k)).map(m => {
+        '<div class="chips">' + inG.map(m => {
           const key = m.id + "@" + g.k;      // a twice-daily dose is two separate ticks
           return '<button class="chip" data-med="' + esc(key) + '" aria-pressed="' +
             (draft.meds.taken[key] ? "true" : "false") + '">' + esc(m.name) + "</button>";
-        }).join("") + "</div>" +
+        }).join("") +
+        // the common case is "took all of them", and tapping five chips to say so
+        // is the sort of friction that stops the whole thing getting logged
+        (inG.length > 1
+          ? '<button class="chip allmed" data-medall="' + g.k + '" aria-pressed="' +
+            (allOn ? "true" : "false") + '">' + (allOn ? "\u2713 all ticked" : "Tick all " + inG.length) +
+            "</button>"
+          : "") + "</div>" +
         '<div class="row" style="margin-top:9px">' +
           '<label class="fld" style="flex:0 1 150px"><span>Taken at</span>' +
           '<input type="time" data-medat="' + g.k + '" value="' + esc(draft.meds.at[g.k] || "") + '"></label>' +
@@ -6209,6 +6264,11 @@ function renderCfg() {
       ? scR.length + " days logged in the last 30, averaging " +
         (scR.reduce((a, b) => a + b, 0) / scR.length).toFixed(1) + " h."
       : "Nothing logged yet. Eight days and it starts appearing in the correlations.";
+  $("#togStart5").setAttribute("aria-pressed", CFG.startAt5 ? "true" : "false");
+  $("#startAtHint").textContent = CFG.startAt5
+    ? "Sliders open at 5 and stay grey until you move one. Anything you saw and left " +
+      "alone saves as 5, but is kept out of your usual so it can't drag a baseline toward the middle."
+    : "Sliders open unset, at the end of the scale, and record nothing unless moved.";
   $("#togNeedNote").setAttribute("aria-pressed", CFG.needNote ? "true" : "false");
   $("#needNoteSel").value = String(CFG.needNoteAt || 3);
   $("#needNoteSel").disabled = !CFG.needNote;
@@ -7664,7 +7724,9 @@ function commit(skip, reason) {
     ENTRIES = ENTRIES.filter(x => !(x.date === draft.date && x.win === draft.win)); saveEnt();
     toast("Marked skipped");
   } else {
-    const anyVal = Object.keys(draft.v).some(k => draft.v[k] != null);
+    // Only count what was actually moved. With every scale resting at 5, testing
+    // draft.v would call an untouched screen a complete check-in.
+    const anyVal = Object.keys(draft.tch || {}).length > 0;
     const anySleep = draft.sleep && draft.sleep.h != null && winById(draft.win).sleep;
     const anyNote = Object.keys(draft.n).some(k => draft.n[k] && draft.n[k].trim());
     const anyPain = draft.pain.sites.length || draft.pain.kinds.length;
@@ -7690,6 +7752,17 @@ function commit(skip, reason) {
         ? whyNeeded(miss[0]) + " Say what's going on before saving."
         : miss.length + " ratings are a long way from usual and need a note.", true);
       return;
+    }
+    // Fill in exactly what was on screen and left alone — never a slider that
+    // was never displayed, which in quick mode is most of them.
+    // Only when at least one rating was actually given. A check-in saved without
+    // touching anything — the sleep wheels alone can carry it through — would
+    // otherwise write two dozen fives nobody looked at.
+    if (CFG.startAt5 && anyVal) {
+      $$("#v-log .item[data-k]").forEach(el => {
+        const k = el.dataset.k;
+        if (ITEM[k] && draft.v[k] == null) draft.v[k] = 5;
+      });
     }
     draft.note = $("#eNote").value.trim();
     Object.keys(draft.n).forEach(k => {                   // drop empty note boxes
@@ -7888,6 +7961,24 @@ function init() {
     if (th) { CFG.tellWho.how = th.dataset.tellhow;
       touchCfg().then(() => { renderTell(); if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return; }
+    const mall = ev.target.closest("[data-medall]");
+    if (mall && draft) {
+      const g = mall.dataset.medall;
+      const inG = (CFG.medList || []).filter(m => (m.name || "").trim() &&
+        (m.whens || [m.when]).indexOf(g) > -1);
+      const allOn = inG.length > 0 && inG.every(m => draft.meds.taken[m.id + "@" + g]);
+      inG.forEach(m => {
+        const key = m.id + "@" + g;
+        if (allOn) delete draft.meds.taken[key]; else draft.meds.taken[key] = true;
+      });
+      // stamp the time on the way through, since that is the next thing asked for
+      if (!allOn && !draft.meds.at[g]) {
+        const n = new Date();
+        draft.meds.at[g] = pad(n.getHours()) + ":" + pad(n.getMinutes());
+      }
+      renderLog();
+      return;
+    }
     const sk = ev.target.closest("[data-starkind]");
     if (sk && starDraft) {
       const v = sk.dataset.starkind, i = starDraft.kinds.indexOf(v);
@@ -8212,6 +8303,9 @@ function init() {
     touchCfg(); renderCfg(); renderLog();
     toast(screenPrev() ? "Asked in the morning, about yesterday" : "Asked at the last check-in, about today");
   };
+  $("#togStart5").onclick = () => { CFG.startAt5 = !CFG.startAt5;
+    usualCache = { day: "", win: -1, map: {} };
+    touchCfg(); renderCfg(); renderLog(); };
   $("#togNeedNote").onclick = () => { CFG.needNote = !CFG.needNote;
     touchCfg(); renderCfg(); renderLog(); };
   $("#needNoteSel").onchange = () => { CFG.needNoteAt = +$("#needNoteSel").value || 3;
