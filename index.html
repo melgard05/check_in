@@ -1592,7 +1592,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 78;
+const BUILD = 79;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2930,6 +2930,10 @@ function painSummary() {
 
 function fillWinSelect(dateISO) {
   const d = dateISO || ($("#eDate") && $("#eDate").value) || todayISO();
+  // Replacing the options resets the browser's selection to the first one, so
+  // anything reading this box afterwards was told "Morning" no matter which
+  // check-in was actually open. Put the selection back.
+  const keep = ($("#eWin") && $("#eWin").value) || (draft && draft.win) || "";
   const list = winsOn(d);
   // a check-in that doesn't run that day still has to be selectable if something
   // was already logged against it, or the entry becomes unreachable
@@ -2939,6 +2943,7 @@ function fillWinSelect(dateISO) {
     '<option value="' + w.id + '">' + esc(w.label) + " \u00b7 " + winTime(w, d) +
     (w.sleep ? " (sleep)" : "") + (extra.indexOf(w) > -1 ? " (not scheduled)" : "") +
     "</option>").join("");
+  if (keep && $("#eWin").querySelector('option[value="' + keep + '"]')) $("#eWin").value = keep;
 }
 
 /* ---------- due logic ---------- */
@@ -6982,8 +6987,9 @@ async function cloudSync(quiet) {
     if (cfgChanged) { fillWinSelect(); renderCfg(); scheduleNotifs();
       cloudLog("adopted a newer schedule from your other device", true); }
     if (pulled.added || pulled.updated || cfgChanged) {
-      fillWinSelect(); setDraft($("#eDate").value || todayISO(), $("#eWin").value || draft.win);
-      renderEntries();
+      // afterPull knows not to throw away a check-in in progress, and works from
+      // the draft rather than a select box that may have just been rebuilt
+      afterPull();
       if (!quiet) toast("Pulled " + (pulled.added + pulled.updated) + " from your other device");
     } else if (!quiet) toast("Already in step");
   } catch (e) {
@@ -7680,8 +7686,7 @@ async function fbSync(quiet) {
     fbLog((added || updated ? "pulled " + added + " new / " + updated + " updated, " : "") +
       "pushed " + Object.keys(payload).length + " · " + ENTRIES.length + " entries total", true);
     if (added || updated) {
-      setDraft($("#eDate").value || todayISO(), $("#eWin").value || draft.win);
-      renderEntries(); refreshDue();
+      afterPull();
       if (!quiet) toast("Pulled " + (added + updated) + " from Firebase");
     } else if (!quiet) toast("Firebase in step");
   } catch (e) {
