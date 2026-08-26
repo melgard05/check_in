@@ -68,6 +68,10 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .flagbar b{color:var(--warn);display:block;font-size:13.5px}
 .flagbar .fbody{color:var(--ink-2);font-size:12.5px;margin-top:2px}
 .flagbar .btn{padding:5px 10px;font-size:12px;flex:0 0 auto}
+.editbar{display:none;align-items:center;gap:10px;background:#2b2119;border:1px solid var(--warn);
+  border-radius:var(--r);padding:9px 12px;margin-bottom:11px}
+.editbar.on{display:flex}
+.editbar b{color:var(--warn);font-size:13.5px}
 .spikebtn{margin-top:4px;background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
 .spikebtn:hover{background:#332618}
 .starbtn{margin-top:8px;background:#2a2415;border-color:#c9a227;color:#e0c453;font-weight:600}
@@ -498,6 +502,13 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   <div class="grid" id="mainGrid">
   <!-- ============ LOG ============ -->
   <section class="view on" id="v-log">
+    <div class="editbar" id="editBar">
+      <div style="flex:1">
+        <b id="editTxt"></b>
+        <div class="mini" id="editSub" style="margin-top:1px"></div>
+      </div>
+      <button class="btn sm" id="editUndo" style="display:none">Restore previous</button>
+    </div>
     <div class="card">
       <div class="row" style="gap:8px">
         <label class="fld" style="flex:1 1 120px"><span>Date</span><input type="date" id="eDate"></label>
@@ -1560,7 +1571,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 74;
+const BUILD = 76;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1581,7 +1592,6 @@ const DEFAULT_CFG = {
   cycle: false,               // track cycle day
   sched: {},                  // per-item overrides: { key: { wins:[], days:[] } }
   quick: true,                // short check-in by default, everything else behind a tap
-  goodRight: true,            // symptom sliders run severe-left to none-right
   spikeItems: ["anxiety", "irrit", "manic"],
   spikeTriggers: SPIKE_TRIGGERS.slice(),   // editable: one person's trigger list is not another's
   needNote: true,             // a core rating far from your usual won't save unexplained
@@ -1636,7 +1646,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "goodRight", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1797,7 +1807,6 @@ async function load() {
   if (!Array.isArray(CFG.quickItems) || !CFG.quickItems.length)
     CFG.quickItems = ["mood", "irrit", "energy", "anxiety", "fog"];
   if (!CFG.sched || typeof CFG.sched !== "object") CFG.sched = {};
-  if (typeof CFG.goodRight !== "boolean") CFG.goodRight = true;
   if (!Array.isArray(CFG.spikeItems) || !CFG.spikeItems.length)
     CFG.spikeItems = ["anxiety", "irrit", "manic"];
   if (typeof CFG.cfgAt !== "number") CFG.cfgAt = 0;
@@ -1849,6 +1858,14 @@ async function load() {
   const cutoff = Date.now() - 30 * 86400000;
   Object.keys(STATE.gone).forEach(k => { if ((STATE.gone[k] || 0) < cutoff) delete STATE.gone[k]; });
   if (!STATE.dirty) STATE.dirty = {};
+  if (!STATE.revs || typeof STATE.revs !== "object" || Array.isArray(STATE.revs)) STATE.revs = {};
+  // month-old replaced copies are not worth carrying between devices forever
+  const revCut = Date.now() - 30 * 86400000;
+  Object.keys(STATE.revs).forEach(k => {
+    STATE.revs[k] = (STATE.revs[k] || []).filter(r => r && r.at &&
+      new Date(r.at).getTime() > revCut);
+    if (!STATE.revs[k].length) delete STATE.revs[k];
+  });
   if (!Array.isArray(STATE.credLog)) STATE.credLog = [];
 
   // The config may have come back without the key. If the sidecar still holds one
@@ -2000,17 +2017,26 @@ const midPct = it => pctOf(it, 5);
 /* Low-anchored items measure a symptom: 1 is none, 10 is bad. Those are the
    ones worth reversing, so "further right" always means "better". Centred
    items have a bad end on both sides, so reversing them would mean nothing. */
-const isRev = it => !!(CFG.goodRight && it && it.anchor === "low");
+/* Every scale runs 1 on the left to 10 on the right, with no exceptions.
+   Symptom scales used to be drawn backwards so that "good" was always on the
+   right, which is defensible but means two sliders side by side run opposite
+   ways — and the reader has to check the end labels every single time. One
+   direction, and colour carries good-versus-bad instead. */
+const isRev = () => false;
 const pctOf = (it, v) => isRev(it) ? ((10 - v) / 9) * 100 : ((v - 1) / 9) * 100;
 const valAtPct = (it, p) => isRev(it) ? Math.round(10 - p * 9) : Math.round(1 + p * 9);
 const noteOpen = {};                       // which note boxes are expanded
 let showAll = false;                       // "add detail" expansion, per draft
 
-/* colour for a low-anchored scale: 1 is fine, 10 is not */
+/* A symptom scale is sequential: none at 1, bad at 10, one ramp the whole way.
+   It used to pass through a cool teal in the middle, which read as a third
+   category rather than as "somewhat". With direction no longer distinguishing
+   these from the centred scales, that ambiguity had to go: symptom scales now
+   run green to red and never touch the cool end, so a low reading here can
+   never be mistaken for a low reading on a centred scale. */
 function lcol(v) {
   if (v == null) return "var(--ink-3)";
-  if (v <= 2) return "var(--base)";
-  if (v <= 4) return "var(--low-1)";
+  if (v <= 3) return "var(--base)";
   if (v <= 6) return "var(--high-1)";
   return "var(--high-2)";
 }
@@ -2125,7 +2151,11 @@ function deviates(key, v) {
   const T = +CFG.needNoteAt || 3;
   const u = usualFor(key);
   if (u != null) return Math.abs(v - u) >= T;
-  return (it.anchor === "low" && !midOf(it)) ? v >= 4 + T : Math.abs(v - 5) >= T;
+  // No personal usual yet, so 5 is only a guess at the middle. For a symptom
+  // scale that guess is wrong at the calm end — a 2 on anxiety is a good day,
+  // not something to explain — so before there's history only the bad direction
+  // is questioned. Once the median is known, both directions are fair game.
+  return it.anchor === "low" ? v >= 4 + T : Math.abs(v - 5) >= T;
 }
 function needsNote(key, v) {
   const it = ITEM[key];
@@ -2829,6 +2859,7 @@ function renderLog() {
   renderSug();
   renderSpikeCount();
   renderStarCount();
+  renderEditBar();
   markNeeded();
 
   const existing = ENTRIES.some(x => x.date === draft.date && x.win === draft.win);
@@ -2837,7 +2868,7 @@ function renderLog() {
     ? '<span style="color:var(--accent)">Saved already — editing it will overwrite.</span>'
     : sk ? '<span style="color:var(--warn)">Marked skipped' + (sk === true ? "" : ": " + esc(sk)) + '.</span>'
     : "Not logged yet.";
-  $("#saveBtn").textContent = existing ? "Update check-in" : "Save check-in";
+  /* label set by renderEditBar, which knows whether this replaces something */
 }
 
 /* Reveal or hide the crash detail without rebuilding the form. */
@@ -2966,6 +2997,7 @@ function refreshDue() {
       gateKey = key;
       gateWin = w.id;
       $("#gateH").textContent = w.label + " check-in";
+      $("#gateGo").textContent = "Do the " + w.label.toLowerCase() + " one";
       $("#gateK").textContent = due.length > 1
         ? due.length + " check-ins due · this one first" : "check-in due";
       $("#gate").classList.add("on");
@@ -7146,6 +7178,30 @@ function renderStarCount() {
       : '<span style="color:var(--ink-3)">Nothing yet. The bar is deliberately low.</span>';
 }
 
+/* Landing on a check-in that is already filled in looks exactly like landing on
+   an empty one, and saving replaces it. That is how a morning's answers get lost
+   without anyone doing anything wrong. */
+function renderEditBar() {
+  const bar = $("#editBar"); if (!bar || !draft) return;
+  const saved = ENTRIES.find(x => x.date === draft.date && x.win === draft.win);
+  const revs = ((STATE.revs || {})[draft.date + "|" + draft.win] || []);
+  if (!saved) {
+    bar.classList.remove("on");
+    $("#saveBtn").textContent = "Save check-in";
+    return;
+  }
+  const when = saved.ts ? new Date(saved.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+  const n = Object.keys(saved.v || {}).filter(k => saved.v[k] != null).length;
+  bar.classList.add("on");
+  $("#editTxt").textContent = "You already saved this " + winById(draft.win).label.toLowerCase() +
+    " check-in" + (when ? " at " + when : "");
+  $("#editSub").textContent = n
+    ? n + " rating" + (n === 1 ? "" : "s") + " recorded. Saving replaces them."
+    : "Saving replaces it.";
+  $("#editUndo").style.display = revs.length ? "" : "none";
+  $("#saveBtn").textContent = "Replace this check-in";
+}
+
 function renderSpikeCount() {
   const el = $("#spikeCount"); if (!el) return;
   const today = (STATE.spikes || []).filter(x => x.date === todayISO());
@@ -7593,6 +7649,22 @@ async function syncFresh(reason, minAgeMs) {
   catch (e) { /* the individual paths already log and mark the dot */ }
   syncing = false;
 }
+/* Has anything been entered into the check-in currently on screen? */
+function draftTouched() {
+  if (!draft) return false;
+  if (Object.keys(draft.tch || {}).length) return true;
+  if (Object.keys(draft.n || {}).some(k => (draft.n[k] || "").trim())) return true;
+  if ((draft.tags || []).length || (draft.warns || []).length) return true;
+  if ((draft.note || "").trim()) return true;
+  if (draft.pain && ((draft.pain.sites || []).length || (draft.pain.kinds || []).length)) return true;
+  if (draft.nap && draft.nap.on) return true;
+  if (draft.medoff && draft.medoff.st) return true;
+  if (draft.screen) return true;
+  if (draft.meds && Object.keys(draft.meds.taken || {}).length) return true;
+  if (draft.ctx) return true;
+  return false;
+}
+
 /* A pull can land while any tab is on screen, so refresh whatever is actually
    being looked at rather than assuming it's the Log. */
 function afterPull() {
@@ -7600,7 +7672,11 @@ function afterPull() {
     refreshDue(); refreshConn(); renderSpikeCount(); renderStarCount(); renderSug();
     const d = ($("#eDate") && $("#eDate").value) || todayISO();
     fillWinSelect(d);
-    if (draft) setDraft(d, winRunsOn(draft.win, d) ? draft.win : firstWinOn(d));
+    // Rebuilding the draft throws away anything half-entered. A sync that fires
+    // while someone is mid-check-in — coming back to the app is enough to trigger
+    // one — would silently reset every slider they had just moved.
+    if (draft && !draftTouched()) setDraft(d, winRunsOn(draft.win, d) ? draft.win : firstWinOn(d));
+    else if (draft) { $("#eDate").value = draft.date; $("#eWin").value = draft.win; }
     renderEntries();
     if ($("#v-chart") && $("#v-chart").classList.contains("on")) {
       drawMain(); drawSleep(); drawDay(); drawCoverage();
@@ -7790,7 +7866,15 @@ function commit(skip, reason) {
     draft.ts = new Date().toISOString();
     delete STATE.skipped[key]; saveState();
     const i = ENTRIES.findIndex(x => x.date === draft.date && x.win === draft.win);
-    if (i > -1) ENTRIES[i] = draft; else ENTRIES.push(draft);
+    if (i > -1) {
+      // Saving over a check-in that already existed used to discard it outright,
+      // with nothing to go back to. Keep the copy it replaced.
+      STATE.revs = STATE.revs || {};
+      const rk = draft.date + "|" + draft.win;
+      STATE.revs[rk] = (STATE.revs[rk] || []).concat([{ at: new Date().toISOString(),
+        e: JSON.parse(JSON.stringify(ENTRIES[i])) }]).slice(-3);
+      ENTRIES[i] = draft;
+    } else ENTRIES.push(draft);
     STATE.dirty = STATE.dirty || {}; STATE.dirty[draft.date + "_" + draft.win] = 1;
     saveEnt(); saveState();
     toast("Saved");
@@ -8273,7 +8357,12 @@ function init() {
     const target = (gateWin && due.some(w => w.id === gateWin)) ? gateWin
       : (due[0] ? due[0].id : bestWindow(todayISO()));
     setDraft(todayISO(), target);
-    show("log"); };
+    show("log");
+    // if what it opened is already filled in, that is worth a word rather than
+    // letting it look like a blank one
+    if (ENTRIES.some(x => x.date === todayISO() && x.win === target))
+      toast("That one is already saved — check the date and check-in above", true);
+  };
   $("#gateSkip").onclick = () => { const due = dueWindows(todayISO());
     if (!due.length) { $("#gate").classList.remove("on"); return; }
     const w = due.find(x => x.id === gateWin) || due[0];
@@ -8903,6 +8992,27 @@ function init() {
         : "Handed over. Press send in the app that opened.");
     }, 900);
   });
+  $("#editUndo").onclick = async () => {
+    const rk = draft.date + "|" + draft.win;
+    const revs = (STATE.revs || {})[rk] || [];
+    const prev = revs[revs.length - 1];
+    if (!prev) { toast("Nothing to go back to", true); return; }
+    const n = Object.keys(prev.e.v || {}).filter(k => prev.e.v[k] != null).length;
+    if (!confirm("Put back the version saved before " +
+      new Date(prev.at).toLocaleString() + "?\n\n" + n + " ratings. " +
+      "What is there now is kept as the version you can go back to.")) return;
+    const i = ENTRIES.findIndex(x => x.date === draft.date && x.win === draft.win);
+    const cur = i > -1 ? JSON.parse(JSON.stringify(ENTRIES[i])) : null;
+    const restored = fixDraft(JSON.parse(JSON.stringify(prev.e)));
+    restored.ts = new Date().toISOString();          // so it wins the next merge
+    if (i > -1) ENTRIES[i] = restored; else ENTRIES.push(restored);
+    STATE.revs[rk] = revs.slice(0, -1).concat(cur ? [{ at: new Date().toISOString(), e: cur }] : []);
+    STATE.dirty = STATE.dirty || {}; STATE.dirty[draft.date + "_" + draft.win] = 1;
+    await saveEnt(); await saveState();
+    setDraft(draft.date, draft.win);
+    if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+    toast("Put back");
+  };
   $("#starBtn").onclick = () => openStar();
   $("#starSave").onclick = saveStar;
   $("#starCancel").onclick = () => { $("#starSheet").classList.remove("on"); starDraft = null; };
