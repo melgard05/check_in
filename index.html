@@ -1552,7 +1552,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 71;
+const BUILD = 72;
 
 const DEFAULT_CFG = {
   windows: [
@@ -6763,6 +6763,7 @@ function mergeStars(remote) {
 }
 function mergeSuggestions(remote) {
   const gone = STATE.gone || {};
+  const before = (STATE.suggestions || []).length;
   const by = {};
   (STATE.suggestions || []).forEach(s => { if (!gone[s.id]) by[s.id] = s; });
   (remote || []).forEach(s => {
@@ -6770,7 +6771,14 @@ function mergeSuggestions(remote) {
     if (!by[s.id]) by[s.id] = s;
     else if (s.done) by[s.id].done = true;
   });
-  STATE.suggestions = Object.keys(by).map(k => by[k]).sort((a, b) => a.at < b.at ? -1 : 1);
+  const out = Object.keys(by).map(k => by[k]).sort((a, b) => a.at < b.at ? -1 : 1);
+  // a sync should only ever add to this list. Anything that removes one without
+  // a tombstone is a bug, and losing what someone typed is the worst way to find out.
+  if (out.length < before) {
+    console.warn("suggestion merge would have dropped", before - out.length, "— keeping them");
+    return;
+  }
+  STATE.suggestions = out;
 }
 
 async function cloudSync(quiet) {
@@ -7507,6 +7515,39 @@ async function fbSync(quiet) {
 async function syncAll(quiet) {
   if (CFG.cloud.sync) await cloudSync(quiet);
   if (CFG.fb.on) await fbSync(quiet);
+  lastSyncAt = Date.now();
+}
+
+/* Every sync used to hang off an action — saving a check-in, logging a star,
+   changing a setting. Opening the app and simply looking at it pulled nothing,
+   so a device you hadn't typed into was showing whatever it last had locally.
+   On a desktop left open for days that is indefinitely stale, and it looks
+   exactly like sync being broken. */
+let lastSyncAt = 0, syncing = false;
+const syncable = () => !!(CFG.cloud.sync || CFG.fb.on);
+async function syncFresh(reason, minAgeMs) {
+  if (!syncable() || syncing || dashOn) return;
+  if (minAgeMs && Date.now() - lastSyncAt < minAgeMs) return;
+  syncing = true;
+  try { await syncAll(true); afterPull(); }
+  catch (e) { /* the individual paths already log and mark the dot */ }
+  syncing = false;
+}
+/* A pull can land while any tab is on screen, so refresh whatever is actually
+   being looked at rather than assuming it's the Log. */
+function afterPull() {
+  try {
+    refreshDue(); refreshConn(); renderSpikeCount(); renderStarCount(); renderSug();
+    const d = ($("#eDate") && $("#eDate").value) || todayISO();
+    fillWinSelect(d);
+    if (draft) setDraft(d, winRunsOn(draft.win, d) ? draft.win : firstWinOn(d));
+    renderEntries();
+    if ($("#v-chart") && $("#v-chart").classList.contains("on")) {
+      drawMain(); drawSleep(); drawDay(); drawCoverage();
+    }
+    if ($("#v-pat") && $("#v-pat").classList.contains("on")) renderPatterns();
+    if ($("#v-data") && $("#v-data").classList.contains("on")) renderCfg();
+  } catch (e) {}
 }
 
 /* ============================================================
@@ -8552,6 +8593,15 @@ function init() {
   }
 
   reportState();
+  // pull before doing anything else, so a device you have only opened to look
+  // at shows what the other one logged rather than its own stale copy
+  syncFresh("open");
+  // and again whenever you come back to it — a desktop tab sits untouched for
+  // hours, and "I opened it and my check-in wasn't there" is the same bug
+  const wake = () => { if (document.visibilityState === "visible") syncFresh("wake", 45000); };
+  document.addEventListener("visibilitychange", wake);
+  window.addEventListener("focus", wake);
+  window.addEventListener("online", () => syncFresh("online", 5000));
   // settle who owns reminders before any local timer is armed
   verifyPush().then(() => scheduleNotifs());
   // A stored subscription can be stale in ways nothing here can see: the browser
