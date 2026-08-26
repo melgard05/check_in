@@ -172,6 +172,7 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
   color:var(--accent)}
 .chip.dose{padding:5px 11px;font-size:12.5px}
 .chip.dose[aria-pressed="false"]{background:#1b1211;border-color:#4a2724;color:#e0857a}
+.chip.dose.unasked[aria-pressed="false"]{background:#1a1712;border-color:#4a3d24;color:#d9b06a}
 .chip.dose[aria-pressed="true"]{background:#16241f;border-color:var(--base);color:#84c2a1}
 .chip.dose small{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;
   opacity:.7;margin-left:6px}
@@ -183,12 +184,30 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 /* one scrollable line rather than a wrapping block: the Data tab has sixteen
    sections and a three-row chip wall would push the content it's meant to
    help you reach off the screen */
-.qtabs{position:sticky;top:0;z-index:30;display:flex;gap:6px;overflow-x:auto;overflow-y:hidden;
-  padding:9px 2px 9px;margin:0 -2px 4px;background:linear-gradient(180deg,var(--bg) 78%,rgba(11,13,16,.9));
-  border-bottom:1px solid var(--line);scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.qtabs::-webkit-scrollbar{display:none}
+/* This was one scrollable line with the scrollbar hidden, which works with a
+   thumb and not at all with a mouse: on a desktop everything past about the
+   sixth chip was simply unreachable. It wraps now, so nothing is ever out of
+   sight. It only sticks on screens wide enough that wrapping stays short —
+   on a phone a three-row bar pinned to the top would eat the content it exists
+   to help you reach. */
+.qtabs{display:none;flex-wrap:wrap;gap:6px;padding:9px 2px;margin:0 -2px 4px;
+  background:var(--bg);border-bottom:1px solid var(--line)}
+.qjump{display:block;position:sticky;top:0;z-index:30;padding:8px 0 9px;margin:0 0 4px;
+  background:linear-gradient(180deg,var(--bg) 78%,rgba(11,13,16,.94));border-bottom:1px solid var(--line)}
+.qjump span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.qjump select{width:100%}
+/* Sixteen chips wrap to five rows on a narrow phone, which is more screen than
+   the content they point at. A picker is one row there; the chips return as
+   soon as they fit in two. */
+@media (min-width:620px){
+  .qjump{display:none}
+  .qtabs{display:flex;position:sticky;top:0;z-index:30;
+    background:linear-gradient(180deg,var(--bg) 78%,rgba(11,13,16,.94))}
+}
+body.dash .qjump{display:none}
 .qtabs button{flex:0 0 auto;background:var(--panel-2);border:1px solid var(--line-2);border-radius:99px;
-  padding:6px 12px;font-size:12.5px;color:var(--ink-2);cursor:pointer;white-space:nowrap;
+  padding:6px 11px;font-size:12.5px;color:var(--ink-2);cursor:pointer;white-space:nowrap;
   transition:color .12s,border-color .12s,background .12s}
 .qtabs button[aria-current="true"]{background:#1f2a30;border-color:var(--accent);color:var(--accent);
   font-weight:600}
@@ -936,6 +955,8 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
   <!-- ============ DATA ============ -->
   <section class="view" id="v-data">
+    <label class="qjump" id="dataJumpWrap"><span>Jump to</span>
+      <select id="dataJump"></select></label>
     <div class="qtabs" id="dataTabs"></div>
     <div class="card" id="planCard" data-dsec="ds-your-plan">
       <h2>Your plan</h2>
@@ -1571,7 +1592,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 76;
+const BUILD = 78;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3088,10 +3109,20 @@ function daily(days) {
     const takenToday = {};
     es.forEach(e => { if (e.meds && e.meds.taken)
       Object.keys(e.meds.taken).forEach(k => { if (e.meds.taken[k]) takenToday[k] = true; }); });
+    // Only count doses this day could actually have an answer for. An evening
+    // dose at lunchtime, or one on a day whose evening check-in never happened,
+    // is not evidence of a missed dose — and counting it as one understates
+    // adherence in the figure that ends up in front of a prescriber.
     const doses = [];
     (CFG.medList || []).forEach(m => {
       if (!(m.name || "").trim()) return;              // a blank row is not a dose
-      (m.whens || [m.when]).forEach(wq => { if (wq !== "prn") doses.push(m.id + "@" + wq); });
+      (m.whens || [m.when]).forEach(wq => {
+        if (wq === "prn") return;
+        const d = { key: m.id + "@" + wq, id: m.id, when: wq };
+        const st = doseState(date, d, takenToday);
+        if (st === "pending" || st === "unasked") return;
+        doses.push(d.key);
+      });
     });
     if (doses.length && es.some(e => e.meds && e.meds.taken))
       row.meds = doses.filter(k => takenToday[k] || takenToday[k.split("@")[0]]).length / doses.length;
@@ -3636,11 +3667,36 @@ function missedRows() {
   const out = [];
   keys.forEach(date => {
     const t = takenOn(date);
-    const doses = wanted.map(d => Object.assign({}, d, { on: doseOn(t, d) }));
-    const missing = doses.filter(d => !d.on).length;
-    out.push({ date, doses, missing });
+    const doses = wanted.map(d => Object.assign({}, d,
+      { on: doseOn(t, d), st: doseState(date, d, t) }));
+    const missing = doses.filter(d => d.st === "missed").length;
+    const unasked = doses.filter(d => d.st === "unasked").length;
+    if (!doses.some(d => d.st !== "pending")) return;      // nothing to say about it yet
+    out.push({ date, doses, missing, unasked });
   });
   return out;
+}
+
+/* An unticked dose is not the same thing as a missed one, and the log was
+   calling every one of them missed:
+     · an evening dose at lunchtime has not been missed, it has not happened yet
+     · a dose on a day whose evening check-in never happened was never asked
+       about — the chips only appear at that check-in
+   Both of those turned every evening dose red, which is both wrong and the
+   fastest way to make an adherence figure worth ignoring. */
+function doseState(date, d, taken) {
+  if (doseOn(taken, d)) return "taken";
+  const wins = winsOn(date);
+  if (!wins.length) return "missed";
+  // the morning group is offered at every check-in; the evening group only from
+  // the second one onward, matching how the log screen decides to show them
+  const askWins = (d.when === "am" || wins.length < 2) ? wins : wins.slice(1);
+  if (date === todayISO()) {
+    const gate = d.when === "am" ? wins[0] : wins[wins.length - 1];
+    if (gate && minsOf(winTime(gate, date)) > nowMins()) return "pending";
+  }
+  const asked = ENTRIES.some(e => e.date === date && askWins.some(w => w.id === e.win));
+  return asked ? "missed" : "unasked";
 }
 const winRank = id => { const i = CFG.windows.findIndex(w => w.id === id); return i < 0 ? 99 : i; };
 /* Ticks a dose on a past day. Returns true if anything actually moved.
@@ -3710,8 +3766,9 @@ function renderMissed() {
   $("#missShowAll").textContent = missAll ? "Only show what's missing" : "Show ticked ones too";
 
   const all = missedRows();
-  const slots = all.reduce((a, r) => a + r.doses.length, 0);
+  const slots = all.reduce((a, r) => a + r.doses.filter(d => d.st !== "pending").length, 0);
   const gone = all.reduce((a, r) => a + r.missing, 0);
+  const never = all.reduce((a, r) => a + (r.unasked || 0), 0);
   const badDays = all.filter(r => r.missing).length;
   const first = all.find(r => r.missing);
   $("#missSum").innerHTML = !all.length
@@ -3722,24 +3779,32 @@ function renderMissed() {
       : "<b>" + gone + "</b> of <b>" + slots + "</b> scheduled doses unticked, across <b>" + badDays +
         "</b> " + (badDays === 1 ? "day" : "days") + ". Earliest is <b>" + fmtDate(first.date) +
         "</b>. Unticked doses pull your adherence figure down, so it's worth clearing the ones you " +
-        "did actually take.";
+        "did actually take." +
+        (never ? ' <span style="color:#d9b06a">' + never + " more " + (never === 1 ? "was" : "were") +
+          " never asked about, because the check-in that offers them wasn't logged that day. " +
+          "Those are amber, and aren't counted as missed.</span>" : "");
 
   $("#missFill").style.display = gone ? "" : "none";
-  const rows = (missAll ? all : all.filter(r => r.missing));
+  const rows = (missAll ? all : all.filter(r => r.missing || r.unasked));
   const ordered = missOrder === "new" ? rows.slice().reverse() : rows;
   const CAP = 400;
   $("#missList").innerHTML = !ordered.length
     ? '<div class="mini">Nothing missing here.</div>'
     : ordered.slice(0, CAP).map(r => {
-        const shown = missAll ? r.doses : r.doses.filter(d => !d.on);
+        const shown = missAll ? r.doses.filter(d => d.st !== "pending")
+                              : r.doses.filter(d => d.st === "missed" || d.st === "unasked");
         return '<div class="missday"><div class="missdate"><b>' + fmtDate(r.date) + "</b>" +
           DAYS[dowOf(r.date)] + " " + r.date.slice(0, 4) + "</div>" +
           '<div class="missdoses">' +
-            shown.map(d => '<button class="chip dose" data-mfix="' + r.date + "|" + esc(d.key) +
-              '" aria-pressed="' + (d.on ? "true" : "false") + '">' + esc(d.name) +
+            shown.map(d => '<button class="chip dose' + (d.st === "unasked" ? " unasked" : "") +
+              '" data-mfix="' + r.date + "|" + esc(d.key) + '" aria-pressed="' +
+              (d.on ? "true" : "false") + '" title="' +
+              (d.st === "unasked" ? "Never asked \u2014 that check-in wasn\u2019t logged" :
+               d.st === "missed" ? "Not ticked" : "Ticked") + '">' + esc(d.name) +
               "<small>" + d.label + "</small></button>").join("") +
-            (r.missing > 1 ? '<button class="btn sm missall" data-mday="' + r.date +
-              '">Tick all ' + r.missing + "</button>" : "") +
+            ((r.missing + (r.unasked || 0)) > 1
+              ? '<button class="btn sm missall" data-mday="' + r.date +
+                '">Tick all ' + (r.missing + (r.unasked || 0)) + "</button>" : "") +
           "</div></div>";
       }).join("") +
       (ordered.length > CAP ? '<div class="missgap">' + (ordered.length - CAP) +
@@ -4207,6 +4272,9 @@ function renderDataTabs() {
   DATA_TABS = $$("#v-data > .card[id]").map(el => el.id).filter(id => TAB_LABEL[id]);
   bar.innerHTML = DATA_TABS.map(id => '<button type="button" data-dgo="' + id +
     '" aria-current="false">' + esc(TAB_LABEL[id]) + "</button>").join("");
+  const sel = $("#dataJump");
+  if (sel) sel.innerHTML = DATA_TABS.map(id =>
+    '<option value="' + id + '">' + esc(TAB_LABEL[id]) + "</option>").join("");
   bar._built = true;
 }
 function dataTabTo(id) {
@@ -4237,15 +4305,11 @@ function markDataTab() {
     cur = DATA_TABS[DATA_TABS.length - 1] || cur;
   $$("#dataTabs button").forEach(b => {
     const on = b.dataset.dgo === cur;
-
     if ((b.getAttribute("aria-current") === "true") !== on)
       b.setAttribute("aria-current", on ? "true" : "false");
-    if (on && b.scrollIntoView) {
-      const r = b.getBoundingClientRect(), br = bar.getBoundingClientRect();
-      if (r.left < br.left + 8 || r.right > br.right - 8)
-        bar.scrollTo({ left: b.offsetLeft - bar.offsetWidth / 2 + b.offsetWidth / 2, behavior: "smooth" });
-    }
   });
+  const sel = $("#dataJump");
+  if (sel && sel.value !== cur && document.activeElement !== sel) sel.value = cur;
 }
 
 function renderGdoc() {
@@ -8129,7 +8193,8 @@ function init() {
       const date = mdy.dataset.mday, t = takenOn(date);
       let n = 0;
       doseDefs().filter(d => !missMed || d.id === missMed)
-        .forEach(d => { if (!doseOn(t, d) && setDose(date, d.key, true)) n++; });
+        .forEach(d => { if (doseState(date, d, t) === "pending") return;
+          if (!doseOn(t, d) && setDose(date, d.key, true)) n++; });
       if (n) persistMed(n + " marked taken on " + fmtDate(date));
       return;
     }
@@ -8509,13 +8574,14 @@ function init() {
     await touchCfg(); renderTriggers(); toast("Defaults restored");
     if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
   };
+  $("#dataJump").onchange = () => { dataTabTo($("#dataJump").value); };
   $("#themeWin").onchange = () => { themeWin = +$("#themeWin").value; themeOpen = ""; renderThemes(); };
   $("#missMedSel").onchange   = () => { missMed = $("#missMedSel").value; renderMissed(); };
   $("#missOrderSel").onchange = () => { missOrder = $("#missOrderSel").value; renderMissed(); };
   $("#missShowAll").onclick   = () => { missAll = !missAll; renderMissed(); };
   $("#missFill").onclick = () => {
-    const rows = missedRows().filter(r => r.missing);
-    const gone = rows.reduce((a, r) => a + r.missing, 0);
+    const rows = missedRows().filter(r => r.missing || r.unasked);
+    const gone = rows.reduce((a, r) => a + r.missing + (r.unasked || 0), 0);
     if (!gone) { toast("Nothing missing to fill in"); return; }
     const who = missMed ? (missMeds().find(m => m.id === missMed) || {}).name : "every medication";
     if (!confirm("Mark " + gone + " unticked " + (gone === 1 ? "dose" : "doses") + " for " + who +
@@ -8523,7 +8589,8 @@ function init() {
         " from " + fmtDate(rows[0].date) + " onward?\n\nThis edits saved check-ins. " +
         "Only do it for a stretch you know you were actually taking them.")) return;
     let n = 0;
-    rows.forEach(r => r.doses.forEach(d => { if (!d.on && setDose(r.date, d.key, true)) n++; }));
+    rows.forEach(r => r.doses.forEach(d => {
+      if (d.st !== "pending" && !d.on && setDose(r.date, d.key, true)) n++; }));
     persistMed(n + " " + (n === 1 ? "dose" : "doses") + " marked taken");
   };
   $("#medChange").onclick = () => {
