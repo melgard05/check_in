@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:53-->
+<!DOCTYPE html><!--build:80-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -74,6 +74,23 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .editbar b{color:var(--warn);font-size:13.5px}
 .spikebtn{margin-top:4px;background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
 .spikebtn:hover{background:#332618}
+.goldcard{border-color:#4a3f1e}
+.sbar{padding:9px 0;border-bottom:1px solid var(--line)}
+.sbar:last-child{border-bottom:0}
+.sbar .h{display:flex;gap:9px;align-items:baseline}
+.sbar .nm{flex:1;font-size:14px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.sbar .ct{font-family:var(--mono);font-size:12px;color:var(--ink-3);flex:0 0 auto}
+.sbar .tr{font-family:var(--mono);font-size:11px;flex:0 0 auto;color:var(--ink-3)}
+.sbar .tr.up{color:#c9a227}
+.sbar .track{height:7px;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;
+  margin:6px 0 5px;overflow:hidden}
+.sbar .fill{height:100%;background:#8a6f1e}
+.sbar.top .fill{background:#c9a227}
+.sbar .ex{font-size:12.5px;color:var(--ink-2);border-left:2px solid var(--line-2);padding:2px 0 2px 9px;
+  line-height:1.45}
+.goldcard .chip[aria-pressed="true"]{background:#2a2415;border-color:#c9a227;color:#e0c453}
+#winWhat.need{border-color:var(--warn)}
+.winnone{color:#d9b06a}
 .starbtn{margin-top:8px;background:#2a2415;border-color:#c9a227;color:#e0c453;font-weight:600}
 .starbtn:hover{background:#332c19}
 #starSheet .gatebox{max-width:440px;border-color:#c9a227}
@@ -738,6 +755,22 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <textarea id="eNote" placeholder="Anything worth remembering when you look back at this day."></textarea></label>
     </div>
 
+    <div id="winBlock" style="display:none">
+      <div class="eyebrow">Something that went well</div>
+      <div class="card goldcard">
+        <p class="sub" style="margin-bottom:10px" id="winSub"></p>
+        <label class="fld"><span id="winLbl">What went well</span>
+          <input type="text" id="winWhat" placeholder="However small. Small ones count."
+            autocapitalize="sentences" spellcheck="true"></label>
+        <p class="sub" style="margin:13px 0 7px">What did that take from you?</p>
+        <div class="chips" id="winStrengths"></div>
+        <div class="row" style="margin-top:11px;gap:8px">
+          <button class="btn sm gho" id="winNone">Nothing comes to mind</button>
+        </div>
+        <div class="mini" id="winNote"></div>
+      </div>
+    </div>
+
     <div class="row" style="margin-top:16px;gap:8px">
       <button class="btn pri" style="flex:2 1 180px" id="saveBtn">Save check-in</button>
       <button class="btn gho" style="flex:1 1 110px" id="skipBtn">Skip this one</button>
@@ -852,6 +885,27 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="row" style="margin-top:12px">
         <button class="btn sm" id="sumOpen">Open the full report</button>
       </div>
+    </div>
+
+    <div class="card" id="strCard">
+      <h2>What you&rsquo;re good at</h2>
+      <p class="sub">Every check-in asks what went well since the last one, and what it took.
+        This adds up the answers. It isn&rsquo;t an assessment &mdash; it&rsquo;s your own words,
+        counted, which is the only kind of evidence about yourself that&rsquo;s hard to talk
+        yourself out of at three in the morning.</p>
+      <div class="row" style="gap:8px;margin-bottom:11px">
+        <label class="fld" style="flex:1 1 150px"><span>Look back over</span>
+          <select id="strRange">
+            <option value="7">The last 7 days</option>
+            <option value="14">The last 14 days</option>
+            <option value="30">The last 30 days</option>
+            <option value="90">The last 90 days</option>
+            <option value="180">The last 6 months</option>
+            <option value="0">Everything</option>
+          </select></label></div>
+      <div id="strSum"></div>
+      <div id="strBars"></div>
+      <div id="strWords"></div>
     </div>
 
     <div class="card" id="starCard">
@@ -1220,6 +1274,33 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           <option value="0">Everything logged</option>
         </select></div>
       <div class="mini" id="needNoteNow"></div>
+    </div>
+
+    <div class="card" id="ds-wins">
+      <h2>What went well</h2>
+      <p class="sub">Every check-in asks for one thing that went well since the last one. It is
+        deliberately the only question here that isn&rsquo;t a measurement &mdash; the ratings record
+        what happened to you, this records what you did. Asked per check-in rather than per day so
+        the answers stay specific.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Ask at every check-in</div>
+        <div class="d" id="winAskHint"></div></div>
+        <button class="tog" id="togWinAsk" aria-pressed="true"></button></div>
+      <div class="sw"><div style="flex:1"><div class="t">Won&rsquo;t save without an answer</div>
+        <div class="d">&ldquo;Nothing comes to mind&rdquo; is one of the answers and is recorded as
+          one, so this never blocks a check-in on a day you can&rsquo;t find a win. Skipping the
+          check-in entirely still works.</div></div>
+        <button class="tog" id="togWinReq" aria-pressed="true"></button></div>
+      <div class="eyebrow" style="margin-top:16px">Strengths</div>
+      <p class="sub">What a win took from you. These are what the report counts, so it can tell you
+        what you are repeatedly good at rather than just listing good days back at you. Edit one by
+        typing over it; clear the box to remove it. Anything already logged keeps its own words.</p>
+      <div id="strEditor"></div>
+      <div class="row" style="gap:8px;margin-top:9px">
+        <input type="text" id="strNew" placeholder="One strength at a time" style="flex:1 1 190px">
+        <button class="btn sm" id="strAdd">Add</button>
+        <button class="btn sm gho" id="strReset">Reset to the defaults</button>
+      </div>
+      <div class="mini" id="strNote"></div>
     </div>
 
     <div class="card" id="ds-tell-someone-about-dose-changes">
@@ -1592,7 +1673,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 79;
+const BUILD = 80;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1619,6 +1700,9 @@ const DEFAULT_CFG = {
   needNoteAt: 3,              // how far from usual counts as far
   needNoteWin: 60,            // how many days back "usual" is worked out over
   startAt5: true,             // every rating opens at 5, so you adjust from a baseline
+  winAsk: true,               // ask what went well at every check-in
+  winRequire: true,           // and don't save until the question has an answer
+  strengths: null,            // set from STRENGTHS on first load; editable after
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
   altDays: [0, 6],            // 0 Sun … 6 Sat
@@ -1667,7 +1751,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "strengths", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1837,6 +1921,10 @@ async function load() {
   if (!(+CFG.needNoteAt >= 1)) CFG.needNoteAt = 3;
   if (!(+CFG.needNoteWin >= 0)) CFG.needNoteWin = 60;
   if (typeof CFG.startAt5 !== "boolean") CFG.startAt5 = true;
+  if (typeof CFG.winAsk !== "boolean") CFG.winAsk = true;
+  if (typeof CFG.winRequire !== "boolean") CFG.winRequire = true;
+  if (!Array.isArray(CFG.strengths) || !CFG.strengths.length) CFG.strengths = STRENGTHS.slice();
+  CFG.strengths = CFG.strengths.map(t => String(t || "").trim()).filter(Boolean);
   // migrate the old newline-separated med list into scheduled entries
   if (!Array.isArray(CFG.medList)) CFG.medList = [];
   if (!CFG.medList.length && (CFG.meds || "").trim()) {
@@ -1952,7 +2040,7 @@ function newDraft(date, winId) {
     medoff: { st: "", at: "", crashAt: "", crashEnd: "", fx: [] },
     recall: false, period: false,
     sleep: null, screen: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "",
-    tch: {} };
+    tch: {}, gold: { what: "", str: [], none: false } };
 }
 function fixDraft(d) {                       // older records, and anything Firebase handed back
   if (!d || typeof d !== "object") return newDraft(todayISO(), (CFG.windows[0] || {}).id || "am");
@@ -1961,6 +2049,11 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (!d.v    || typeof d.v !== "object" || Array.isArray(d.v)) d.v = {};
   if (!d.n    || typeof d.n !== "object" || Array.isArray(d.n)) d.n = {};
   if (!d.tch  || typeof d.tch !== "object" || Array.isArray(d.tch)) d.tch = null;
+  if (!d.gold || typeof d.gold !== "object" || Array.isArray(d.gold))
+    d.gold = { what: "", str: [], none: false };
+  if (typeof d.gold.what !== "string") d.gold.what = "";
+  if (!Array.isArray(d.gold.str)) d.gold.str = [];
+  if (typeof d.gold.none !== "boolean") d.gold.none = false;
   if (!d.pain || typeof d.pain !== "object") d.pain = {};
   if (!Array.isArray(d.pain.sites)) d.pain.sites = d.pain.sites ? [].concat(d.pain.sites) : [];
   if (!Array.isArray(d.pain.kinds)) d.pain.kinds = d.pain.kinds ? [].concat(d.pain.kinds) : [];
@@ -2877,6 +2970,7 @@ function renderLog() {
     (draft.tags.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
   $("#eNote").value = draft.note || "";
 
+  renderWin();
   renderSug();
   renderSpikeCount();
   renderStarCount();
@@ -4265,7 +4359,8 @@ function renderTell() {
 const TAB_LABEL = {
   planCard: "Plan", "ds-dashboard": "Dashboard", "ds-export": "Export",
   "ds-cloudflare": "Cloudflare", "ds-firebase": "Firebase", "ds-check-in-times": "Check-in times",
-  "ds-explain-the-outliers": "Outliers", "ds-tell-someone-about-dose-changes": "Tell someone",
+  "ds-explain-the-outliers": "Outliers", "ds-wins": "Wins",
+  "ds-tell-someone-about-dose-changes": "Tell someone",
   "ds-screen-time": "Screen time", "ds-what-set-it-off": "Triggers",
   "ds-quick-spike-check": "Spike check", "ds-what-to-track": "What to track",
   "ds-medication-list": "Medications", "ds-location": "Location",
@@ -4339,13 +4434,133 @@ function renderGdoc() {
       : "Ready. Press <b>Create or update it now</b> to make the Doc.";
 }
 
+let strRange = 30;
+
+/* Wins, and what they were tagged with, over a window. Counts only — the tags
+   are hers, so anything this says came out of her own mouth first. */
+function winStats(days) {
+  const from = days > 0 ? addDays(todayISO(), -(days - 1)) : "0000-00-00";
+  const stars = (STATE.stars || [])
+    .filter(x => x && x.date >= from && (x.what || "").trim())
+    .sort((a, b) => (a.date + (a.at || "")) < (b.date + (b.at || "")) ? -1 : 1);
+  const asked = ENTRIES.filter(e => e.date >= from && e.gold &&
+    (((e.gold.what || "").trim()) || e.gold.none));
+  const blanks = ENTRIES.filter(e => e.date >= from && e.gold && e.gold.none);
+  // split the run in half by count, not by calendar, so a quiet fortnight
+  // doesn't make everything look like it stopped
+  const mid = stars.length >= 8 ? stars[Math.floor(stars.length / 2)].date : "";
+  const t = {};
+  stars.forEach(x => (x.kinds || []).forEach(k => {
+    if (!t[k]) t[k] = { k: k, n: 0, dset: {}, last: "", ex: "", recent: 0, early: 0 };
+    t[k].n++; t[k].dset[x.date] = 1;
+    if (mid) { if (x.date >= mid) t[k].recent++; else t[k].early++; }
+    if (x.date >= t[k].last) { t[k].last = x.date; t[k].ex = x.what; }
+  }));
+  const rows = Object.keys(t).map(k => {
+    const r = t[k]; r.days = Object.keys(r.dset).length; delete r.dset; return r;
+  }).sort((a, b) => (b.n - a.n) || (b.days - a.days) || (a.k < b.k ? -1 : 1));
+  const byWin = {};
+  stars.forEach(x => { if (x.win) byWin[x.win] = (byWin[x.win] || 0) + 1; });
+  const dayN = Object.keys(stars.reduce((a, x) => { a[x.date] = 1; return a; }, {})).length;
+  return { stars, asked, blanks, rows, byWin, dayN, mid, from,
+    untagged: stars.filter(x => !(x.kinds || []).length).length };
+}
+
+function renderStrengthReport() {
+  if (!$("#strCard")) return;
+  $("#strRange").value = String(strRange);
+  const st = winStats(strRange);
+  const span = strRange > 0 ? "the last " + strRange + " days" : "everything logged";
+
+  if (!st.stars.length && !st.blanks.length) {
+    $("#strSum").innerHTML = '<div class="empty"><b>Nothing yet</b>Every check-in asks for one ' +
+      "thing that went well since the last one. A few days of answers and this fills in.</div>";
+    $("#strBars").innerHTML = ""; $("#strWords").innerHTML = "";
+    return;
+  }
+
+  const answered = st.asked.length;
+  $("#strSum").innerHTML = '<div class="statnote"><b>' + st.stars.length + "</b> win" +
+    (st.stars.length === 1 ? "" : "s") + " named in " + span + ", across <b>" + st.dayN + "</b> " +
+    (st.dayN === 1 ? "day" : "days") + "." +
+    (answered
+      ? " Asked and answered <b>" + answered + "</b> times" +
+        (st.blanks.length
+          ? ", and on <b>" + st.blanks.length + "</b> of those nothing came to mind. That is worth " +
+            "seeing rather than hiding \u2014 a run of them usually lines up with a run in the ratings."
+          : ", and you found one every time.")
+      : "") +
+    (st.untagged ? " " + st.untagged + " untagged, so they count in the words below but not the " +
+      "tally above." : "") + "</div>";
+
+  if (!st.rows.length) {
+    $("#strBars").innerHTML = '<div class="mini" style="padding:2px 0 10px">No strength tags yet. ' +
+      "The chips under the question are what turn a list of good moments into a list of things " +
+      "you can do \u2014 tapping one takes a second and is what this report counts.</div>";
+  } else {
+    const top = st.rows[0].n;
+    const tagged = st.rows.reduce((a, r) => a + r.n, 0);
+    $("#strBars").innerHTML =
+      '<div class="mini" style="margin-bottom:8px">Ranked by how often you tagged it. ' +
+      "The share is of <b>" + tagged + "</b> tags, not of days \u2014 one win can take more than " +
+      "one thing.</div>" +
+      st.rows.map((r, i) => {
+        // Two either way is noise, and "less lately" on this particular card is the
+        // kind of noise that does damage. Say nothing unless the gap is real.
+        const tot = r.recent + r.early, gap = r.recent - r.early;
+        const trend = (st.mid && tot >= 6 && Math.abs(gap) >= Math.max(2, Math.round(tot * 0.3)))
+          ? (gap > 0 ? "more lately" : "less lately") : "";
+        return '<div class="sbar' + (i === 0 ? " top" : "") + '">' +
+          '<div class="h"><span class="nm">' + esc(r.k) + "</span>" +
+          '<span class="ct">' + r.n + "\u00d7 \u00b7 " + r.days +
+            (r.days === 1 ? " day" : " days") + "</span>" +
+          (trend ? '<span class="tr' + (trend === "more lately" ? " up" : "") + '">' +
+            trend + "</span>" : "") + "</div>" +
+          '<div class="track"><div class="fill" style="width:' +
+            Math.max(4, Math.round(r.n / top * 100)) + '%"></div></div>' +
+          (r.ex ? '<div class="ex">' + esc(r.ex) + "</div>" : "") + "</div>";
+      }).join("") +
+      (st.rows.length > 2
+        ? '<div class="statnote" style="margin:12px 0 0">Read the top of that list as a sentence ' +
+          "about yourself: you are someone who <b>" + esc(st.rows[0].k.toLowerCase()) + "</b>" +
+          (st.rows[1] ? " and <b>" + esc(st.rows[1].k.toLowerCase()) + "</b>" : "") +
+          ", " + st.rows[0].n + " and " + (st.rows[1] ? st.rows[1].n + " " : "") +
+          "recorded times over. You wrote every one of those down yourself, at the time, " +
+          "before you knew it would be counted.</div>"
+        : "");
+  }
+
+  // the same word-counting used on the notes, pointed at the wins instead
+  const corpus = st.stars.map(x => ({ date: x.date, win: x.win || "", key: "",
+    label: "Win", text: x.what, v: null }));
+  const th = corpus.length >= 4 ? themesFrom(corpus, strRange).slice(0, 8) : [];
+  const winLbl = id => { const w = CFG.windows.find(x => x.id === id); return w ? w.label : id; };
+  const wk = Object.keys(st.byWin).sort((a, b) => st.byWin[b] - st.byWin[a]);
+  $("#strWords").innerHTML =
+    (th.length
+      ? '<div class="eyebrow" style="margin-top:18px">The same wins, in your own words</div>' +
+        '<div class="mini" style="margin-bottom:8px">Words that came back across separate days. ' +
+        "Counted, not interpreted \u2014 what they mean is yours to say.</div>" +
+        th.map(t => '<div class="strow"><span class="stwhat">' + esc(t.label) +
+          '<div class="mini" style="margin-top:2px">' +
+          esc((t.samples || []).map(x => x.text).slice(0, 2).join(" \u00b7 ")) + "</div></span>" +
+          '<span class="stwhen">' + t.days + " days</span></div>").join("")
+      : "") +
+    (wk.length > 1
+      ? '<div class="statnote" style="margin-top:14px">Most of them come out of your <b>' +
+        esc(winLbl(wk[0])) + "</b> check-in (" + st.byWin[wk[0]] + " of " + st.stars.length +
+        "). That is as likely to be about which stretch of the day you can see clearly as " +
+        "about when the good things happen.</div>"
+      : "");
+}
+
 function renderStars() {
   const el = $("#starList"); if (!el) return;
   const l = (STATE.stars || []).slice().sort((a, b) =>
     (a.date + a.at) < (b.date + b.at) ? 1 : -1);
   if (!l.length) {
-    el.innerHTML = '<div class="empty"><b>Nothing starred yet</b>The button is under the spike ' +
-      "button on the Log tab. The bar is meant to be low.</div>";
+    el.innerHTML = '<div class="empty"><b>Nothing starred yet</b>Every check-in asks for one, ' +
+      "and the star button under the spike button takes one any time. The bar is meant to be low.</div>";
     return;
   }
   const byDate = {};
@@ -4361,6 +4576,8 @@ function renderStars() {
         '<span class="stwhat"><span style="color:#e0c453">\u2605</span> ' + esc(x.what) +
           (x.kinds && x.kinds.length
             ? '<span class="stwhen"> &middot; ' + esc(x.kinds.join(", ").toLowerCase()) + "</span>" : "") +
+          (x.win ? '<span class="stwhen"> &middot; ' +
+            esc(String((winById(x.win) || {}).label || "").toLowerCase()) + "</span>" : "") +
           (x.note ? '<div class="mini" style="margin-top:2px">' + esc(x.note) + "</div>" : "") +
         "</span>" +
         '<span class="stwhen">' + esc(x.at) + "</span>" +
@@ -4556,6 +4773,7 @@ function renderSummary(rows, corr, cut) {
 
 function renderPatterns() {
   renderMissed();
+  renderStrengthReport();
   renderStars();
   renderThemes();
   const rows = daily(0);
@@ -6050,6 +6268,7 @@ function printSummary() {
     starWeeks[k] = (starWeeks[k] || 0) + 1;
   });
 
+  const winSt = winStats(90);
   const corpus90 = noteCorpus(90);
   const themes90 = corpus90.length ? themesFrom(corpus90, 90).slice(0, 12) : [];
 
@@ -6176,7 +6395,20 @@ function printSummary() {
         stars90.slice(0, 25).map(x => "<tr><td>" + x.date + "</td><td>" + esc2(x.what) +
           '</td><td class="sm">' + esc2((x.kinds || []).join(", ").toLowerCase()) + "</td></tr>").join("") +
         "</table>" +
-        (stars90.length > 25 ? '<div class="sm">Showing the 25 most recent.</div>' : "")
+        (stars90.length > 25 ? '<div class="sm">Showing the 25 most recent.</div>' : "") +
+        (winSt.rows.length
+          ? '<div class="sm" style="margin:10px 0 4px">Tagged by the patient at the time with what ' +
+            "the win took. Counts only \u2014 no interpretation has been applied.</div>" +
+            "<table><tr><th>What it took</th><th>Times</th><th>Days</th></tr>" +
+            winSt.rows.slice(0, 10).map(r => "<tr><td>" + esc2(r.k) + "</td><td>" + r.n +
+              "</td><td>" + r.days + "</td></tr>").join("") + "</table>"
+          : "") +
+        (winSt.blanks.length
+          ? '<div class="sm" style="margin-top:6px">The question is asked at every check-in and ' +
+            "cannot be left unanswered. On <b>" + winSt.blanks.length + "</b> of <b>" +
+            winSt.asked.length + "</b> occasions the answer given was that nothing came to mind. " +
+            "Those are recorded rather than skipped, so a run of them is visible as a run.</div>"
+          : "")
       : "") +
 
     // what keeps coming back in their own words, counted rather than interpreted
@@ -6223,6 +6455,22 @@ function printSummary() {
    ============================================================ */
 /* The spike list was locked to anxiety / irritability / elevated, which assumes
    everyone's spikes are the same shape. Offer every item that's switched on. */
+function renderStrengths() {
+  const el = $("#strEditor"); if (!el) return;
+  const l = CFG.strengths || [];
+  el.innerHTML = l.length
+    ? l.map((t, i) => '<div class="pnote"><input type="text" data-str="' + i + '" value="' +
+        esc(t) + '"><button data-strdel="' + i + '" aria-label="Remove">&times;</button></div>').join("")
+    : '<div class="mini" style="padding:4px 0">Nothing listed, so no tags are offered. ' +
+      "The question is still asked \u2014 you just get the sentence, not the tags.</div>";
+  const used = {};
+  (STATE.stars || []).forEach(x => (x.kinds || []).forEach(k => { used[k] = (used[k] || 0) + 1; }));
+  const orphan = Object.keys(used).filter(k => l.indexOf(k) < 0);
+  $("#strNote").textContent = (l.length ? l.length + " offered. Shared with your other device." : "") +
+    (orphan.length ? " " + orphan.length + " tag" + (orphan.length === 1 ? "" : "s") +
+      " on wins already logged are no longer on the list; they still count in the report." : "");
+}
+
 function renderTriggers() {
   const el = $("#trigEditor"); if (!el) return;
   const l = CFG.spikeTriggers || [];
@@ -6370,6 +6618,13 @@ function renderCfg() {
     ? "Sliders open at 5 and stay grey until you move one. Anything you saw and left " +
       "alone saves as 5, but is kept out of your usual so it can't drag a baseline toward the middle."
     : "Sliders open unset, at the end of the scale, and record nothing unless moved.";
+  $("#togWinAsk").setAttribute("aria-pressed", CFG.winAsk !== false ? "true" : "false");
+  $("#togWinReq").setAttribute("aria-pressed", CFG.winRequire !== false ? "true" : "false");
+  $("#togWinReq").style.opacity = CFG.winAsk === false ? "0.4" : "";
+  $("#winAskHint").textContent = CFG.winAsk === false
+    ? "Off. The star button on the Log tab still works, and everything already logged is kept."
+    : "Asked once per check-in, about the stretch since the last one.";
+  renderStrengths();
   $("#togNeedNote").setAttribute("aria-pressed", CFG.needNote ? "true" : "false");
   $("#needNoteSel").value = String(CFG.needNoteAt || 3);
   $("#needNoteSel").disabled = !CFG.needNote;
@@ -6918,7 +7173,13 @@ function mergeStars(remote) {
   const gone = STATE.gone || {};
   const by = {};
   (STATE.stars || []).forEach(x => { if (x && x.id && !gone[x.id]) by[x.id] = x; });
-  (remote || []).forEach(x => { if (!x || !x.id || gone[x.id]) return; if (!by[x.id]) by[x.id] = x; });
+  (remote || []).forEach(x => {
+    if (!x || !x.id || gone[x.id]) return;
+    // a win attached to a check-in can be edited, so the same id can legitimately
+    // arrive changed. Newer wins; anything without a timestamp stays put.
+    if (!by[x.id]) by[x.id] = x;
+    else if (x.ts && by[x.id].ts && x.ts > by[x.id].ts) by[x.id] = x;
+  });
   STATE.stars = Object.keys(by).map(k => by[k])
     .sort((a, b) => (a.date + a.at) < (b.date + b.at) ? -1 : 1);
 }
@@ -7205,8 +7466,83 @@ async function saveSpike() {
    of a life — it's also useless on the day you need evidence that good ones
    happen at all. Deliberately one line and a tap: anything longer doesn't
    get written down when things are going well. */
-const STAR_KINDS = ["Something I did", "Something someone did", "Just happened",
-  "Got through it", "Said no", "Asked for help", "Went outside", "Made me laugh"];
+/* The old list described where a good thing came from — "something I did",
+   "just happened". That answers attribution, not capability, and the point of
+   collecting these is to find out what someone is repeatedly good at. These name
+   the thing it took instead, so the tally reads as a list of strengths. */
+const STRENGTHS = ["Got it done", "Pushed through resistance", "Looked after myself",
+  "Asked for help", "Spoke up", "Said no", "Showed up for someone", "Handled something hard",
+  "Worked it out", "Kept a promise to myself", "Stayed steady"];
+const strengthList = () => (CFG.strengths && CFG.strengths.length) ? CFG.strengths : STRENGTHS;
+/* Which stretch this check-in is asking about. Asking "what went well today" at
+   four check-ins gets the same answer four times; asking about the gap since the
+   last one gets four different ones, which is the point. */
+function prevWinOf(date, winId) {
+  const list = winsOn(date);
+  const i = list.findIndex(w => w.id === winId);
+  if (i > 0) return { win: list[i - 1], date: date, same: true };
+  if (i < 0) {                                  // a check-in not scheduled that day
+    const all = CFG.windows.slice().sort((a, b) => minsOf(winTime(a, date)) - minsOf(winTime(b, date)));
+    const j = all.findIndex(w => w.id === winId);
+    if (j > 0) return { win: all[j - 1], date: date, same: true };
+  }
+  const y = addDays(date, -1), yl = winsOn(y);
+  return yl.length ? { win: yl[yl.length - 1], date: y, same: false } : null;
+}
+/* Asking someone to name a win from nine days ago gets you a reconstruction, and
+   the whole report is built on these being real. Recent enough to remember is the
+   only stretch worth blocking a save over. */
+const winRequired = date => CFG.winAsk !== false && CFG.winRequire !== false &&
+  String(date || "") >= addDays(todayISO(), -1);
+
+function winPeriodText(date, winId) {
+  const p = prevWinOf(date, winId);
+  if (!p) return "Since you last checked in";
+  const lbl = String((p.win && p.win.label) || "last").toLowerCase();
+  return "Since your " + lbl + " check-in" + (p.same ? "" : " yesterday");
+}
+
+/* The win question, shown inside the check-in itself. */
+function renderWin() {
+  const blk = $("#winBlock"); if (!blk || !draft) return;
+  const on = CFG.winAsk !== false;
+  blk.style.display = on ? "" : "none";
+  if (!on) return;
+  const g = draft.gold || (draft.gold = { what: "", str: [], none: false });
+  const req = winRequired(draft.date);
+  $("#winSub").innerHTML = esc(winPeriodText(draft.date, draft.win)) +
+    " \u2014 one thing that went well, however small." +
+    (req
+      ? " This one is asked every time; <b>nothing comes to mind</b> is a real answer and gets recorded as one."
+      : CFG.winRequire !== false
+        ? " Optional this far back \u2014 a win you have to reconstruct isn\u2019t worth counting."
+        : " Optional.");
+  const box = $("#winWhat");
+  box.value = g.what || "";
+  box.disabled = !!g.none;
+  box.style.opacity = g.none ? "0.45" : "";
+  if ((g.what || "").trim()) box.classList.remove("need");
+  $("#winLbl").textContent = g.none ? "Left blank" : "What went well";
+  $("#winStrengths").innerHTML = strengthList().map(t =>
+    '<button class="chip" data-wstr="' + esc(t) + '" aria-pressed="' +
+    ((g.str || []).indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+  const hideStr = !!g.none;
+  $("#winStrengths").style.display = hideStr ? "none" : "";
+  $("#winStrengths").previousElementSibling.style.display = hideStr ? "none" : "";
+  const nb = $("#winNone");
+  nb.textContent = g.none ? "Actually, there was something" : "Nothing comes to mind";
+  nb.classList.toggle("winnone", !!g.none);
+  const wk = (STATE.stars || []).filter(x => x.date >= addDays(todayISO(), -6)).length;
+  $("#winNote").innerHTML = g.none
+    ? "Recorded as a blank. Days you can\u2019t name one are worth knowing about \u2014 " +
+      "they show up in the strengths report as their own line, not as a gap."
+    : (g.str || []).length
+      ? "Tagged. The tags are what the report counts, so the same kind of win keeps adding up."
+      : wk
+        ? wk + " logged in the last seven days."
+        : "Tag what it took, if anything fits. That\u2019s what turns a list of wins into a list of strengths.";
+}
+
 let starDraft = null;
 let lastTell = "";                 // recoverable if the hand-off to Messages silently fails
 
@@ -7217,7 +7553,7 @@ function openStar() {
   $("#starWhat").value = "";
   $("#starNote").value = "";
   $("#starAt").value = starDraft.at;
-  $("#starKinds").innerHTML = STAR_KINDS.map(t =>
+  $("#starKinds").innerHTML = strengthList().map(t =>
     '<button class="chip" data-starkind="' + esc(t) + '" aria-pressed="false">' + esc(t) + "</button>").join("");
   $("#starSheet").classList.add("on");
   setTimeout(() => { const b = $("#starWhat"); if (b) b.focus(); }, 60);
@@ -7236,6 +7572,30 @@ async function saveStar() {
   if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
   toast("Noted \u2014 that one counts");
 }
+/* One list to read wins back from, whether they came from the star button or a
+   check-in. Keyed to the check-in so editing one edits its star instead of
+   leaving a second copy behind. */
+function syncWinStar() {
+  const g = draft.gold || {};
+  const id = "cw_" + draft.date + "_" + draft.win;
+  const prev = (STATE.stars || []).find(x => x && x.id === id);
+  STATE.stars = (STATE.stars || []).filter(x => x && x.id !== id);
+  STATE.gone = STATE.gone || {};
+  const what = (g.what || "").trim();
+  if (!what) {
+    // a blank answer, or the question turned off after the fact — tombstone it so
+    // a copy sitting on the other device doesn't sync itself back in
+    if (prev) STATE.gone[id] = Date.now();
+    return;
+  }
+  delete STATE.gone[id];
+  const now = new Date();
+  STATE.stars.push({ id: id, date: draft.date, src: "checkin", win: draft.win,
+    at: (prev && prev.at) || (pad(now.getHours()) + ":" + pad(now.getMinutes())),
+    ts: now.toISOString(), what: what, kinds: (g.str || []).slice(), note: "" });
+  STATE.stars.sort((a, b) => (a.date + a.at) < (b.date + b.at) ? -1 : 1);
+}
+
 function renderStarCount() {
   const el = $("#starCount"); if (!el) return;
   const today = (STATE.stars || []).filter(x => x.date === todayISO());
@@ -7731,6 +8091,8 @@ function draftTouched() {
   if (draft.screen) return true;
   if (draft.meds && Object.keys(draft.meds.taken || {}).length) return true;
   if (draft.ctx) return true;
+  if (draft.gold && ((draft.gold.what || "").trim() || draft.gold.none ||
+      (draft.gold.str || []).length)) return true;
   return false;
 }
 
@@ -7880,8 +8242,9 @@ function commit(skip, reason) {
     const anyMedOff = draft.medoff && !!draft.medoff.st;
     const anyPeriod = !!draft.period;
     const anyScreen = !!draft.screen;
+    const anyWin = !!(draft.gold && ((draft.gold.what || "").trim() || draft.gold.none));
     if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap && !anyCtx && !anyMedOff && !anyPeriod &&
-        !anyScreen && !draft.tags.length && !draft.warns.length && !draft.note) {
+        !anyScreen && !anyWin && !draft.tags.length && !draft.warns.length && !draft.note) {
       toast("Nothing filled in yet", true); return;
     }
     // A reading a long way from your usual is the one worth having words against.
@@ -7897,6 +8260,23 @@ function commit(skip, reason) {
         ? whyNeeded(miss[0]) + " Say what's going on before saving."
         : miss.length + " ratings are a long way from usual and need a note.", true);
       return;
+    }
+    // The one question in here that isn't a measurement. It only does its job if
+    // it's actually answered, so it blocks the save — but "nothing comes to mind"
+    // is one of the answers. A check-in that can't be saved is a check-in that
+    // doesn't happen, and that's a worse outcome than a blank win.
+    if (winRequired(draft.date)) {
+      const g = draft.gold || {};
+      if (!(g.what || "").trim() && !g.none) {
+        const box = $("#winWhat");
+        if (box) {
+          box.classList.add("need");
+          if (box.scrollIntoView) box.scrollIntoView({ block: "center", behavior: "smooth" });
+          setTimeout(() => box.focus(), 320);
+        }
+        toast("One thing that went well \u2014 or tap \u201cNothing comes to mind\u201d", true);
+        return;
+      }
     }
     // Fill in exactly what was on screen and left alone — never a slider that
     // was never displayed, which in quick mode is most of them.
@@ -7932,6 +8312,11 @@ function commit(skip, reason) {
       draft.sleep = Object.assign(draft.sleep || {}, { h: wheelVal($("#wH")), m: wheelVal($("#wM")),
         bed: $("#sBed").value || "", wake: $("#sWake").value || "" });
     } else draft.sleep = null;
+    if (CFG.winAsk !== false && $("#winWhat") && !$("#winWhat").disabled)
+      draft.gold.what = ($("#winWhat").value || "").trim();
+    if (draft.gold.none) { draft.gold.what = ""; draft.gold.str = []; }
+    draft.gold.str = (draft.gold.str || []).filter(t => strengthList().indexOf(t) > -1);
+    syncWinStar();
     draft.ts = new Date().toISOString();
     delete STATE.skipped[key]; saveState();
     const i = ENTRIES.findIndex(x => x.date === draft.date && x.win === draft.win);
@@ -8052,6 +8437,18 @@ function init() {
   $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value });
     fillFromTimes(); };
   $("#eNote").oninput  = () => { draft.note = $("#eNote").value; };
+  $("#winWhat").oninput = () => {
+    draft.gold.what = $("#winWhat").value;
+    if (draft.gold.what.trim()) $("#winWhat").classList.remove("need");
+  };
+  $("#winNone").onclick = () => {
+    // Not a skip. Turning it on stores an explicit "there wasn't one", which is
+    // the thing worth counting on a bad week.
+    draft.gold.none = !draft.gold.none;
+    if (draft.gold.none) { draft.gold.what = ""; draft.gold.str = []; }
+    renderWin();
+    if (!draft.gold.none) setTimeout(() => $("#winWhat").focus(), 40);
+  };
 
   // typing in any per-item note box
   document.addEventListener("input", ev => {
@@ -8095,6 +8492,13 @@ function init() {
         if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return;
     }
+    const strd = ev.target.closest("[data-strdel]");
+    if (strd) {
+      CFG.strengths.splice(+strd.dataset.strdel, 1);
+      touchCfg().then(() => { renderStrengths(); renderLog();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
     const td = ev.target.closest("[data-trigdel]");
     if (td) {
       CFG.spikeTriggers.splice(+td.dataset.trigdel, 1);
@@ -8130,6 +8534,14 @@ function init() {
         draft.meds.at[g] = pad(n.getHours()) + ":" + pad(n.getMinutes());
       }
       renderLog();
+      return;
+    }
+    const wst = ev.target.closest("[data-wstr]");
+    if (wst && draft) {
+      const v = wst.dataset.wstr, i = (draft.gold.str || []).indexOf(v);
+      i > -1 ? draft.gold.str.splice(i, 1) : draft.gold.str.push(v);
+      wst.setAttribute("aria-pressed", i > -1 ? "false" : "true");
+      renderWin();
       return;
     }
     const sk = ev.target.closest("[data-starkind]");
@@ -8467,6 +8879,34 @@ function init() {
     touchCfg(); renderCfg(); renderLog(); };
   $("#togNeedNote").onclick = () => { CFG.needNote = !CFG.needNote;
     touchCfg(); renderCfg(); renderLog(); };
+  $("#togWinAsk").onclick = () => { CFG.winAsk = CFG.winAsk === false;
+    touchCfg(); renderCfg(); renderLog(); };
+  $("#togWinReq").onclick = () => {
+    if (CFG.winAsk === false) { toast("Turn the question on first", true); return; }
+    CFG.winRequire = CFG.winRequire === false;
+    touchCfg(); renderCfg(); renderLog();
+  };
+  $("#strAdd").onclick = async () => {
+    const box = $("#strNew"), v = String(box.value || "").trim();
+    box.value = "";
+    if (!v) { box.focus(); return; }
+    if (!(CFG.strengths || []).some(t => t.toLowerCase() === v.toLowerCase()))
+      CFG.strengths = (CFG.strengths || []).concat([v]);
+    await touchCfg();
+    renderStrengths(); renderLog(); box.focus();
+    if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  };
+  $("#strNew").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); $("#strAdd").click(); }
+  });
+  $("#strReset").onclick = async () => {
+    if (!confirm("Put the default strengths back?\n\nYour own list is replaced. " +
+      "Wins already logged keep the tags they were logged with.")) return;
+    CFG.strengths = STRENGTHS.slice();
+    await touchCfg();
+    renderStrengths(); renderLog();
+    if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  };
   $("#needNoteSel").onchange = () => { CFG.needNoteAt = +$("#needNoteSel").value || 3;
     usualCache = { day: "", win: -1, map: {} };
     touchCfg(); renderCfg(); renderLog(); };
@@ -8581,6 +9021,7 @@ function init() {
   };
   $("#dataJump").onchange = () => { dataTabTo($("#dataJump").value); };
   $("#themeWin").onchange = () => { themeWin = +$("#themeWin").value; themeOpen = ""; renderThemes(); };
+  $("#strRange").onchange = () => { strRange = +$("#strRange").value; renderStrengthReport(); };
   $("#missMedSel").onchange   = () => { missMed = $("#missMedSel").value; renderMissed(); };
   $("#missOrderSel").onchange = () => { missOrder = $("#missOrderSel").value; renderMissed(); };
   $("#missShowAll").onclick   = () => { missAll = !missAll; renderMissed(); };
@@ -8889,6 +9330,18 @@ function init() {
     if (e.key === "Enter") { e.preventDefault(); $("#planNoteAdd").click(); }
   });
   document.addEventListener("input", ev => {
+    const si2 = ev.target.dataset && ev.target.dataset.str;
+    if (si2 != null) {
+      const v = ev.target.value.trim();
+      if (v) CFG.strengths[+si2] = v;
+      clearTimeout(window.__strT);
+      window.__strT = setTimeout(() => {
+        CFG.strengths = (CFG.strengths || []).map(x => String(x || "").trim()).filter(Boolean);
+        touchCfg().then(() => { renderLog();
+          if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      }, 700);
+      return;
+    }
     const ti = ev.target.dataset && ev.target.dataset.trig;
     if (ti != null) {
       const v = ev.target.value.trim();
