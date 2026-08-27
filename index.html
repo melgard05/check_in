@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:80-->
+<!DOCTYPE html><!--build:81-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -760,7 +760,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="card goldcard">
         <p class="sub" style="margin-bottom:10px" id="winSub"></p>
         <label class="fld"><span id="winLbl">What went well</span>
-          <input type="text" id="winWhat" placeholder="However small. Small ones count."
+          <input type="text" id="winWhat" placeholder="Took my meds. Got out of bed. Answered the phone."
             autocapitalize="sentences" spellcheck="true"></label>
         <p class="sub" style="margin:13px 0 7px">What did that take from you?</p>
         <div class="chips" id="winStrengths"></div>
@@ -904,6 +904,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
             <option value="0">Everything</option>
           </select></label></div>
       <div id="strSum"></div>
+      <div id="strRecent"></div>
       <div id="strBars"></div>
       <div id="strWords"></div>
     </div>
@@ -1278,13 +1279,30 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div class="card" id="ds-wins">
       <h2>What went well</h2>
-      <p class="sub">Every check-in asks for one thing that went well since the last one. It is
-        deliberately the only question here that isn&rsquo;t a measurement &mdash; the ratings record
-        what happened to you, this records what you did. Asked per check-in rather than per day so
-        the answers stay specific.</p>
-      <div class="sw"><div style="flex:1"><div class="t">Ask at every check-in</div>
+      <p class="sub">One thing that went well since the last check-in. It is deliberately the only
+        question here that isn&rsquo;t a measurement &mdash; the ratings record what happened to you,
+        this records what you did. Asked per check-in rather than per day so the answers stay
+        specific to a stretch you can still picture.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Ask this at all</div>
         <div class="d" id="winAskHint"></div></div>
         <button class="tog" id="togWinAsk" aria-pressed="true"></button></div>
+      <div id="winWhenWrap">
+        <div class="sw"><div style="flex:1"><div class="t">Ask on an ordinary day at</div>
+          <div class="d">Best at the end of the day, when there&rsquo;s something to look back on.
+            Asking at all four turns it into paperwork, and paperwork gets thin answers.</div></div></div>
+        <div class="schedrow" id="winWinPick"></div>
+        <div id="winAltWrap">
+          <div class="sw"><div style="flex:1"><div class="t">Ask on the second schedule at</div>
+            <div class="d" id="winAltHint"></div></div></div>
+          <div class="schedrow" id="winWinAltPick"></div>
+        </div>
+        <div class="sw"><div style="flex:1"><div class="t">Ask anyway on a down day</div>
+          <div class="d">If mood or confidence lands 2 points below your usual, or anxiety 2 points
+            above it, the question appears at that check-in whether it was scheduled or not
+            &mdash; and says so. Those are the days the answer is worth most.</div></div>
+          <button class="tog" id="togWinDown" aria-pressed="true"></button></div>
+        <div class="mini" id="winWhenNote"></div>
+      </div>
       <div class="sw"><div style="flex:1"><div class="t">Won&rsquo;t save without an answer</div>
         <div class="d">&ldquo;Nothing comes to mind&rdquo; is one of the answers and is recorded as
           one, so this never blocks a check-in on a day you can&rsquo;t find a win. Skipping the
@@ -1673,7 +1691,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 80;
+const BUILD = 81;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1700,8 +1718,11 @@ const DEFAULT_CFG = {
   needNoteAt: 3,              // how far from usual counts as far
   needNoteWin: 60,            // how many days back "usual" is worked out over
   startAt5: true,             // every rating opens at 5, so you adjust from a baseline
-  winAsk: true,               // ask what went well at every check-in
+  winAsk: true,               // ask what went well
   winRequire: true,           // and don't save until the question has an answer
+  winWins: null,              // which check-ins ask on an ordinary day (set on first load)
+  winWinsAlt: null,           // …and on the alternate schedule
+  winDownAsk: true,           // ask anyway when mood, anxiety or confidence are down
   strengths: null,            // set from STRENGTHS on first load; editable after
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
@@ -1751,7 +1772,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "strengths", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winDownAsk", "strengths", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1923,7 +1944,24 @@ async function load() {
   if (typeof CFG.startAt5 !== "boolean") CFG.startAt5 = true;
   if (typeof CFG.winAsk !== "boolean") CFG.winAsk = true;
   if (typeof CFG.winRequire !== "boolean") CFG.winRequire = true;
+  if (typeof CFG.winDownAsk !== "boolean") CFG.winDownAsk = true;
+  // Asking four times a day turns the question into paperwork, and paperwork
+  // gets thin answers. Default to the end of the day, when there is something to
+  // look back on: the last two check-ins of a working day, the last one of a day off.
+  if (!Array.isArray(CFG.winWins)) {
+    const wd = CFG.windows.filter(runsWd);
+    CFG.winWins = wd.slice(-2).map(w => w.id);
+  }
+  if (!Array.isArray(CFG.winWinsAlt)) {
+    const alt = CFG.windows.filter(runsAlt);
+    CFG.winWinsAlt = alt.slice(-1).map(w => w.id);
+  }
+  // a window deleted in settings shouldn't leave a ghost behind
+  CFG.winWins = CFG.winWins.filter(id => CFG.windows.some(w => w.id === id));
+  CFG.winWinsAlt = CFG.winWinsAlt.filter(id => CFG.windows.some(w => w.id === id));
   if (!Array.isArray(CFG.strengths) || !CFG.strengths.length) CFG.strengths = STRENGTHS.slice();
+  else if (CFG.strengths.length === STRENGTHS_B80.length &&
+           CFG.strengths.every((t, i) => t === STRENGTHS_B80[i])) CFG.strengths = STRENGTHS.slice();
   CFG.strengths = CFG.strengths.map(t => String(t || "").trim()).filter(Boolean);
   // migrate the old newline-separated med list into scheduled entries
   if (!Array.isArray(CFG.medList)) CFG.medList = [];
@@ -2352,6 +2390,9 @@ function applyVal(item, v) {
   fill.style.background = col;
 
   markNeeded(key);
+  // mood, anxiety and confidence decide whether the win question appears at a
+  // check-in that wouldn't otherwise ask, so it has to react as the slider moves
+  if (WIN_WATCH.indexOf(key) > -1) { try { renderWin(); } catch (e) {} }
   if (key === "rebound") syncCrashBlock();   // show/hide only, no re-render
   if (it.grp === "pain") {
     let pw = item.querySelector(".pw");
@@ -4466,6 +4507,55 @@ function winStats(days) {
     untagged: stars.filter(x => !(x.kinds || []).length).length };
 }
 
+/* The tags say what a win took. This says what the wins keep being *about*, off
+   the words themselves — same stemming and stop-list as the notes, pointed at a
+   much shorter kind of sentence, so the threshold has to be lower to see anything. */
+function commonWins(stars) {
+  const by = {};
+  stars.forEach(x => {
+    const ws = wordsOf(x.what || ""), stems = ws.map(stemWord), seen = {};
+    const add = (term, shown) => {
+      if (seen[term]) return; seen[term] = 1;
+      if (!by[term]) by[term] = { term, n: 0, dset: {}, raw: {}, ex: [] };
+      const t = by[term];
+      t.n++; t.dset[x.date] = 1;
+      t.raw[shown] = (t.raw[shown] || 0) + 1;
+      const line = (x.what || "").trim();
+      if (t.ex.length < 3 && t.ex.every(e => e.toLowerCase() !== line.toLowerCase())) t.ex.push(line);
+    };
+    stems.forEach((st, i) => {
+      if (STOP.has(ws[i]) || STOP.has(st) || st.length < 3 || /^\d+$/.test(st)) return;
+      add(st, ws[i]);
+    });
+    for (let i = 0; i < stems.length - 1; i++) {
+      const bad = j => STOP.has(ws[j]) && !KEEPW.has(ws[j]);
+      if (bad(i) || bad(i + 1)) continue;
+      add(stems[i] + " " + stems[i + 1], ws[i] + " " + ws[i + 1]);
+    }
+  });
+  const rows = Object.keys(by).map(k => {
+    const t = by[k];
+    t.days = Object.keys(t.dset).length; delete t.dset;
+    t.label = Object.keys(t.raw).sort((a, b) => t.raw[b] - t.raw[a])[0];
+    t.phrase = k.indexOf(" ") > -1;
+    return t;
+  }).filter(t => t.n >= 2 && t.days >= 2)
+    .sort((a, b) => (b.n - a.n) || (b.days - a.days) || (a.term < b.term ? -1 : 1));
+  // "made it to the gym" and "gym" are the same win twice — keep the phrase, drop
+  // the single word it swallows when they turn up on the same days
+  const phrases = rows.filter(r => r.phrase);
+  const kept = rows.filter(r => r.phrase ||
+    !phrases.some(pz => pz.term.split(" ").indexOf(r.term) > -1 && pz.n >= r.n));
+  // "cleaned" and "office" off "cleaned the office" are one habit listed twice.
+  // Same tally, same sentences behind it — show the first and drop the echo.
+  const seen = {};
+  return kept.filter(r => {
+    const sig = r.n + "|" + r.days + "|" + r.ex.map(e => e.toLowerCase()).sort().join("~");
+    if (seen[sig]) return false;
+    seen[sig] = 1; return true;
+  });
+}
+
 function renderStrengthReport() {
   if (!$("#strCard")) return;
   $("#strRange").value = String(strRange);
@@ -4475,7 +4565,7 @@ function renderStrengthReport() {
   if (!st.stars.length && !st.blanks.length) {
     $("#strSum").innerHTML = '<div class="empty"><b>Nothing yet</b>Every check-in asks for one ' +
       "thing that went well since the last one. A few days of answers and this fills in.</div>";
-    $("#strBars").innerHTML = ""; $("#strWords").innerHTML = "";
+    $("#strRecent").innerHTML = ""; $("#strBars").innerHTML = ""; $("#strWords").innerHTML = "";
     return;
   }
 
@@ -4530,22 +4620,39 @@ function renderStrengthReport() {
         : "");
   }
 
-  // the same word-counting used on the notes, pointed at the wins instead
-  const corpus = st.stars.map(x => ({ date: x.date, win: x.win || "", key: "",
-    label: "Win", text: x.what, v: null }));
-  const th = corpus.length >= 4 ? themesFrom(corpus, strRange).slice(0, 8) : [];
+  // the actual sentences, newest first — the part worth reading on a bad night
+  const recent = st.stars.slice().reverse().slice(0, 12);
+  $("#strRecent").innerHTML = recent.length
+    ? '<div class="eyebrow" style="margin-top:16px">Lately</div>' +
+      '<div class="mini" style="margin-bottom:8px">The last ' + recent.length +
+      ", newest first. This is the part to read when you don\u2019t believe the rest of it.</div>" +
+      recent.map(x => '<div class="strow">' +
+        '<span class="stwhat"><span style="color:#e0c453">\u2605</span> ' + esc(x.what) +
+          ((x.kinds || []).length
+            ? '<span class="stwhen"> &middot; ' + esc(x.kinds.join(", ").toLowerCase()) + "</span>" : "") +
+        "</span>" +
+        '<span class="stwhen">' + esc(fmtDate(x.date)) + "</span></div>").join("")
+    : "";
+
+  // and what those sentences keep being about
+  const cw = commonWins(st.stars).slice(0, 8);
   const winLbl = id => { const w = CFG.windows.find(x => x.id === id); return w ? w.label : id; };
   const wk = Object.keys(st.byWin).sort((a, b) => st.byWin[b] - st.byWin[a]);
   $("#strWords").innerHTML =
-    (th.length
-      ? '<div class="eyebrow" style="margin-top:18px">The same wins, in your own words</div>' +
-        '<div class="mini" style="margin-bottom:8px">Words that came back across separate days. ' +
-        "Counted, not interpreted \u2014 what they mean is yours to say.</div>" +
-        th.map(t => '<div class="strow"><span class="stwhat">' + esc(t.label) +
-          '<div class="mini" style="margin-top:2px">' +
-          esc((t.samples || []).map(x => x.text).slice(0, 2).join(" \u00b7 ")) + "</div></span>" +
-          '<span class="stwhen">' + t.days + " days</span></div>").join("")
-      : "") +
+    (cw.length
+      ? '<div class="eyebrow" style="margin-top:18px">What your wins keep being about</div>' +
+        '<div class="mini" style="margin-bottom:8px">Counted off what you typed, not off the tags. ' +
+        "A word has to turn up in separate wins on separate days to appear at all. This counts; " +
+        "what it means is yours to say.</div>" +
+        cw.map(t => '<div class="sbar"><div class="h">' +
+          '<span class="nm">' + esc(t.label) + "</span>" +
+          '<span class="ct">' + t.n + " win" + (t.n === 1 ? "" : "s") + " \u00b7 " + t.days +
+            (t.days === 1 ? " day" : " days") + "</span></div>" +
+          t.ex.map(e => '<div class="ex">' + esc(e) + "</div>").join("") + "</div>").join("")
+      : st.stars.length >= 4
+        ? '<div class="mini" style="margin-top:16px">Nothing has come back often enough yet to ' +
+          "call it common. Give it a couple of weeks.</div>"
+        : "") +
     (wk.length > 1
       ? '<div class="statnote" style="margin-top:14px">Most of them come out of your <b>' +
         esc(winLbl(wk[0])) + "</b> check-in (" + st.byWin[wk[0]] + " of " + st.stars.length +
@@ -6404,8 +6511,10 @@ function printSummary() {
               "</td><td>" + r.days + "</td></tr>").join("") + "</table>"
           : "") +
         (winSt.blanks.length
-          ? '<div class="sm" style="margin-top:6px">The question is asked at every check-in and ' +
-            "cannot be left unanswered. On <b>" + winSt.blanks.length + "</b> of <b>" +
+          ? '<div class="sm" style="margin-top:6px">The question is put at set check-ins \u2014 and ' +
+            "at any check-in where mood, anxiety or confidence lands two points the wrong side of " +
+            "their own baseline \u2014 and cannot be left unanswered. On <b>" + winSt.blanks.length +
+            "</b> of <b>" +
             winSt.asked.length + "</b> occasions the answer given was that nothing came to mind. " +
             "Those are recorded rather than skipped, so a run of them is visible as a run.</div>"
           : "")
@@ -6623,7 +6732,27 @@ function renderCfg() {
   $("#togWinReq").style.opacity = CFG.winAsk === false ? "0.4" : "";
   $("#winAskHint").textContent = CFG.winAsk === false
     ? "Off. The star button on the Log tab still works, and everything already logged is kept."
-    : "Asked once per check-in, about the stretch since the last one.";
+    : "Asked about the stretch since the last check-in, at the check-ins picked below.";
+  $("#winWhenWrap").style.display = CFG.winAsk === false ? "none" : "";
+  $("#winAltWrap").style.display = CFG.weekend ? "" : "none";
+  $("#winAltHint").textContent = "The days you\u2019ve marked as different \u2014 " +
+    ((CFG.altDays || []).map(i => DAYS[i]).join(", ") || "none set") + ".";
+  $("#togWinDown").setAttribute("aria-pressed", CFG.winDownAsk !== false ? "true" : "false");
+  const pick = (el, list, only) => {
+    $(el).innerHTML = CFG.windows.filter(only).map(w =>
+      '<button class="chip sm" data-' + (el === "#winWinPick" ? "winwin" : "winwinalt") + '="' + w.id +
+      '" aria-pressed="' + ((list || []).indexOf(w.id) > -1 ? "true" : "false") + '">' +
+      esc(w.label) + "</button>").join("") ||
+      '<div class="mini">No check-ins run on this schedule.</div>';
+  };
+  pick("#winWinPick", CFG.winWins, runsWd);
+  pick("#winWinAltPick", CFG.winWinsAlt, runsAlt);
+  const nWd = (CFG.winWins || []).length, nAlt = (CFG.winWinsAlt || []).length;
+  $("#winWhenNote").textContent = !nWd && !nAlt
+    ? (CFG.winDownAsk !== false
+        ? "Nothing scheduled \u2014 it will only appear on a down day."
+        : "Nothing scheduled and down days off, so it never appears.")
+    : nWd + " on an ordinary day" + (CFG.weekend ? ", " + nAlt + " on the second schedule" : "") + ".";
   renderStrengths();
   $("#togNeedNote").setAttribute("aria-pressed", CFG.needNote ? "true" : "false");
   $("#needNoteSel").value = String(CFG.needNoteAt || 3);
@@ -7470,7 +7599,12 @@ async function saveSpike() {
    "just happened". That answers attribution, not capability, and the point of
    collecting these is to find out what someone is repeatedly good at. These name
    the thing it took instead, so the tally reads as a list of strengths. */
-const STRENGTHS = ["Got it done", "Pushed through resistance", "Looked after myself",
+const STRENGTHS = ["Got it done", "Pushed through resistance", "Took my meds anyway",
+  "Looked after myself", "Asked for help", "Spoke up", "Said no", "Showed up for someone",
+  "Handled something hard", "Worked it out", "Kept a promise to myself", "Stayed steady"];
+/* the list as it shipped one build earlier, so an untouched copy can be upgraded
+   in place rather than leaving the new tag hidden behind a Reset nobody presses */
+const STRENGTHS_B80 = ["Got it done", "Pushed through resistance", "Looked after myself",
   "Asked for help", "Spoke up", "Said no", "Showed up for someone", "Handled something hard",
   "Worked it out", "Kept a promise to myself", "Stayed steady"];
 const strengthList = () => (CFG.strengths && CFG.strengths.length) ? CFG.strengths : STRENGTHS;
@@ -7478,21 +7612,74 @@ const strengthList = () => (CFG.strengths && CFG.strengths.length) ? CFG.strengt
    four check-ins gets the same answer four times; asking about the gap since the
    last one gets four different ones, which is the point. */
 function prevWinOf(date, winId) {
-  const list = winsOn(date);
-  const i = list.findIndex(w => w.id === winId);
-  if (i > 0) return { win: list[i - 1], date: date, same: true };
-  if (i < 0) {                                  // a check-in not scheduled that day
-    const all = CFG.windows.slice().sort((a, b) => minsOf(winTime(a, date)) - minsOf(winTime(b, date)));
-    const j = all.findIndex(w => w.id === winId);
-    if (j > 0) return { win: all[j - 1], date: date, same: true };
-  }
-  const y = addDays(date, -1), yl = winsOn(y);
-  return yl.length ? { win: yl[yl.length - 1], date: y, same: false } : null;
+  // Walk back through the schedule, today then yesterday then the day before.
+  // The first pass looks for a check-in that also asks this question: with only
+  // two asks in a day, "since the last check-in" would leave the whole morning
+  // uncovered, and a stretch nobody is ever asked about is a stretch whose wins
+  // never get logged. The second pass takes whatever came before, so this still
+  // answers sensibly when nothing is scheduled at all.
+  const dayList = d => {
+    const l = winsOn(d).slice();
+    if (d === date && !l.some(w => w.id === winId)) {      // a window not scheduled today
+      const w = CFG.windows.find(x => x.id === winId);
+      if (w) l.push(w);
+      l.sort((a, b) => minsOf(winTime(a, d)) - minsOf(winTime(b, d)));
+    }
+    return l;
+  };
+  const find = wants => {
+    for (let back = 0; back < 3; back++) {
+      const d = addDays(date, -back), l = dayList(d);
+      let from = l.length - 1;
+      if (back === 0) {
+        const i = l.findIndex(w => w.id === winId);
+        if (i < 0) continue;
+        from = i - 1;
+      }
+      for (let j = from; j >= 0; j--) {
+        if (!wants || winAsksAt(d, l[j].id)) return { win: l[j], date: d, same: d === date };
+      }
+    }
+    return null;
+  };
+  return find(true) || find(false);
 }
+/* The three she named as the ones worth watching. Two points the wrong side of
+   her own usual is the trigger; before there are eight readings to take a median
+   from, 5 stands in for it. */
+const WIN_WATCH = ["mood", "anxiety", "confid"];
+function winDownNow() {
+  if (!draft || CFG.winDownAsk === false || CFG.winAsk === false) return [];
+  return WIN_WATCH.filter(k => {
+    const it = ITEM[k];
+    if (!it || !isOn(k)) return false;
+    if (!draft.tch || !draft.tch[k]) return false;       // a slider she actually moved
+    const v = draft.v[k];
+    if (v == null) return false;
+    const u = usualFor(k), base = u == null ? 5 : u;
+    return it.anchor === "low" ? v >= base + 2 : v <= base - 2;
+  });
+}
+function winDownWhy() {
+  return winDownNow().map(k => {
+    const u = usualFor(k);
+    return (ITEM[k].label || k) + " at " + draft.v[k] +
+      (u == null ? "" : " against your usual " + (Math.round(u * 10) / 10));
+  });
+}
+/* Scheduled check-ins ask; a bad reading makes any check-in ask. */
+function winAsksAt(date, winId) {
+  if (CFG.winAsk === false) return false;
+  const list = isAltDay(date) ? CFG.winWinsAlt : CFG.winWins;
+  return (list || []).indexOf(winId) > -1;
+}
+const winShown = () => !!draft && CFG.winAsk !== false &&
+  (winAsksAt(draft.date, draft.win) || winDownNow().length > 0);
+
 /* Asking someone to name a win from nine days ago gets you a reconstruction, and
    the whole report is built on these being real. Recent enough to remember is the
    only stretch worth blocking a save over. */
-const winRequired = date => CFG.winAsk !== false && CFG.winRequire !== false &&
+const winRequired = date => winShown() && CFG.winRequire !== false &&
   String(date || "") >= addDays(todayISO(), -1);
 
 function winPeriodText(date, winId) {
@@ -7505,15 +7692,30 @@ function winPeriodText(date, winId) {
 /* The win question, shown inside the check-in itself. */
 function renderWin() {
   const blk = $("#winBlock"); if (!blk || !draft) return;
-  const on = CFG.winAsk !== false;
+  const on = winShown();
   blk.style.display = on ? "" : "none";
   if (!on) return;
   const g = draft.gold || (draft.gold = { what: "", str: [], none: false });
   const req = winRequired(draft.date);
-  $("#winSub").innerHTML = esc(winPeriodText(draft.date, draft.win)) +
-    " \u2014 one thing that went well, however small." +
+  const why = winDownWhy();
+  const unscheduled = why.length && !winAsksAt(draft.date, draft.win);
+  blk.querySelector(".eyebrow").textContent = why.length
+    ? "Something that went well anyway" : "Something that went well";
+  $("#winSub").innerHTML =
+    (why.length
+      ? "<b>" + esc(why.join(", ")) + ".</b> " +
+        (unscheduled
+          ? "This check-in doesn\u2019t normally ask, but a day like this is exactly the one that " +
+            "shouldn\u2019t go into the record as nothing but numbers. "
+          : "") +
+        esc(winPeriodText(draft.date, draft.win)).toLowerCase().replace("since", "Since") +
+        " \u2014 one thing that went well, and the bar is on the floor: taking your medication " +
+        "counts. Getting through the day counts."
+      : esc(winPeriodText(draft.date, draft.win)) +
+        " \u2014 one thing that went well, however small. Taking your medication on a rough day is " +
+        "a win; so is anything you had to make yourself do.") +
     (req
-      ? " This one is asked every time; <b>nothing comes to mind</b> is a real answer and gets recorded as one."
+      ? " <b>Nothing comes to mind</b> is a real answer and gets recorded as one."
       : CFG.winRequire !== false
         ? " Optional this far back \u2014 a win you have to reconstruct isn\u2019t worth counting."
         : " Optional.");
@@ -8250,15 +8452,21 @@ function commit(skip, reason) {
     // A reading a long way from your usual is the one worth having words against.
     // Six months on, the number alone won't tell you what the day was.
     const miss = noteMissing();
+    // On a low day both of these fire, and being stopped twice in a row reads as
+    // the app moving the goalposts. Say both at once.
+    const winAlso = winRequired(draft.date) &&
+      !(draft.gold && ((draft.gold.what || "").trim() || draft.gold.none));
     if (miss.length) {
       markNeeded();
       const item = document.querySelector('.item[data-k="' + miss[0] + '"]');
       if (item && item.scrollIntoView) item.scrollIntoView({ block: "center", behavior: "smooth" });
       const ta = item && item.querySelector("textarea");
       if (ta) setTimeout(() => ta.focus(), 320);
-      toast(miss.length === 1
-        ? whyNeeded(miss[0]) + " Say what's going on before saving."
-        : miss.length + " ratings are a long way from usual and need a note.", true);
+      toast((miss.length === 1
+        ? whyNeeded(miss[0]) + " Say what's going on"
+        : miss.length + " ratings are a long way from usual and need a note") +
+        (winAlso ? ", and name one thing that went well, before saving."
+                 : miss.length === 1 ? " before saving." : "."), true);
       return;
     }
     // The one question in here that isn't a measurement. It only does its job if
@@ -8312,7 +8520,7 @@ function commit(skip, reason) {
       draft.sleep = Object.assign(draft.sleep || {}, { h: wheelVal($("#wH")), m: wheelVal($("#wM")),
         bed: $("#sBed").value || "", wake: $("#sWake").value || "" });
     } else draft.sleep = null;
-    if (CFG.winAsk !== false && $("#winWhat") && !$("#winWhat").disabled)
+    if (winShown() && $("#winWhat") && !$("#winWhat").disabled)
       draft.gold.what = ($("#winWhat").value || "").trim();
     if (draft.gold.none) { draft.gold.what = ""; draft.gold.str = []; }
     draft.gold.str = (draft.gold.str || []).filter(t => strengthList().indexOf(t) > -1);
@@ -8697,6 +8905,24 @@ function init() {
       }
       return;
     }
+    const ww = ev.target.closest("[data-winwin]");
+    if (ww) {
+      const id = ww.dataset.winwin;
+      CFG.winWins = (CFG.winWins || []).indexOf(id) > -1
+        ? CFG.winWins.filter(x => x !== id) : (CFG.winWins || []).concat([id]);
+      touchCfg().then(() => { renderCfg(); renderLog();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
+    const wwa = ev.target.closest("[data-winwinalt]");
+    if (wwa) {
+      const id = wwa.dataset.winwinalt;
+      CFG.winWinsAlt = (CFG.winWinsAlt || []).indexOf(id) > -1
+        ? CFG.winWinsAlt.filter(x => x !== id) : (CFG.winWinsAlt || []).concat([id]);
+      touchCfg().then(() => { renderCfg(); renderLog();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
     const nw = ev.target.closest("[data-napwin]");
     if (nw) {
       const id = nw.dataset.napwin;
@@ -8880,6 +9106,8 @@ function init() {
   $("#togNeedNote").onclick = () => { CFG.needNote = !CFG.needNote;
     touchCfg(); renderCfg(); renderLog(); };
   $("#togWinAsk").onclick = () => { CFG.winAsk = CFG.winAsk === false;
+    touchCfg(); renderCfg(); renderLog(); };
+  $("#togWinDown").onclick = () => { CFG.winDownAsk = CFG.winDownAsk === false;
     touchCfg(); renderCfg(); renderLog(); };
   $("#togWinReq").onclick = () => {
     if (CFG.winAsk === false) { toast("Turn the question on first", true); return; }
