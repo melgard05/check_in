@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:81-->
+<!DOCTYPE html><!--build:82-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -75,6 +75,7 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .spikebtn{margin-top:4px;background:#2b2119;border-color:var(--warn);color:var(--warn);font-weight:600}
 .spikebtn:hover{background:#332618}
 .goldcard{border-color:#4a3f1e}
+.needcard{border-color:var(--warn)}
 .sbar{padding:9px 0;border-bottom:1px solid var(--line)}
 .sbar:last-child{border-bottom:0}
 .sbar .h{display:flex;gap:9px;align-items:baseline}
@@ -708,6 +709,16 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       The same idea pointed the other way. Everything else here is looking for what's wrong, and a
       record made only of symptoms is not an honest record of a life.</div>
     <div class="mini" style="text-align:center;margin:2px 0 4px" id="starCount"></div>
+
+    <div id="allNoteBlock" style="display:none">
+      <div class="eyebrow">What&rsquo;s going on</div>
+      <div class="card needcard">
+        <p class="sub" style="margin-bottom:10px" id="allNoteSub"></p>
+        <textarea id="allNote" rows="3"
+          placeholder="What today has actually been like. One answer covers all of them."></textarea>
+        <div class="mini" id="allNoteHint"></div>
+      </div>
+    </div>
 
     <div class="eyebrow" id="ebCore">Core</div>
     <div class="card" id="coreItems"></div>
@@ -1691,7 +1702,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 81;
+const BUILD = 82;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2325,6 +2336,69 @@ function whyNeeded(key) {
     (Math.round(u * 10) / 10) + ".";
   return esc(it.label) + " is at " + v + ".";
 }
+/* Every core rating that is a long way out right now, whether or not it already
+   has words against it. */
+function needyKeys() {
+  if (!draft || CFG.needNote === false) return [];
+  return Object.keys(ITEM).filter(k => needsNote(k, draft.v[k]) &&
+    document.querySelector('.item[data-k="' + k + '"]'));
+}
+
+/* Three ratings out on the same day are almost always one situation, and typing
+   the same sentence into three boxes is how people learn to stop typing anything.
+   One box fills all of them; each rating keeps its own underneath for whatever is
+   specific to it, and anything written there is never overwritten from here. */
+let lastAllNote = "";
+function renderAllNote(keepValue) {
+  const blk = $("#allNoteBlock"); if (!blk || !draft) return;
+  const keys = needyKeys();
+  const on = keys.length >= 2;
+  blk.style.display = on ? "" : "none";
+  if (!on) { if (!keepValue) lastAllNote = ""; return; }
+
+  // the numbers, not just the names — the same thing whyNeeded() says when only
+  // one rating is out, so nothing is lost by answering them together
+  const labels = keys.map(k => {
+    const u = usualFor(k);
+    return "<b>" + esc((ITEM[k] || {}).label || k) + " " + draft.v[k] + "</b>" +
+      (u == null ? "" : " against your usual " + (Math.round(u * 10) / 10));
+  });
+  $("#allNoteSub").innerHTML = labels.join(", ") + " \u2014 " +
+    (keys.length === 2 ? "both" : "all " + keys.length) +
+    " a long way out. Write it once here and it goes against every one of them.";
+
+  // whatever most of those boxes already say — so coming back to a half-finished
+  // check-in shows the answer already given rather than an empty box over full ones
+  const counts = {};
+  keys.forEach(k => { const t = (draft.n[k] || "").trim(); if (t) counts[t] = (counts[t] || 0) + 1; });
+  const common = Object.keys(counts).sort((a, b) => counts[b] - counts[a])[0] || "";
+  const box = $("#allNote");
+  if (!keepValue) {
+    if (document.activeElement !== box) box.value = common;
+    lastAllNote = common || lastAllNote;
+    // a rating that has only just gone out gets the same explanation as the rest,
+    // rather than quietly becoming a fourth empty box to find
+    if (lastAllNote) keys.forEach(k => {
+      if ((draft.n[k] || "").trim()) return;
+      draft.n[k] = lastAllNote;
+      const ta = document.querySelector('[data-nt="' + k + '"]');
+      if (ta && document.activeElement !== ta) ta.value = lastAllNote;
+      const btn = document.querySelector('[data-note="' + k + '"]');
+      if (btn && btn.lastChild) btn.lastChild.textContent = "note added";
+      markNeeded(k);
+    });
+  }
+  const own = keys.filter(k => {
+    const t = (draft.n[k] || "").trim();
+    return t && t !== (box.value || "").trim();
+  }).length;
+  $("#allNoteHint").textContent = own
+    ? own + " of them " + (own === 1 ? "has" : "have") + " something of its own written underneath. " +
+      "This box leaves those alone."
+    : "Each rating still has its own box underneath \u2014 add anything that only applies to one of " +
+      "them there, and it stops following this one.";
+}
+
 /* the sliders update in place rather than re-rendering, so the badge has to be
    nudged by hand whenever a value moves across the line */
 function markNeeded(key) {
@@ -2390,6 +2464,9 @@ function applyVal(item, v) {
   fill.style.background = col;
 
   markNeeded(key);
+  // moving a slider can put a rating out, or bring one back — either changes the
+  // set the shared box covers
+  if (it.grp === "core") { try { renderAllNote(); } catch (e) {} }
   // mood, anxiety and confidence decide whether the win question appears at a
   // check-in that wouldn't otherwise ask, so it has to react as the slider moves
   if (WIN_WATCH.indexOf(key) > -1) { try { renderWin(); } catch (e) {} }
@@ -3011,6 +3088,7 @@ function renderLog() {
     (draft.tags.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
   $("#eNote").value = draft.note || "";
 
+  renderAllNote();
   renderWin();
   renderSug();
   renderSpikeCount();
@@ -8458,15 +8536,19 @@ function commit(skip, reason) {
       !(draft.gold && ((draft.gold.what || "").trim() || draft.gold.none));
     if (miss.length) {
       markNeeded();
-      const item = document.querySelector('.item[data-k="' + miss[0] + '"]');
-      if (item && item.scrollIntoView) item.scrollIntoView({ block: "center", behavior: "smooth" });
-      const ta = item && item.querySelector("textarea");
+      renderAllNote();
+      // more than one out means the one box at the top covers them all, so send
+      // her there rather than to the first of several identical empty boxes
+      const shared = needyKeys().length >= 2 ? $("#allNote") : null;
+      const target = shared || document.querySelector('.item[data-k="' + miss[0] + '"]');
+      if (target && target.scrollIntoView) target.scrollIntoView({ block: "center", behavior: "smooth" });
+      const ta = shared || (target && target.querySelector("textarea"));
       if (ta) setTimeout(() => ta.focus(), 320);
       toast((miss.length === 1
         ? whyNeeded(miss[0]) + " Say what's going on"
-        : miss.length + " ratings are a long way from usual and need a note") +
-        (winAlso ? ", and name one thing that went well, before saving."
-                 : miss.length === 1 ? " before saving." : "."), true);
+        : miss.length + " ratings are a long way from usual \u2014 one answer at the top covers them all")
+        + (winAlso ? ", and name one thing that went well, before saving."
+                   : miss.length === 1 ? " before saving." : "."), true);
       return;
     }
     // The one question in here that isn't a measurement. It only does its job if
@@ -8645,6 +8727,22 @@ function init() {
   $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value });
     fillFromTimes(); };
   $("#eNote").oninput  = () => { draft.note = $("#eNote").value; };
+  $("#allNote").oninput = () => {
+    const v = $("#allNote").value;
+    needyKeys().forEach(k => {
+      const cur = draft.n[k] || "";
+      // written about that rating specifically — leave it be
+      if (cur.trim() && cur !== lastAllNote) return;
+      draft.n[k] = v;
+      const ta = document.querySelector('[data-nt="' + k + '"]');
+      if (ta && document.activeElement !== ta) ta.value = v;
+      const btn = document.querySelector('[data-note="' + k + '"]');
+      if (btn && btn.lastChild) btn.lastChild.textContent = v.trim() ? "note added" : "hide note";
+      markNeeded(k);
+    });
+    lastAllNote = v;
+    renderAllNote(true);
+  };
   $("#winWhat").oninput = () => {
     draft.gold.what = $("#winWhat").value;
     if (draft.gold.what.trim()) $("#winWhat").classList.remove("need");
@@ -8666,6 +8764,7 @@ function init() {
     const btn = document.querySelector('[data-note="' + k + '"]');
     if (btn) btn.lastChild.textContent = ev.target.value.trim() ? "note added" : "hide note";
     markNeeded(k);
+    renderAllNote(true);            // hint only — never rewrite the box she isn't in
     if (ITEM[k] && ITEM[k].grp === "pain") painSummary();
   });
 
