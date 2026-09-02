@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:83-->
+<!DOCTYPE html><!--build:84-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -553,6 +553,8 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
       <div class="eyebrow" style="margin:14px 0 8px">Where you were</div>
       <div class="chips" id="ctxChips"></div>
+      <div class="mini" style="margin-top:7px">Tap as many as fit. A day that took in
+        work, an appointment and an hour on the land was all three.</div>
       <div class="sw" style="margin-top:8px;border-bottom:0;padding-bottom:0">
         <div><div class="t">Logged from memory</div>
           <div class="d">Filling this in later. Recall is fuzzier and leans toward how you feel
@@ -1685,6 +1687,24 @@ const CTX = [
   { id:"away",   label:"Away",              work:false }
 ];
 const CTXBY = {}; CTX.forEach(c => CTXBY[c.id] = c);
+/* Where you were used to be one answer. A day that starts at work, takes in a
+   doctor's appointment and ends on the land is three, and forcing it into one
+   threw away the two that might explain the reading. Entries saved before this
+   hold a bare string, so everything reads through here. */
+function ctxOf(x) {
+  if (!x) return [];
+  const raw = (Array.isArray(x.ctxs) && x.ctxs.length) ? x.ctxs
+    : Array.isArray(x.ctx) ? x.ctx : (x.ctx ? [x.ctx] : []);
+  const out = [];
+  raw.forEach(c => {
+    const id = c === "remote" ? "work" : c;              // retired option
+    if (CTXBY[id] && out.indexOf(id) < 0) out.push(id);
+  });
+  return out.sort((a, b) => CTX.findIndex(c => c.id === a) - CTX.findIndex(c => c.id === b));
+}
+const ctxLabels = x => ctxOf(x).map(c => CTXBY[c].label);
+const ctxSame = (a, b) => ctxOf(a).join("|") === ctxOf(b).join("|");
+const ctxAny = (x, flag) => ctxOf(x).some(c => CTXBY[c][flag]);
 
 const CRASH = ["Irritable / short fuse", "Exhausted, hit a wall", "Foggy, can't think",
   "Ravenous", "Tearful or low", "Restless, can't settle", "Headache", "Body aches",
@@ -1702,7 +1722,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 83;
+const BUILD = 84;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2082,10 +2102,11 @@ function newDraft(date, winId) {
   const found = ENTRIES.find(x => x.date === date && x.win === winId);
   if (found) return JSON.parse(JSON.stringify(found));
   // carry the day's context forward so it only needs answering once
-  const earlier = ENTRIES.filter(x => x.date === date && x.ctx).sort((a, b) => a.ts < b.ts ? 1 : -1)[0];
+  const earlier = ENTRIES.filter(x => x.date === date && ctxOf(x).length)
+    .sort((a, b) => a.ts < b.ts ? 1 : -1)[0];
   return { date, win: winId, ts: new Date().toISOString(), v: {}, n: {},
     pain: { sites: [], kinds: [] }, nap: { on: false, h: 0, m: 0, start: "" },
-    ctx: (earlier && earlier.ctx) || "",
+    ctx: earlier ? ctxOf(earlier) : [],
     medoff: { st: "", at: "", crashAt: "", crashEnd: "", fx: [] },
     recall: false, period: false,
     sleep: null, screen: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "",
@@ -2112,8 +2133,7 @@ function fixDraft(d) {                       // older records, and anything Fire
   d.recall = !!d.recall;
   d.period = !!d.period;
   if (d.v && d.v.alcohol != null && d.v.binge == null) delete d.v.alcohol;   // retired item
-  if (d.ctx === "remote") d.ctx = "work";        // retired option, keep it as a work day
-  if (typeof d.ctx !== "string" || !CTXBY[d.ctx]) d.ctx = "";
+  d.ctx = ctxOf(d);                             // string or array in, clean array out
   if (!d.medoff || typeof d.medoff !== "object" || Array.isArray(d.medoff)) d.medoff = {};
   if (["time", "still", "none"].indexOf(d.medoff.st) < 0) d.medoff.st = "";
   if (typeof d.medoff.at !== "string") d.medoff.at = d.medoff.at == null ? "" : String(d.medoff.at);
@@ -2156,11 +2176,11 @@ function setDraft(date, winId) {
   if (!saved && winId === lastWinId()) {
     // the last check-in of the day is the one most likely to be somewhere else,
     // so it gets asked rather than inheriting the work tag from earlier
-    draft.ctx = "";
-  } else if (!draft.ctx) {
-    const sib = ENTRIES.filter(x => x.date === date && x.ctx)
+    draft.ctx = [];
+  } else if (!draft.ctx.length) {
+    const sib = ENTRIES.filter(x => x.date === date && ctxOf(x).length)
       .sort((a, b) => (a.ts || "") < (b.ts || "") ? 1 : -1)[0];
-    if (sib) draft.ctx = sib.ctx;
+    if (sib) draft.ctx = ctxOf(sib);
   }
   $("#eDate").value = date; $("#eWin").value = winId;
   renderLog();
@@ -2919,7 +2939,7 @@ function renderLog() {
   $("#ctxChips").innerHTML = CTX.map(c =>
     '<button class="chip ctx' + (c.work ? " w" : c.outdoors ? " out" : c.appt ? " ap" : "") +
     '" data-ctx="' + c.id + '" aria-pressed="' +
-    (draft.ctx === c.id ? "true" : "false") + '">' + esc(c.label) + "</button>").join("");
+    (draft.ctx.indexOf(c.id) > -1 ? "true" : "false") + '">' + esc(c.label) + "</button>").join("");
 
   // cycle
   $("#cycleBlock").style.display = CFG.cycle && (!CFG.quick || showAll) ? "" : "none";
@@ -3271,7 +3291,7 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", ctxs: [], worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -3293,9 +3313,13 @@ function daily(days) {
       crashMins: mo.medoff.crashAt ? minsOf(mo.medoff.crashAt) : null,
       crashLen: crashLen(mo.medoff),
       fx: (mo.medoff.fx || []).slice() };
-    const cx = es.map(e => e.ctx).filter(Boolean);
+    // every place the day was logged from, across all its check-ins
+    const cx = [];
+    es.forEach(e => ctxOf(e).forEach(c => cx.push(c)));
     if (cx.length) {
-      row.ctx = cx.sort((a, b) =>
+      row.ctxs = ctxOf({ ctxs: cx });
+      // one dominant label is still wanted wherever a row needs a single word
+      row.ctx = cx.slice().sort((a, b) =>
         cx.filter(v => v === b).length - cx.filter(v => v === a).length)[0];
       row.worked = cx.some(c => CTXBY[c] && CTXBY[c].work);
       row.reentry = cx.some(c => CTXBY[c] && CTXBY[c].reentry);
@@ -3773,10 +3797,10 @@ function readoutFor(i) {
   let s = '<span class="dt">' + fmtDate(r.date) + "</span> &nbsp;";
   if (!r.n) { s += "no check-ins"; $("#readout").innerHTML = s; return; }
   s += r.n + " check-in" + (r.n > 1 ? "s" : "");
-  if (r.ctx && CTXBY[r.ctx]) s += ' · <span style="color:' +
-    (CTXBY[r.ctx].work ? "#b6a0e4" : CTXBY[r.ctx].outdoors ? "#84c2a1"
-      : CTXBY[r.ctx].appt ? "#d9a03c" : "#7fbde4") +
-    '">' + esc(CTXBY[r.ctx].label) + "</span>";
+  ctxOf(r).forEach(c => { s += ' · <span style="color:' +
+    (CTXBY[c].work ? "#b6a0e4" : CTXBY[c].outdoors ? "#84c2a1"
+      : CTXBY[c].appt ? "#d9a03c" : "#7fbde4") +
+    '">' + esc(CTXBY[c].label) + "</span>"; });
   s += "<br>";
   const bits = Object.keys(SCOL).filter(k => r.v[k] != null && isOn(k))
     .map(k => ITEM[k].label.toLowerCase() + " <b>" + r.v[k].toFixed(1) + "</b>");
@@ -5313,7 +5337,7 @@ function renderCycle(rows) {
    "not working" covers sitting at home and being out on the land. */
 function renderCtxSplit(rows) {
   const el = $("#ctxSplit"); if (!el) return;
-  const used = CTX.map(c => ({ c, set: rows.filter(r => r.ctx === c.id && r.v.mood != null) }))
+  const used = CTX.map(c => ({ c, set: rows.filter(r => ctxOf(r).indexOf(c.id) > -1 && r.v.mood != null) }))
     .filter(x => x.set.length >= 3);
   if (used.length < 3) { el.innerHTML = ""; return; }
   const keys = ITEMS.filter(i => (i.grp === "core" || i.key === "pain") && isOn(i.key)).map(i => i.key);
@@ -5326,7 +5350,11 @@ function renderCtxSplit(rows) {
     if (vals.length < 2) return null;
     return badHigh[k] ? Math.min.apply(null, vals) : Math.max.apply(null, vals);
   };
+  const overlap = rows.some(r => ctxOf(r).length > 1);
   el.innerHTML = '<div class="eyebrow" style="margin:0 0 8px">By where you were</div>' +
+    (overlap ? '<div class="mini" style="margin:-2px 0 8px">A day logged in more than one place ' +
+      "counts in each of its columns, so these don't add up to the total \u2014 they answer " +
+      '"what does a day with work in it look like", not "what does a work-only day look like".</div>' : "") +
     '<div class="scroll"><table class="tbl"><tr><th></th>' +
     used.map(u => "<th>" + esc(u.c.label.replace("Back from time off", "Back")) + "</th>").join("") +
     "</tr>" +
@@ -5350,8 +5378,8 @@ function renderCtxSplit(rows) {
    Comparing check-in by check-in is what actually separates them. */
 function renderCtxPerWin() {
   const el = $("#ctxPerWin"); if (!el) return;
-  const work = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && CTXBY[e.ctx].work);
-  const off = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && !CTXBY[e.ctx].work);
+  const work = ENTRIES.filter(e => ctxAny(e, "work"));
+  const off = ENTRIES.filter(e => ctxOf(e).length && !ctxAny(e, "work"));
   if (work.length < 4 || off.length < 4) { el.innerHTML = ""; return; }
   const keys = ITEMS.filter(i => (i.grp === "core" || i.key === "pain") && isOn(i.key)).map(i => i.key);
   const mean = (set, k) => { const v = set.map(e => e.v[k]).filter(x => x != null);
@@ -5834,7 +5862,7 @@ function buildExport(kind) {
       .concat(noted.map(i => i.key + "_note"))
       .concat(["warning_signs", "tags", "notes"]);
     return toCSV(head, rows.map(r => [r.date, r.n,
-      r.ctx && CTXBY[r.ctx] ? CTXBY[r.ctx].label : "",
+      ctxLabels(r).join("; "),
       r.worked == null ? "" : (r.worked ? "yes" : "no"),
       r.sleep ? r.sleep.hours.toFixed(2) : "", r.sleep ? r.sleep.bed || "" : "",
       r.sleep ? r.sleep.wake || "" : "",
@@ -5865,11 +5893,11 @@ function buildExport(kind) {
     ENTRIES.slice().sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0).forEach(e => {
       const w = winById(e.win);
       Object.keys(e.v).forEach(k => { if (e.v[k] != null)
-        out.push([e.date, w.label, w.time, e.ts, e.ctx || "", k, ITEM[k] ? ITEM[k].label : k, e.v[k],
+        out.push([e.date, w.label, w.time, e.ts, ctxOf(e).join(";"), k, ITEM[k] ? ITEM[k].label : k, e.v[k],
           ITEM[k] ? ITEM[k].anchor : "", (e.n && e.n[k]) || ""]); });
       // a note with no rating still deserves a row
       if (e.n) Object.keys(e.n).forEach(k => { if (e.v[k] == null && e.n[k])
-        out.push([e.date, w.label, w.time, e.ts, e.ctx || "", k, ITEM[k] ? ITEM[k].label : k, "",
+        out.push([e.date, w.label, w.time, e.ts, ctxOf(e).join(";"), k, ITEM[k] ? ITEM[k].label : k, "",
           ITEM[k] ? ITEM[k].anchor : "", e.n[k]]); });
     });
     return toCSV(["date", "checkin", "scheduled_time", "logged_at", "context", "item_key", "item", "value",
@@ -5940,7 +5968,7 @@ function buildExport(kind) {
   const out = [];
   ENTRIES.forEach(e => {
     const w = winById(e.win);
-    if (e.ctx && CTXBY[e.ctx]) out.push([e.date, w.label, "context", CTXBY[e.ctx].label]);
+    if (ctxOf(e).length) out.push([e.date, w.label, "context", ctxLabels(e).join(", ")]);
     (e.tags || []).forEach(t => out.push([e.date, w.label, "tag", t]));
     (e.warns || []).forEach(t => out.push([e.date, w.label, "warning_sign", t]));
   });
@@ -6152,8 +6180,8 @@ function printWorkReport() {
   }).filter(Boolean).sort((x, y) => Math.abs(y.d) - Math.abs(x.d));
 
   // ---- individual check-ins
-  const wEnt = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && CTXBY[e.ctx].work);
-  const oEnt = ENTRIES.filter(e => e.ctx && CTXBY[e.ctx] && !CTXBY[e.ctx].work);
+  const wEnt = ENTRIES.filter(e => ctxAny(e, "work"));
+  const oEnt = ENTRIES.filter(e => ctxOf(e).length && !ctxAny(e, "work"));
   const ciRows = keys.map(k => {
     const a = mean(wEnt, k, e => e.v[k]), c = mean(oEnt, k, e => e.v[k]);
     if (a == null || c == null) return null;
@@ -6162,7 +6190,7 @@ function printWorkReport() {
 
   // ---- each context on its own
   const ctxRows = CTX.map(cx => {
-    const set = ENTRIES.filter(e => e.ctx === cx.id);
+    const set = ENTRIES.filter(e => ctxOf(e).indexOf(cx.id) > -1);
     if (set.length < 3) return null;
     return { label: cx.label, n: set.length, work: cx.work,
       vals: keys.map(k => mean(set, k, e => e.v[k])) };
@@ -6225,7 +6253,12 @@ function printWorkReport() {
             keys.map((k, i) => "<tr><td>" + esc2(label(k)) + "</td>" +
               ctxRows.map(c => '<td class="m">' + f1(c.vals[i]) + "</td>").join("") + "</tr>").join("") +
             '<tr><td class="sm">check-ins</td>' +
-            ctxRows.map(c => '<td class="sm">' + c.n + "</td>").join("") + "</tr></table>"
+            ctxRows.map(c => '<td class="sm">' + c.n + "</td>").join("") + "</tr></table>" +
+            (ENTRIES.some(e => ctxOf(e).length > 1)
+              ? '<div class="sm">Where you were is recorded as every place that applied, so a ' +
+                "check-in that took in more than one appears under each. The columns overlap and " +
+                "do not sum to the total.</div>"
+              : "")
           : "") +
 
         ((spOn.length || spOff.length)
@@ -6626,7 +6659,7 @@ function printSummary() {
     on.map(i => "<th>" + esc2(i.label.slice(0, 6)) + "</th>").join("") +
     "<th>Notes</th></tr>" +
     rows.slice().reverse().slice(0, 60).map(r => "<tr><td>" + r.date + "</td><td>" +
-      (r.ctx && CTXBY[r.ctx] ? esc2(CTXBY[r.ctx].label.slice(0, 8)) : "") + '</td><td class="m">' +
+      esc2(ctxLabels(r).map(l => l.slice(0, 8)).join(", ")) + '</td><td class="m">' +
       (r.sleep ? r.sleep.hours.toFixed(1) : "\u2014") + "</td>" +
       on.map(i => '<td class="m">' + (r.v[i.key] == null ? "\u2014" : r.v[i.key].toFixed(1)) + "</td>").join("") +
       '<td class="sm">' + esc2(r.warns.concat(r.tags).join(", ")) + "</td></tr>").join("") + "</table>" +
@@ -7357,14 +7390,15 @@ function mergeEntries(remote) {
    check-in that day has it, the rest of that day adopts it. */
 function applyDayCtx() {
   const byDate = {};
-  ENTRIES.forEach(e => { if (e.ctx) {
+  ENTRIES.forEach(e => { if (ctxOf(e).length) {
     const cur = byDate[e.date];
-    if (!cur || (e.ts || "") > cur.ts) byDate[e.date] = { ctx: e.ctx, ts: e.ts || "" };
+    if (!cur || (e.ts || "") > cur.ts) byDate[e.date] = { ctx: ctxOf(e), ts: e.ts || "" };
   } });
   // the last check-in of the day is the one most likely to be somewhere else,
   // so it has to be answered rather than assumed
   ENTRIES.forEach(e => {
-    if (!e.ctx && byDate[e.date] && e.win !== lastWinId()) e.ctx = byDate[e.date].ctx;
+    if (!ctxOf(e).length && byDate[e.date] && e.win !== lastWinId())
+      e.ctx = byDate[e.date].ctx.slice();
   });
 }
 function mergeSpikes(remote) {
@@ -8373,7 +8407,7 @@ function draftTouched() {
   if (draft.medoff && draft.medoff.st) return true;
   if (draft.screen) return true;
   if (draft.meds && Object.keys(draft.meds.taken || {}).length) return true;
-  if (draft.ctx) return true;
+  if (ctxOf(draft).length) return true;
   if (draft.gold && ((draft.gold.what || "").trim() || draft.gold.none ||
       (draft.gold.str || []).length)) return true;
   return false;
@@ -8521,7 +8555,7 @@ function commit(skip, reason) {
     const anyNote = Object.keys(draft.n).some(k => draft.n[k] && draft.n[k].trim());
     const anyPain = draft.pain.sites.length || draft.pain.kinds.length;
     const anyNap = draft.nap && draft.nap.on;
-    const anyCtx = !!draft.ctx;
+    const anyCtx = ctxOf(draft).length > 0;
     const anyMedOff = draft.medoff && !!draft.medoff.st;
     const anyPeriod = !!draft.period;
     const anyScreen = !!draft.screen;
@@ -8957,15 +8991,17 @@ function init() {
     if (sv) { downloadSVG(sv.dataset.svg, sv.dataset.nm); return; }
     const cx = ev.target.closest("[data-ctx]");
     if (cx) {
-      draft.ctx = draft.ctx === cx.dataset.ctx ? "" : cx.dataset.ctx;
+      const id = cx.dataset.ctx, at = draft.ctx.indexOf(id);
+      at > -1 ? draft.ctx.splice(at, 1) : draft.ctx.push(id);
+      draft.ctx = ctxOf(draft);
       $$("#ctxChips .chip").forEach(c =>
-        c.setAttribute("aria-pressed", c.dataset.ctx === draft.ctx ? "true" : "false"));
+        c.setAttribute("aria-pressed", draft.ctx.indexOf(c.dataset.ctx) > -1 ? "true" : "false"));
       // it describes the day, so bring the day's other check-ins along
       let touched = false;
       ENTRIES.forEach(e => {
         if (e.date !== draft.date || e.win === draft.win) return;
-        if (e.ctx === draft.ctx) return;
-        e.ctx = draft.ctx; e.ts = new Date().toISOString();
+        if (ctxSame(e, draft)) return;
+        e.ctx = draft.ctx.slice(); e.ts = new Date().toISOString();
         STATE.dirty = STATE.dirty || {}; STATE.dirty[e.date + "_" + e.win] = 1;
         touched = true;
       });
