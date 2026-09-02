@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:84-->
+<!DOCTYPE html><!--build:85-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -932,10 +932,15 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div class="card" id="themeCard">
       <h2>What you keep writing</h2>
-      <p class="sub">Every note you've typed, gathered up, with the words that keep coming back.
+      <p class="sub">Everything you've typed, gathered up, with the words that keep coming back.
         This counts &mdash; it doesn't interpret. A term has to turn up across separate days to
         appear at all, and the only judgement offered is what mood averaged on the days you used it.
         Leads to look at, not conclusions.</p>
+      <p class="sub" style="margin-bottom:8px">Pick what it reads. One at a time answers a narrow
+        question well &mdash; what your bad days keep being about, or what your good ones do.
+        All of them together answers a broader one, and blurs both.</p>
+      <div class="chips" id="themeSrcPick"></div>
+      <div class="mini" id="themeSrcNote" style="margin:7px 0 11px"></div>
       <div class="row" style="gap:8px;margin-bottom:11px">
         <label class="fld" style="flex:1 1 150px"><span>Look back over</span>
           <select id="themeWin">
@@ -1687,6 +1692,23 @@ const CTX = [
   { id:"away",   label:"Away",              work:false }
 ];
 const CTXBY = {}; CTX.forEach(c => CTXBY[c.id] = c);
+
+/* Everything typed into this app, by where it was typed. The word-counting used
+   to run over the whole lot at once, which meant the explanation of a bad day and
+   the record of a good one were averaged into the same list. Kept apart, each
+   answers a different question — and the wins answer the one worth asking. */
+const THEME_SRC = [
+  { id:"dev",   label:"Outlier explanations", hint:"what you wrote when a core rating was a long way out" },
+  { id:"note",  label:"Other notes",          hint:"everything else typed into a check-in" },
+  { id:"spike", label:"Spikes",               hint:"what you wrote when you logged a spike" },
+  { id:"win",   label:"Wins",                 hint:"what went well" },
+  { id:"str",   label:"Strength tags",        hint:"what those wins took" }
+];
+const THEME_SRC_IDS = THEME_SRC.map(x => x.id);
+const themeSrcList = () => {
+  const l = (CFG.themeSrc || []).filter(id => THEME_SRC_IDS.indexOf(id) > -1);
+  return l.length ? l : THEME_SRC_IDS.slice();
+};
 /* Where you were used to be one answer. A day that starts at work, takes in a
    doctor's appointment and ends on the land is three, and forcing it into one
    threw away the two that might explain the reading. Entries saved before this
@@ -1722,7 +1744,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 84;
+const BUILD = 85;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1754,6 +1776,7 @@ const DEFAULT_CFG = {
   winWins: null,              // which check-ins ask on an ordinary day (set on first load)
   winWinsAlt: null,           // …and on the alternate schedule
   winDownAsk: true,           // ask anyway when mood, anxiety or confidence are down
+  themeSrc: null,             // which kinds of writing feed "what you keep writing"
   strengths: null,            // set from STRENGTHS on first load; editable after
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
@@ -1803,7 +1826,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winDownAsk", "strengths", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winDownAsk", "strengths", "themeSrc", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1976,6 +1999,9 @@ async function load() {
   if (typeof CFG.winAsk !== "boolean") CFG.winAsk = true;
   if (typeof CFG.winRequire !== "boolean") CFG.winRequire = true;
   if (typeof CFG.winDownAsk !== "boolean") CFG.winDownAsk = true;
+  if (!Array.isArray(CFG.themeSrc)) CFG.themeSrc = THEME_SRC_IDS.slice();
+  CFG.themeSrc = CFG.themeSrc.filter(id => THEME_SRC_IDS.indexOf(id) > -1);
+  if (!CFG.themeSrc.length) CFG.themeSrc = THEME_SRC_IDS.slice();
   // Asking four times a day turns the question into paperwork, and paperwork
   // gets thin answers. Default to the end of the day, when there is something to
   // look back on: the last two check-ins of a working day, the last one of a day off.
@@ -4090,30 +4116,49 @@ const wordsOf = t => String(t || "").toLowerCase().replace(/[^a-z0-9\s'-]/g, " "
   .split(/\s+/).map(w => w.replace(/^['-]+|['-]+$/g, "")).filter(Boolean);
 
 /* every piece of prose you have typed, with where it came from */
-function noteCorpus(days) {
+/* `srcs` picks which kinds of writing to gather; omit it for all of them. */
+function noteCorpus(days, srcs) {
   const from = days > 0 ? addDays(todayISO(), -(days - 1)) : "0000-00-00";
+  const use = id => !srcs || srcs.indexOf(id) > -1;
   const out = [];
   ENTRIES.forEach(e => {
     if (!e.date || e.date < from) return;
     Object.keys(e.n || {}).forEach(k => {
       const t = (e.n[k] || "").trim();
-      if (t) out.push({ date: e.date, win: e.win, key: k,
-        label: (ITEM[k] && ITEM[k].label) || k, text: t, v: e.v ? e.v[k] : null });
+      if (!t) return;
+      // a note against a core rating that was a long way out is the one the app
+      // insisted on, and it reads differently from a passing remark
+      const dev = !!(ITEM[k] && ITEM[k].grp === "core" && deviates(k, e.v ? e.v[k] : null));
+      if (!use(dev ? "dev" : "note")) return;
+      out.push({ date: e.date, win: e.win, key: k, src: dev ? "dev" : "note",
+        label: ((ITEM[k] && ITEM[k].label) || k) + (dev ? " \u00b7 a long way out" : ""),
+        text: t, v: e.v ? e.v[k] : null });
     });
     const g = (e.note || "").trim();
-    if (g) out.push({ date: e.date, win: e.win, key: "", label: "Check-in note", text: g, v: null });
+    if (g && use("note")) out.push({ date: e.date, win: e.win, key: "", src: "note",
+      label: "Check-in note", text: g, v: null });
   });
-  (STATE.spikes || []).forEach(x => {
+  if (use("spike")) (STATE.spikes || []).forEach(x => {
     const t = ((x && x.note) || "").trim();
     if (!t || !x.date || x.date < from) return;
-    out.push({ date: x.date, win: "", key: "", label: x.medName ? "Took " + x.medName : "Spike",
-      text: t, v: null, spike: true });
+    out.push({ date: x.date, win: "", key: "", src: "spike",
+      label: x.medName ? "Took " + x.medName : "Spike", text: t, v: null, spike: true });
+  });
+  (STATE.stars || []).forEach(x => {
+    if (!x || !x.date || x.date < from) return;
+    const t = (x.what || "").trim();
+    if (t && use("win")) out.push({ date: x.date, win: x.win || "", key: "", src: "win",
+      label: "Win", text: t, v: null });
+    if (use("str")) (x.kinds || []).forEach(k => out.push({ date: x.date, win: x.win || "",
+      key: "", src: "str", label: "Strength", text: k, v: null }));
   });
   // the same words typed at two check-ins on one day are one thought, not two —
-  // counting both inflates the tally and repeats the quote back at you
+  // counting both inflates the tally and repeats the quote back at you. Kept per
+  // source, so the one explanation written against three ratings collapses to one
+  // without a win that happens to use the same words swallowing it.
   const seen = {}, uniq = [];
   out.forEach(n => {
-    const k = n.date + "|" + n.text.toLowerCase().replace(/\s+/g, " ").trim();
+    const k = n.src + "|" + n.date + "|" + n.text.toLowerCase().replace(/\s+/g, " ").trim();
     if (seen[k]) return;
     seen[k] = 1; uniq.push(n);
   });
@@ -4803,13 +4848,27 @@ function renderThemes() {
   $$("#themeMode button").forEach(b =>
     b.setAttribute("aria-pressed", b.dataset.thmode === themeMode ? "true" : "false"));
 
-  const corpus = noteCorpus(themeWin);
+  const srcs = themeSrcList();
+  $("#themeSrcPick").innerHTML = THEME_SRC.map(x =>
+    '<button class="chip" data-thsrc="' + x.id + '" aria-pressed="' +
+    (srcs.indexOf(x.id) > -1 ? "true" : "false") + '">' + esc(x.label) + "</button>").join("") +
+    '<button class="chip" data-thsrc="__all" aria-pressed="' +
+    (srcs.length === THEME_SRC.length ? "true" : "false") + '">All of it</button>';
+  $("#themeSrcNote").innerHTML = "Reading " +
+    esc(THEME_SRC.filter(x => srcs.indexOf(x.id) > -1).map(x => x.hint).join(", ")) + "." +
+    (srcs.indexOf("str") > -1 && srcs.length > 1
+      ? " Strength tags come off a fixed list, so they repeat far more readily than anything you " +
+        "type \u2014 expect them near the top, and read them next to the free text rather than against it."
+      : "");
+
+  const corpus = noteCorpus(themeWin, srcs);
   const span = themeWin > 0 ? "the last " + themeWin + " days" : "everything logged";
   const dayN = Object.keys(corpus.reduce((a, n) => { a[n.date] = 1; return a; }, {})).length;
 
   if (!corpus.length) {
-    $("#themeSum").innerHTML = "Nothing typed in " + span + ". The note boxes under each rating are " +
-      "where this comes from \u2014 they're what turns a 3 into something you can still read in a year.";
+    $("#themeSum").innerHTML = "Nothing from " +
+      THEME_SRC.filter(x => srcs.indexOf(x.id) > -1).map(x => x.label.toLowerCase()).join(" or ") +
+      " in " + span + ". Widen the window, or turn on another source above.";
     $("#themeList").innerHTML = "";
     return;
   }
@@ -6490,7 +6549,8 @@ function printSummary() {
   });
 
   const winSt = winStats(90);
-  const corpus90 = noteCorpus(90);
+  const thSrc = themeSrcList();
+  const corpus90 = noteCorpus(90, thSrc);
   const themes90 = corpus90.length ? themesFrom(corpus90, 90).slice(0, 12) : [];
 
   const mo = rows.filter(r => r.medoff && r.medoff.mins != null);
@@ -6638,9 +6698,15 @@ function printSummary() {
     (themes90.length
       ? "<h2>Recurring in their own words</h2>" +
         '<div class="sm" style="margin-bottom:6px">From <b>' + corpus90.length +
-        "</b> free-text notes over 90 days. A term appears only if it came back on separate days. " +
+        "</b> entries over 90 days, drawn from " +
+        esc2(THEME_SRC.filter(x => thSrc.indexOf(x.id) > -1).map(x => x.hint).join(", ")) +
+        ". A term appears only if it came back on separate days. " +
         "The mood column is the average on days the term was used against the average on the rest " +
-        "\u2014 association, not cause.</div>" +
+        "\u2014 association, not cause." +
+        (thSrc.indexOf("str") > -1
+          ? " Strength tags are chosen from a fixed list rather than written, so they repeat more " +
+            "readily than free text and rank accordingly."
+          : "") + "</div>" +
         "<table><tr><th>Term</th><th>Days</th><th>Mood on those days</th></tr>" +
         themes90.map(t => "<tr><td>" + esc2(t.label) + '</td><td class="m">' + t.days + "</td>" +
           '<td class="m">' + (t.delta == null ? "\u2014"
@@ -8978,6 +9044,21 @@ function init() {
       if (["digest", "coverAudit", "corrSame"].indexOf(id) > -1) setDeep(true);
       setTimeout(() => { const c = document.getElementById(id);
         if (c && c.scrollIntoView) c.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60);
+      return;
+    }
+    const ths = ev.target.closest("[data-thsrc]");
+    if (ths) {
+      const id = ths.dataset.thsrc;
+      const cur = themeSrcList();
+      if (id === "__all") CFG.themeSrc = THEME_SRC_IDS.slice();
+      else if (cur.indexOf(id) > -1) {
+        // one has to stay on, or the card is being asked to count nothing
+        if (cur.length === 1) { toast("Leave at least one on", true); return; }
+        CFG.themeSrc = cur.filter(x => x !== id);
+      } else CFG.themeSrc = THEME_SRC_IDS.filter(x => cur.indexOf(x) > -1 || x === id);
+      themeOpen = "";
+      touchCfg().then(() => { renderThemes();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return;
     }
     const thm = ev.target.closest("[data-thmode]");
