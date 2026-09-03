@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:85-->
+<!DOCTYPE html><!--build:86-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -76,6 +76,15 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .spikebtn:hover{background:#332618}
 .goldcard{border-color:#4a3f1e}
 .needcard{border-color:var(--warn)}
+.jrow{padding:10px 0;border-bottom:1px solid var(--line)}
+.jrow:last-child{border-bottom:0}
+.jrow .jh{display:flex;gap:9px;align-items:baseline;margin-bottom:4px}
+.jrow .jwhen{font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:1}
+.jrow .jtxt{font-size:14px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;
+  color:var(--ink-2);cursor:text}
+.jrow .jtxt mark{background:#2a2415;color:#e0c453}
+.jdel{background:none;border:0;color:var(--ink-3);font-size:17px;line-height:1;padding:0 4px;cursor:pointer}
+.jdel:hover{color:var(--warn)}
 .sbar{padding:9px 0;border-bottom:1px solid var(--line)}
 .sbar:last-child{border-bottom:0}
 .sbar .h{display:flex;gap:9px;align-items:baseline}
@@ -349,10 +358,11 @@ body.dash .qtabs{display:none}
 .chip.ctx.ap[aria-pressed="true"]{background:#2b2119;border-color:var(--warn);color:var(--warn)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .row>*{min-width:0}
-label.fld{display:block;flex:1 1 130px}
+label.fld{display:block;flex:1 1 130px;min-width:0}
+input[type=search]{-webkit-appearance:none;appearance:none}
 label.fld>span{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.16em;
   text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
-input[type=text],input[type=password],input[type=time],input[type=date],input[type=number],select,textarea{
+input[type=text],input[type=search],input[type=password],input[type=time],input[type=date],input[type=number],select,textarea{
   width:100%;background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;padding:9px 10px;
   font-size:15px;color:var(--ink);appearance:none}
 input[type=password]{letter-spacing:.18em;font-family:var(--mono);-webkit-text-security:disc}
@@ -790,6 +800,20 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     </div>
     <div class="mini" style="text-align:center;margin-top:12px">Sliders you don't touch are saved as blank, not as 5.</div>
 
+    <div class="eyebrow">Journal</div>
+    <div class="card">
+      <p class="sub" style="margin-bottom:10px">Optional, and nothing in here is rated, scored or
+        required. What you&rsquo;re feeling and what&rsquo;s going on, in your own words and at
+        whatever length. Write as often as you like &mdash; it doesn&rsquo;t belong to a check-in.</p>
+      <textarea id="jrnIn" rows="4" style="min-height:104px"
+        placeholder="What it&rsquo;s like right now, and what&rsquo;s going on."></textarea>
+      <div class="row" style="gap:8px;margin-top:9px;align-items:center">
+        <button class="btn sm pri" id="jrnAdd">Save entry</button>
+        <span class="mini" id="jrnHint" style="flex:1 1 140px"></span>
+      </div>
+      <div id="jrnRecent" style="margin-top:12px"></div>
+    </div>
+
     <div class="eyebrow">Suggestions</div>
     <div class="card">
       <p class="sub" style="margin-bottom:11px">Anything that annoyed you just now, while it's fresh.
@@ -928,6 +952,26 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         because a 6 out of 10 day with one genuinely good hour in it is not the same as a flat 6,
         and only one of those is worth reading back on a bad day.</p>
       <div id="starList"></div>
+    </div>
+
+    <div class="card" id="jrnCard">
+      <h2>Journal</h2>
+      <p class="sub">Everything you&rsquo;ve written, newest first. Tap an entry to edit it.
+        This is the one part of the app that isn&rsquo;t trying to measure anything.</p>
+      <div class="row" style="gap:8px;margin-bottom:11px">
+        <label class="fld" style="flex:1 1 150px"><span>Find</span>
+          <input type="search" id="jrnFind" placeholder="A word or a phrase"></label>
+        <label class="fld" style="flex:1 1 140px"><span>Look back over</span>
+          <select id="jrnRange">
+            <option value="7">The last 7 days</option>
+            <option value="30">The last 30 days</option>
+            <option value="90">The last 90 days</option>
+            <option value="180">The last 6 months</option>
+            <option value="0" selected>Everything</option>
+          </select></label>
+      </div>
+      <div id="jrnSum" class="statnote"></div>
+      <div id="jrnList"></div>
     </div>
 
     <div class="card" id="themeCard">
@@ -1326,6 +1370,15 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           one, so this never blocks a check-in on a day you can&rsquo;t find a win. Skipping the
           check-in entirely still works.</div></div>
         <button class="tog" id="togWinReq" aria-pressed="true"></button></div>
+      <div class="eyebrow" style="margin-top:16px">Journal</div>
+      <p class="sub">The journal box at the bottom of the Log tab. It is never required and never
+        rated. It is also the most personal thing in here, so it stays out of the doctor export
+        unless you say otherwise &mdash; the export is yours to hand over, and this decides what
+        is in it before you do.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Include the journal in the doctor export</div>
+        <div class="d" id="jrnExpHint"></div></div>
+        <button class="tog" id="togJrnExport" aria-pressed="false"></button></div>
+
       <div class="eyebrow" style="margin-top:16px">Strengths</div>
       <p class="sub">What a win took from you. These are what the report counts, so it can tell you
         what you are repeatedly good at rather than just listing good days back at you. Edit one by
@@ -1627,6 +1680,11 @@ const Store = (() => {
   };
 })();
 const K_ENT = "baseline:entries", K_CFG = "baseline:config", K_STATE = "baseline:state";
+/* A half-written journal entry, kept on this device only. It is not finished
+   writing yet, so it has no business travelling to another device or into a
+   backup — but losing it because a check-in reminder stole the screen would be
+   the fastest way to stop anyone writing a second one. */
+const K_JDRAFT = "baseline:jrndraft";
 
 /* ---------- item catalog ----------
    anchor: "center" = 5 is baseline, fill runs outward from the middle.
@@ -1702,7 +1760,8 @@ const THEME_SRC = [
   { id:"note",  label:"Other notes",          hint:"everything else typed into a check-in" },
   { id:"spike", label:"Spikes",               hint:"what you wrote when you logged a spike" },
   { id:"win",   label:"Wins",                 hint:"what went well" },
-  { id:"str",   label:"Strength tags",        hint:"what those wins took" }
+  { id:"str",   label:"Strength tags",        hint:"what those wins took" },
+  { id:"jrn",   label:"Journal",              hint:"what you wrote in the journal" }
 ];
 const THEME_SRC_IDS = THEME_SRC.map(x => x.id);
 const themeSrcList = () => {
@@ -1744,7 +1803,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 85;
+const BUILD = 86;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1777,6 +1836,7 @@ const DEFAULT_CFG = {
   winWinsAlt: null,           // …and on the alternate schedule
   winDownAsk: true,           // ask anyway when mood, anxiety or confidence are down
   themeSrc: null,             // which kinds of writing feed "what you keep writing"
+  jrnExport: false,           // keep the journal out of the doctor export unless asked
   strengths: null,            // set from STRENGTHS on first load; editable after
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
@@ -1826,7 +1886,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winDownAsk", "strengths", "themeSrc", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winDownAsk", "strengths", "themeSrc", "jrnExport", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1999,6 +2059,7 @@ async function load() {
   if (typeof CFG.winAsk !== "boolean") CFG.winAsk = true;
   if (typeof CFG.winRequire !== "boolean") CFG.winRequire = true;
   if (typeof CFG.winDownAsk !== "boolean") CFG.winDownAsk = true;
+  if (typeof CFG.jrnExport !== "boolean") CFG.jrnExport = false;
   if (!Array.isArray(CFG.themeSrc)) CFG.themeSrc = THEME_SRC_IDS.slice();
   CFG.themeSrc = CFG.themeSrc.filter(id => THEME_SRC_IDS.indexOf(id) > -1);
   if (!CFG.themeSrc.length) CFG.themeSrc = THEME_SRC_IDS.slice();
@@ -2054,6 +2115,7 @@ async function load() {
   if (!Array.isArray(STATE.suggestions)) STATE.suggestions = [];
   if (!Array.isArray(STATE.spikes)) STATE.spikes = [];
   if (!Array.isArray(STATE.stars)) STATE.stars = [];
+  if (!Array.isArray(STATE.journal)) STATE.journal = [];
   // ids of things deliberately removed, so a sync can't resurrect them
   if (!STATE.gone || typeof STATE.gone !== "object") STATE.gone = {};
   if (!Array.isArray(STATE.flagLog)) STATE.flagLog = [];      // what was raised, and when
@@ -4152,6 +4214,11 @@ function noteCorpus(days, srcs) {
     if (use("str")) (x.kinds || []).forEach(k => out.push({ date: x.date, win: x.win || "",
       key: "", src: "str", label: "Strength", text: k, v: null }));
   });
+  if (use("jrn")) (STATE.journal || []).forEach(x => {
+    const t = ((x && x.text) || "").trim();
+    if (!t || !x.date || x.date < from) return;
+    out.push({ date: x.date, win: "", key: "", src: "jrn", label: "Journal", text: t, v: null });
+  });
   // the same words typed at two check-ins on one day are one thought, not two —
   // counting both inflates the tally and repeats the quote back at you. Kept per
   // source, so the one explanation written against three ratings collapses to one
@@ -4811,6 +4878,104 @@ function renderStrengthReport() {
       : "");
 }
 
+/* ---------- journal ---------- */
+let jrnFind = "", jrnRange = 0, jrnEdit = "";
+
+function jrnMatches(days, q) {
+  const from = days > 0 ? addDays(todayISO(), -(days - 1)) : "0000-00-00";
+  const needle = String(q || "").trim().toLowerCase();
+  return (STATE.journal || [])
+    .filter(x => x && x.date >= from && (x.text || "").trim())
+    .filter(x => !needle || (x.text || "").toLowerCase().indexOf(needle) > -1)
+    .sort((a, b) => (a.date + (a.at || "")) < (b.date + (b.at || "")) ? 1 : -1);
+}
+function jrnHi(text, q) {
+  const needle = String(q || "").trim();
+  if (!needle) return esc(text);
+  const i = text.toLowerCase().indexOf(needle.toLowerCase());
+  if (i < 0) return esc(text);
+  return esc(text.slice(0, i)) + "<mark>" + esc(text.slice(i, i + needle.length)) +
+    "</mark>" + esc(text.slice(i + needle.length));
+}
+
+async function jrnSave() {
+  const box = $("#jrnIn"), t = (box.value || "").trim();
+  if (!t) { box.focus(); toast("Nothing written yet", true); return; }
+  const now = new Date();
+  STATE.journal = (STATE.journal || []).concat([{
+    id: "jr" + Date.now().toString(36), date: todayISO(),
+    at: pad(now.getHours()) + ":" + pad(now.getMinutes()),
+    ts: now.toISOString(), text: t }]);
+  box.value = "";
+  await Store.set(K_JDRAFT, "");
+  await saveState();
+  renderJournal();
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  toast("Saved to your journal");
+}
+
+/* The short list under the box on the Log tab. */
+function renderJournalRecent() {
+  const el = $("#jrnRecent"); if (!el) return;
+  const l = jrnMatches(0, "").slice(0, 3);
+  const n = (STATE.journal || []).length;
+  $("#jrnHint").textContent = n
+    ? n + " entr" + (n === 1 ? "y" : "ies") + " so far \u00b7 all of them are on the Patterns tab"
+    : "Nothing here is required. Skip it on the days you don\u2019t want it.";
+  el.innerHTML = l.length
+    ? '<div class="eyebrow" style="margin:4px 0 6px">Recently</div>' +
+      l.map(x => '<div class="jrow"><div class="jh"><span class="jwhen">' +
+        esc(fmtDate(x.date)) + " \u00b7 " + esc(x.at || "") + "</span></div>" +
+        '<div class="jtxt">' + esc((x.text || "").length > 220
+          ? x.text.slice(0, 220).trim() + "\u2026" : x.text) + "</div></div>").join("")
+    : "";
+}
+
+/* The whole thing on the Patterns tab, searchable and editable. */
+function renderJournal() {
+  renderJournalRecent();
+  const el = $("#jrnList"); if (!el) return;
+  if ($("#jrnFind") && document.activeElement !== $("#jrnFind")) $("#jrnFind").value = jrnFind;
+  if ($("#jrnRange")) $("#jrnRange").value = String(jrnRange);
+  const all = (STATE.journal || []).filter(x => x && (x.text || "").trim()).length;
+  const l = jrnMatches(jrnRange, jrnFind);
+  const span = jrnRange > 0 ? "the last " + jrnRange + " days" : "everything";
+
+  if (!all) {
+    $("#jrnSum").innerHTML = "Nothing written yet. The box is at the bottom of the Log tab, " +
+      "and it never asks you for anything.";
+    el.innerHTML = "";
+    return;
+  }
+  const dayN = Object.keys(l.reduce((a, x) => { a[x.date] = 1; return a; }, {})).length;
+  const words = l.reduce((a, x) => a + (x.text || "").trim().split(/\s+/).length, 0);
+  $("#jrnSum").innerHTML = jrnFind.trim()
+    ? "<b>" + l.length + "</b> of <b>" + all + "</b> mention \u201c" + esc(jrnFind.trim()) +
+      "\u201d in " + span + "."
+    : "<b>" + l.length + "</b> entr" + (l.length === 1 ? "y" : "ies") + " across <b>" + dayN +
+      "</b> " + (dayN === 1 ? "day" : "days") + " in " + span + ", <b>" + words + "</b> words." +
+      (CFG.jrnExport ? " Included in the doctor export." : " Kept out of the doctor export.");
+
+  if (!l.length) { el.innerHTML = '<div class="mini">Nothing matches.</div>'; return; }
+  const byDate = {};
+  l.forEach(x => { (byDate[x.date] = byDate[x.date] || []).push(x); });
+  el.innerHTML = Object.keys(byDate).sort().reverse().slice(0, 120).map(d =>
+    '<div class="noteday"><div class="d">' + esc(fmtDate(d)) + " &middot; " + DAYS[dowOf(d)] +
+    " " + d.slice(0, 4) + "</div>" +
+    byDate[d].map(x => '<div class="jrow">' +
+      '<div class="jh"><span class="jwhen">' + esc(x.at || "") +
+        (x.edited ? " \u00b7 edited" : "") + "</span>" +
+        '<button class="jdel" data-jrndel="' + esc(x.id) + '" aria-label="Remove">&times;</button></div>' +
+      (jrnEdit === x.id
+        ? '<textarea data-jrnta="' + esc(x.id) + '" rows="5" style="min-height:110px">' +
+            esc(x.text) + "</textarea>" +
+          '<div class="row" style="gap:8px;margin-top:8px">' +
+            '<button class="btn sm pri" data-jrnok="' + esc(x.id) + '">Save</button>' +
+            '<button class="btn sm gho" data-jrncx="1">Cancel</button></div>'
+        : '<div class="jtxt" data-jrnopen="' + esc(x.id) + '">' + jrnHi(x.text, jrnFind) + "</div>")
+      + "</div>").join("") + "</div>").join("");
+}
+
 function renderStars() {
   const el = $("#starList"); if (!el) return;
   const l = (STATE.stars || []).slice().sort((a, b) =>
@@ -5044,6 +5209,7 @@ function renderSummary(rows, corr, cut) {
 
 function renderPatterns() {
   renderMissed();
+  renderJournal();
   renderStrengthReport();
   renderStars();
   renderThemes();
@@ -6549,7 +6715,8 @@ function printSummary() {
   });
 
   const winSt = winStats(90);
-  const thSrc = themeSrcList();
+  // the journal is the one thing here that has to be opted in to before it leaves
+  const thSrc = themeSrcList().filter(id => id !== "jrn" || CFG.jrnExport);
   const corpus90 = noteCorpus(90, thSrc);
   const themes90 = corpus90.length ? themesFrom(corpus90, 90).slice(0, 12) : [];
 
@@ -6933,6 +7100,10 @@ function renderCfg() {
         ? "Nothing scheduled \u2014 it will only appear on a down day."
         : "Nothing scheduled and down days off, so it never appears.")
     : nWd + " on an ordinary day" + (CFG.weekend ? ", " + nAlt + " on the second schedule" : "") + ".";
+  $("#togJrnExport").setAttribute("aria-pressed", CFG.jrnExport ? "true" : "false");
+  $("#jrnExpHint").textContent = CFG.jrnExport
+    ? "Your journal words count toward the recurring-terms table in the export."
+    : "Held back. Everything else in the export is unaffected.";
   renderStrengths();
   $("#togNeedNote").setAttribute("aria-pressed", CFG.needNote ? "true" : "false");
   $("#needNoteSel").value = String(CFG.needNoteAt || 3);
@@ -7493,6 +7664,19 @@ function mergeStars(remote) {
   STATE.stars = Object.keys(by).map(k => by[k])
     .sort((a, b) => (a.date + a.at) < (b.date + b.at) ? -1 : 1);
 }
+function mergeJournal(remote) {
+  const gone = STATE.gone || {};
+  const by = {};
+  (STATE.journal || []).forEach(x => { if (x && x.id && !gone[x.id]) by[x.id] = x; });
+  (remote || []).forEach(x => {
+    if (!x || !x.id || gone[x.id]) return;
+    // an entry can be edited after the fact, so the same id can arrive changed
+    if (!by[x.id]) by[x.id] = x;
+    else if (x.ts && by[x.id].ts && x.ts > by[x.id].ts) by[x.id] = x;
+  });
+  STATE.journal = Object.keys(by).map(k => by[k])
+    .sort((a, b) => (a.date + (a.at || "")) < (b.date + (b.at || "")) ? -1 : 1);
+}
 function mergeSuggestions(remote) {
   const gone = STATE.gone || {};
   const before = (STATE.suggestions || []).length;
@@ -7533,7 +7717,8 @@ async function cloudSync(quiet) {
         mergeSuggestions(o.state.suggestions);
         mergeSpikes(o.state.spikes);
         mergeStars(o.state.stars);
-        renderSug(); renderSpikeCount(); renderStarCount();      // or they sit in storage unseen until a reload
+        mergeJournal(o.state.journal);
+        renderSug(); renderSpikeCount(); renderStarCount(); renderJournal();
       }
       // a real entry always beats a skip for the same slot
       Object.keys(STATE.skipped).forEach(k => {
@@ -8387,8 +8572,9 @@ async function fbSync(quiet) {
       mergeSuggestions(Object.keys(st.suggestions || {}).map(k => st.suggestions[k]));
       mergeSpikes(Object.keys(st.spikes || {}).map(k => st.spikes[k]));
       mergeStars(Object.keys(st.stars || {}).map(k => st.stars[k]));
+      mergeJournal(Object.keys(st.journal || {}).map(k => st.journal[k]));
       await saveState();                      // the pull is worth keeping even if no entries moved
-      renderSug(); renderSpikeCount(); renderStarCount();
+      renderSug(); renderSpikeCount(); renderStarCount(); renderJournal();
     }
     Object.keys(STATE.skipped).forEach(k => {
       const p = k.split("|");
@@ -8417,6 +8603,7 @@ async function fbSync(quiet) {
       body: JSON.stringify({ skipped: skipOut, suggestions: sugOut, gone: STATE.gone || {},
         spikes: (STATE.spikes || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
         stars: (STATE.stars || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
+        journal: (STATE.journal || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
         meta: { at: new Date().toISOString(), build: BUILD, device: CFG.cloud.uid || "?" } })
     });
     await fetch(fbPath(tok, "/settings"), {
@@ -8483,7 +8670,7 @@ function draftTouched() {
    being looked at rather than assuming it's the Log. */
 function afterPull() {
   try {
-    refreshDue(); refreshConn(); renderSpikeCount(); renderStarCount(); renderSug();
+    refreshDue(); refreshConn(); renderSpikeCount(); renderStarCount(); renderSug(); renderJournal();
     const d = ($("#eDate") && $("#eDate").value) || todayISO();
     fillWinSelect(d);
     // Rebuilding the draft throws away anything half-entered. A sync that fires
@@ -8767,6 +8954,11 @@ function init() {
     if (!now.length) clearNotifs();
   });
   scheduleNotifs();
+  // whatever was being written when the tab was last closed
+  Store.get(K_JDRAFT).then(t => {
+    if (t && $("#jrnIn") && !$("#jrnIn").value) $("#jrnIn").value = t;
+  }).catch(() => {});
+  renderJournal();
 
   $$("nav button").forEach(b => b.onclick = () => show(b.dataset.v));
 
@@ -8830,6 +9022,18 @@ function init() {
   $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value });
     fillFromTimes(); };
   $("#eNote").oninput  = () => { draft.note = $("#eNote").value; };
+  $("#jrnAdd").onclick = () => jrnSave();
+  $("#jrnIn").addEventListener("input", () => {
+    clearTimeout(window.__jdT);
+    window.__jdT = setTimeout(() => Store.set(K_JDRAFT, $("#jrnIn").value || ""), 500);
+  });
+  $("#jrnFind").addEventListener("input", () => {
+    jrnFind = $("#jrnFind").value; jrnEdit = "";
+    clearTimeout(window.__jfT);
+    window.__jfT = setTimeout(renderJournal, 180);
+  });
+  $("#jrnRange").onchange = () => { jrnRange = +$("#jrnRange").value; jrnEdit = ""; renderJournal(); };
+
   $("#allNote").oninput = () => {
     const v = $("#allNote").value;
     needyKeys().forEach(k => {
@@ -9058,6 +9262,41 @@ function init() {
       } else CFG.themeSrc = THEME_SRC_IDS.filter(x => cur.indexOf(x) > -1 || x === id);
       themeOpen = "";
       touchCfg().then(() => { renderThemes();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
+    const jop = ev.target.closest("[data-jrnopen]");
+    if (jop) { jrnEdit = jop.dataset.jrnopen; renderJournal();
+      setTimeout(() => { const t = document.querySelector('[data-jrnta="' + jrnEdit + '"]');
+        if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }, 40);
+      return; }
+    if (ev.target.closest("[data-jrncx]")) { jrnEdit = ""; renderJournal(); return; }
+    const jok = ev.target.closest("[data-jrnok]");
+    if (jok) {
+      const id = jok.dataset.jrnok;
+      const ta = document.querySelector('[data-jrnta="' + id + '"]');
+      const t = ((ta && ta.value) || "").trim();
+      const e = (STATE.journal || []).find(x => x.id === id);
+      if (e) {
+        if (!t) { toast("An empty entry would just be a deletion \u2014 use the \u00d7", true); return; }
+        e.text = t; e.ts = new Date().toISOString(); e.edited = true;
+      }
+      jrnEdit = "";
+      saveState().then(() => { renderJournal();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
+    const jdl = ev.target.closest("[data-jrndel]");
+    if (jdl) {
+      const id = jdl.dataset.jrndel;
+      const e = (STATE.journal || []).find(x => x.id === id);
+      const head = e ? (e.text || "").trim().slice(0, 60) : "";
+      if (!confirm("Delete this journal entry?\n\n\u201c" + head +
+        (head.length >= 60 ? "\u2026" : "") + "\u201d\n\nIt can't be brought back.")) return;
+      STATE.journal = (STATE.journal || []).filter(x => x.id !== id);
+      STATE.gone = STATE.gone || {}; STATE.gone[id] = Date.now();
+      jrnEdit = "";
+      saveState().then(() => { renderJournal();
         if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return;
     }
@@ -9326,6 +9565,8 @@ function init() {
     touchCfg(); renderCfg(); renderLog(); };
   $("#togWinAsk").onclick = () => { CFG.winAsk = CFG.winAsk === false;
     touchCfg(); renderCfg(); renderLog(); };
+  $("#togJrnExport").onclick = () => { CFG.jrnExport = !CFG.jrnExport;
+    touchCfg(); renderCfg(); renderJournal(); };
   $("#togWinDown").onclick = () => { CFG.winDownAsk = CFG.winDownAsk === false;
     touchCfg(); renderCfg(); renderLog(); };
   $("#togWinReq").onclick = () => {
