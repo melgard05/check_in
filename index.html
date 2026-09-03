@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:86-->
+<!DOCTYPE html><!--build:87-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -98,6 +98,11 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .sbar.top .fill{background:#c9a227}
 .sbar .ex{font-size:12.5px;color:var(--ink-2);border-left:2px solid var(--line-2);padding:2px 0 2px 9px;
   line-height:1.45}
+.rdrow{padding:9px 0;border-bottom:1px solid var(--line)}
+.rdrow:last-child{border-bottom:0}
+.rdrow .t{font-size:14.5px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.rdrow .t .st{color:#e0c453}
+.rdrow .m{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);letter-spacing:.05em;margin-top:3px}
 .goldcard .chip[aria-pressed="true"]{background:#2a2415;border-color:#c9a227;color:#e0c453}
 #winWhat.need{border-color:var(--warn)}
 .winnone{color:#d9b06a}
@@ -778,6 +783,18 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <textarea id="eNote" placeholder="Anything worth remembering when you look back at this day."></textarea></label>
     </div>
 
+    <div id="readBlock" style="display:none">
+      <div class="eyebrow" id="readEyebrow">Things you did</div>
+      <div class="card goldcard">
+        <p class="sub" style="margin-bottom:12px" id="readSub"></p>
+        <div id="readList"></div>
+        <div class="row" style="margin-top:11px;gap:8px">
+          <button class="btn sm gho" id="readMore">Show me different ones</button>
+        </div>
+        <div class="mini" id="readNote"></div>
+      </div>
+    </div>
+
     <div id="winBlock" style="display:none">
       <div class="eyebrow">Something that went well</div>
       <div class="card goldcard">
@@ -1353,7 +1370,13 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           <div class="d">Best at the end of the day, when there&rsquo;s something to look back on.
             Asking at all four turns it into paperwork, and paperwork gets thin answers.</div></div></div>
         <div class="schedrow" id="winWinPick"></div>
-        <div id="winAltWrap">
+          <div class="sw"><div style="flex:1"><div class="t">Hand back old wins at</div>
+          <div class="d">These check-ins don&rsquo;t ask for a new one &mdash; nothing has happened
+            since the last one but sleep. They show you four you already logged instead, reaching
+            back weeks rather than days. A check-in that reads never asks, not even on a down
+            day.</div></div></div>
+        <div class="schedrow" id="winReadPickRow"></div>
+      <div id="winAltWrap">
           <div class="sw"><div style="flex:1"><div class="t">Ask on the second schedule at</div>
             <div class="d" id="winAltHint"></div></div></div>
           <div class="schedrow" id="winWinAltPick"></div>
@@ -1803,7 +1826,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 86;
+const BUILD = 87;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1834,6 +1857,7 @@ const DEFAULT_CFG = {
   winRequire: true,           // and don't save until the question has an answer
   winWins: null,              // which check-ins ask on an ordinary day (set on first load)
   winWinsAlt: null,           // …and on the alternate schedule
+  winRead: null,              // check-ins that hand back old wins instead of asking for one
   winDownAsk: true,           // ask anyway when mood, anxiety or confidence are down
   themeSrc: null,             // which kinds of writing feed "what you keep writing"
   jrnExport: false,           // keep the journal out of the doctor export unless asked
@@ -1886,7 +1910,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winDownAsk", "strengths", "themeSrc", "jrnExport", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -2074,9 +2098,21 @@ async function load() {
     const alt = CFG.windows.filter(runsAlt);
     CFG.winWinsAlt = alt.slice(-1).map(w => w.id);
   }
+  // Nothing has happened since the last check-in except sleep, so there is
+  // nothing to name. The first check-in of the day reads old wins back instead.
+  if (!Array.isArray(CFG.winRead)) {
+    const wd = CFG.windows.filter(runsWd), alt = CFG.windows.filter(runsAlt);
+    CFG.winRead = [];
+    [wd[0], alt[0]].forEach(w => { if (w && CFG.winRead.indexOf(w.id) < 0) CFG.winRead.push(w.id); });
+  }
   // a window deleted in settings shouldn't leave a ghost behind
   CFG.winWins = CFG.winWins.filter(id => CFG.windows.some(w => w.id === id));
   CFG.winWinsAlt = CFG.winWinsAlt.filter(id => CFG.windows.some(w => w.id === id));
+  CFG.winRead = CFG.winRead.filter(id => CFG.windows.some(w => w.id === id));
+  // a check-in that reads doesn't also ask — one of them has to win, and reading
+  // is the one that was chosen deliberately
+  CFG.winWins = CFG.winWins.filter(id => CFG.winRead.indexOf(id) < 0);
+  CFG.winWinsAlt = CFG.winWinsAlt.filter(id => CFG.winRead.indexOf(id) < 0);
   if (!Array.isArray(CFG.strengths) || !CFG.strengths.length) CFG.strengths = STRENGTHS.slice();
   else if (CFG.strengths.length === STRENGTHS_B80.length &&
            CFG.strengths.every((t, i) => t === STRENGTHS_B80[i])) CFG.strengths = STRENGTHS.slice();
@@ -2577,7 +2613,7 @@ function applyVal(item, v) {
   if (it.grp === "core") { try { renderAllNote(); } catch (e) {} }
   // mood, anxiety and confidence decide whether the win question appears at a
   // check-in that wouldn't otherwise ask, so it has to react as the slider moves
-  if (WIN_WATCH.indexOf(key) > -1) { try { renderWin(); } catch (e) {} }
+  if (WIN_WATCH.indexOf(key) > -1) { try { renderWin(); renderRead(); } catch (e) {} }
   if (key === "rebound") syncCrashBlock();   // show/hide only, no re-render
   if (it.grp === "pain") {
     let pw = item.querySelector(".pw");
@@ -3197,6 +3233,7 @@ function renderLog() {
   $("#eNote").value = draft.note || "";
 
   renderAllNote();
+  renderRead();
   renderWin();
   renderSug();
   renderSpikeCount();
@@ -7094,12 +7131,19 @@ function renderCfg() {
   };
   pick("#winWinPick", CFG.winWins, runsWd);
   pick("#winWinAltPick", CFG.winWinsAlt, runsAlt);
+  $("#winReadPickRow").innerHTML = CFG.windows.map(w =>
+    '<button class="chip sm" data-winread="' + w.id + '" aria-pressed="' +
+    ((CFG.winRead || []).indexOf(w.id) > -1 ? "true" : "false") + '">' + esc(w.label) +
+    "</button>").join("");
   const nWd = (CFG.winWins || []).length, nAlt = (CFG.winWinsAlt || []).length;
-  $("#winWhenNote").textContent = !nWd && !nAlt
+  const nRd = (CFG.winRead || []).length;
+  $("#winWhenNote").textContent = (nRd ? nRd + " hand" + (nRd === 1 ? "s" : "") +
+    " old ones back. " : "") + (!nWd && !nAlt
     ? (CFG.winDownAsk !== false
         ? "Nothing scheduled \u2014 it will only appear on a down day."
         : "Nothing scheduled and down days off, so it never appears.")
-    : nWd + " on an ordinary day" + (CFG.weekend ? ", " + nAlt + " on the second schedule" : "") + ".";
+    : nWd + " ask on an ordinary day" +
+      (CFG.weekend ? ", " + nAlt + " on the second schedule" : "") + ".");
   $("#togJrnExport").setAttribute("aria-pressed", CFG.jrnExport ? "true" : "false");
   $("#jrnExpHint").textContent = CFG.jrnExport
     ? "Your journal words count toward the recurring-terms table in the export."
@@ -8034,12 +8078,16 @@ function winDownWhy() {
   });
 }
 /* Scheduled check-ins ask; a bad reading makes any check-in ask. */
+const winReadsAt = winId => CFG.winAsk !== false && (CFG.winRead || []).indexOf(winId) > -1;
 function winAsksAt(date, winId) {
-  if (CFG.winAsk === false) return false;
+  if (CFG.winAsk === false || winReadsAt(winId)) return false;
   const list = isAltDay(date) ? CFG.winWinsAlt : CFG.winWins;
   return (list || []).indexOf(winId) > -1;
 }
-const winShown = () => !!draft && CFG.winAsk !== false &&
+/* A reading check-in never asks, not even on a bad day — on a bad morning the
+   evidence is the thing worth having, and being asked to produce more of it
+   before breakfast is the opposite of help. */
+const winShown = () => !!draft && CFG.winAsk !== false && !winReadsAt(draft.win) &&
   (winAsksAt(draft.date, draft.win) || winDownNow().length > 0);
 
 /* Asking someone to name a win from nine days ago gets you a reconstruction, and
@@ -8053,6 +8101,73 @@ function winPeriodText(date, winId) {
   if (!p) return "Since you last checked in";
   const lbl = String((p.win && p.win.label) || "last").toLowerCase();
   return "Since your " + lbl + " check-in" + (p.same ? "" : " yesterday");
+}
+
+/* Same wins every morning stops being read after a week; a fresh random set every
+   render is unsettling to look at. Seeded on the date, so it holds still all day
+   and changes by itself tomorrow. */
+let readBump = 0;
+function winReadPick(n) {
+  const all = (STATE.stars || []).filter(x => x && (x.what || "").trim());
+  if (!all.length) return [];
+  const seedStr = (draft ? draft.date : todayISO()) + "|" + readBump;
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++) { h ^= seedStr.charCodeAt(i); h = Math.imul(h, 16777619); }
+  const rnd = () => { h ^= h << 13; h ^= h >>> 17; h ^= h << 5; return ((h >>> 0) % 100000) / 100000; };
+  // Deliberately reach back as well as forward. A list of only the last few days
+  // reads as "this week went alright"; one that spans months reads as evidence.
+  const today = draft ? draft.date : todayISO();
+  const bands = [
+    all.filter(x => x.date >= addDays(today, -6)),
+    all.filter(x => x.date < addDays(today, -6) && x.date >= addDays(today, -29)),
+    all.filter(x => x.date < addDays(today, -29))
+  ];
+  const out = [], taken = {}, said = {};
+  const key = x => (x.what || "").trim().toLowerCase();
+  // The same sentence three times reads as a shortage, not a record. Only allow a
+  // repeat once there is genuinely nothing else left to show.
+  const grab = (pool, loose) => {
+    const free = pool.filter(x => !taken[x.id] && (loose || !said[key(x)]));
+    if (!free.length) return false;
+    const pick = free[Math.floor(rnd() * free.length) % free.length];
+    taken[pick.id] = 1; said[key(pick)] = 1; out.push(pick); return true;
+  };
+  bands.forEach(bd => grab(bd, false));
+  while (out.length < n && grab(all, false)) { /* fill from anywhere, still distinct */ }
+  while (out.length < n && grab(all, true)) { /* only now repeat a phrase */ }
+  return out.sort((a, b) => (a.date + (a.at || "")) < (b.date + (b.at || "")) ? 1 : -1);
+}
+
+/* The morning side of the same idea: hand back what she already proved. */
+function renderRead() {
+  const blk = $("#readBlock"); if (!blk || !draft) return;
+  const on = CFG.winAsk !== false && winReadsAt(draft.win);
+  blk.style.display = on ? "" : "none";
+  if (!on) return;
+  const l = winReadPick(4);
+  const down = winDownNow().length > 0;
+  $("#readEyebrow").textContent = down ? "Read this first" : "Things you did";
+  $("#readSub").innerHTML = l.length
+    ? (down
+        ? "This is the morning to read these. You wrote every one of them yourself, on a day you " +
+          "were living through, before you knew you would need them."
+        : "Nothing has happened since last night except sleep, so this one doesn\u2019t ask you for " +
+          "anything. It hands back what you already wrote.")
+    : "Nothing logged yet. Wins get named at the later check-ins, and the star button takes one " +
+      "any time \u2014 a week of those and this fills up.";
+  $("#readList").innerHTML = l.map(x => '<div class="rdrow">' +
+    '<div class="t"><span class="st">\u2605</span> ' + esc(x.what) + "</div>" +
+    '<div class="m">' + esc(fmtDate(x.date)) + " \u00b7 " + DAYS[dowOf(x.date)] +
+      ((x.kinds || []).length ? " \u00b7 " + esc(x.kinds.join(", ").toLowerCase()) : "") +
+    "</div></div>").join("");
+  $("#readMore").style.display = l.length > 1 ? "" : "none";
+  const all = (STATE.stars || []).filter(x => x && (x.what || "").trim()).length;
+  const dayN = Object.keys((STATE.stars || []).reduce((a, x) => {
+    if ((x.what || "").trim()) a[x.date] = 1; return a; }, {})).length;
+  $("#readNote").textContent = all > l.length
+    ? all + " logged across " + dayN + " " + (dayN === 1 ? "day" : "days") +
+      ". All of them are on the Patterns tab."
+    : "";
 }
 
 /* The win question, shown inside the check-in itself. */
@@ -9054,6 +9169,7 @@ function init() {
     draft.gold.what = $("#winWhat").value;
     if (draft.gold.what.trim()) $("#winWhat").classList.remove("need");
   };
+  $("#readMore").onclick = () => { readBump++; renderRead(); };
   $("#winNone").onclick = () => {
     // Not a skip. Turning it on stores an explicit "there wasn't one", which is
     // the thing worth counting on a bad week.
@@ -9368,6 +9484,19 @@ function init() {
       const id = ww.dataset.winwin;
       CFG.winWins = (CFG.winWins || []).indexOf(id) > -1
         ? CFG.winWins.filter(x => x !== id) : (CFG.winWins || []).concat([id]);
+      if (CFG.winWins.indexOf(id) > -1) CFG.winRead = (CFG.winRead || []).filter(x => x !== id);
+      touchCfg().then(() => { renderCfg(); renderLog();
+        if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+      return;
+    }
+    const wrd = ev.target.closest("[data-winread]");
+    if (wrd) {
+      const id = wrd.dataset.winread;
+      CFG.winRead = (CFG.winRead || []).indexOf(id) > -1
+        ? CFG.winRead.filter(x => x !== id) : (CFG.winRead || []).concat([id]);
+      // reading and asking are mutually exclusive at the same check-in
+      CFG.winWins = (CFG.winWins || []).filter(x => CFG.winRead.indexOf(x) < 0);
+      CFG.winWinsAlt = (CFG.winWinsAlt || []).filter(x => CFG.winRead.indexOf(x) < 0);
       touchCfg().then(() => { renderCfg(); renderLog();
         if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return;
@@ -9377,6 +9506,7 @@ function init() {
       const id = wwa.dataset.winwinalt;
       CFG.winWinsAlt = (CFG.winWinsAlt || []).indexOf(id) > -1
         ? CFG.winWinsAlt.filter(x => x !== id) : (CFG.winWinsAlt || []).concat([id]);
+      if (CFG.winWinsAlt.indexOf(id) > -1) CFG.winRead = (CFG.winRead || []).filter(x => x !== id);
       touchCfg().then(() => { renderCfg(); renderLog();
         if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
       return;
