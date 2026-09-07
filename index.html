@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:89-->
+<!DOCTYPE html><!--build:91-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -978,6 +978,24 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div id="starList"></div>
     </div>
 
+    <div class="card" id="callsCard" style="display:none">
+      <h2>Phone calls</h2>
+      <p class="sub">How many you took, how they actually went, and how that compares with how
+        much you were dreading them beforehand. The last one is the point: dread is a prediction,
+        and predictions can be checked.</p>
+      <div class="row" style="gap:8px;margin-bottom:11px">
+        <label class="fld" style="flex:1 1 150px"><span>Look back over</span>
+          <select id="callsRange">
+            <option value="14">The last 14 days</option>
+            <option value="30" selected>The last 30 days</option>
+            <option value="90">The last 90 days</option>
+            <option value="180">The last 6 months</option>
+            <option value="0">Everything</option>
+          </select></label></div>
+      <div id="callsSum"></div>
+      <div id="callsBody"></div>
+    </div>
+
     <div class="card" id="jrnCard">
       <h2>Journal</h2>
       <p class="sub">Everything you&rsquo;ve written, newest first. Tap an entry to edit it.
@@ -1363,6 +1381,24 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="mini" id="needNoteNow"></div>
     </div>
 
+    <div class="card" id="ds-pattern-alerts">
+      <h2>Pattern alerts</h2>
+      <p class="sub">The bar that appears at the top when something in your data is worth a look.
+        It shows one at a time, and each check-in leads with a different one rather than the same
+        sentence over and over. Waving one away is taken to mean &ldquo;I&rsquo;ve seen this&rdquo;
+        &mdash; it comes back when the numbers behind it move, and if you dismiss the same
+        unchanged thing three times it stops asking altogether.</p>
+      <div class="sw"><div style="flex:1"><div class="t">Bring a dismissed one back</div>
+        <div class="d" id="flagBackHint"></div></div>
+        <select id="flagBackSel" style="flex:0 0 158px">
+          <option value="0">Only if it changes</option>
+          <option value="1">After a day</option>
+          <option value="3">After 3 days</option>
+          <option value="7">After a week</option>
+        </select></div>
+      <div class="mini" id="flagQuietNote"></div>
+    </div>
+
     <div class="card" id="ds-wins">
       <h2>What went well</h2>
       <p class="sub">One thing that went well since the last check-in. It is deliberately the only
@@ -1742,6 +1778,10 @@ const ITEMS = [
   { key:"tension",  label:"Muscle tension",  low:"Loose",            high:"Locked up",       grp:"body", anchor:"low",    note:true },
   { key:"calls",    label:"Phone calls",     low:"Fine, made them",  high:"Couldn't face them", grp:"body", anchor:"low", note:true,
     wins:["mid","pm"], days:[1,2,3,4,5] },
+  { key:"callsn",   label:"Calls taken",     low:"None",             high:"A lot",           grp:"body", anchor:"low", note:true,
+    wins:["pm"], days:[1,2,3,4,5] },
+  { key:"callsok",  label:"How they went",   low:"Badly",            high:"Went well",       grp:"body", anchor:"center", note:true,
+    wins:["pm"], days:[1,2,3,4,5], needs:{ key:"callsn", min:2 } },
   { key:"social",   label:"Wanting people",  low:"Hiding from everyone", high:"Very social", grp:"body", anchor:"center", note:true },
   { key:"spend",    label:"Spending urge",   low:"None",             high:"Hard to resist",  grp:"body", anchor:"low",    mid:true, note:true },
   { key:"medeff",   label:"Meds felt right", low:"Did nothing",      high:"Worked well",     grp:"body", anchor:"center", note:true },
@@ -1836,7 +1876,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 89;
+const BUILD = 91;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1871,6 +1911,7 @@ const DEFAULT_CFG = {
   winDownAsk: true,           // ask anyway when mood, anxiety or confidence are down
   themeSrc: null,             // which kinds of writing feed "what you keep writing"
   jrnExport: false,           // keep the journal out of the doctor export unless asked
+  flagBack: 3,                // days before a dismissed pattern may come back; 0 = only if it changes
   strengths: null,            // set from STRENGTHS on first load; editable after
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
@@ -1920,7 +1961,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "flagBack", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -1990,6 +2031,25 @@ function schedText(k) {
   return wn + " · " + dn;
 }
 const inQuick = k => (CFG.quickItems || []).indexOf(k) > -1;
+/* "How did they go" on a day with no calls is a number that means nothing, and it
+   would still be averaged into every chart it appears in. So the question waits
+   for the one it depends on. */
+function itemMeets(it) {
+  if (!it || !it.needs) return true;
+  if (!draft) return true;
+  if (!draft.tch || !draft.tch[it.needs.key]) return false;   // shown and left alone is not an answer
+  const v = draft.v[it.needs.key];
+  return v != null && v >= it.needs.min;
+}
+/* Shown or hidden in place, without rebuilding the form mid-drag. */
+function syncNeeds() {
+  if (!draft) return;
+  ITEMS.forEach(it => {
+    if (!it.needs) return;
+    const el = document.querySelector('#v-log .item[data-k="' + it.key + '"]');
+    if (el) el.style.display = itemMeets(it) ? "" : "none";
+  });
+}
 const activeItems = grp => ITEMS.filter(i => i.grp === grp && isOn(i.key) &&
   (!draft || itemShows(i.key, draft.win, draft.date)) &&
   (!CFG.quick || showAll || grp === "sleep" || inQuick(i.key)));
@@ -2020,7 +2080,7 @@ function vcol(v) {
 }
 const SCOL = { mood:"#7fd4c1", irrit:"#c25a4a", energy:"#c98b3a", anxiety:"#9b7fd4",
   focus:"#5fa8d4", initiate:"#8fbf6a", pain:"#d4657f", sleepq:"#6f8fd4", fog:"#8a93a8",
-  calls:"#d49a5f", confid:"#c9a03c" };
+  calls:"#d49a5f", callsn:"#b0864d", callsok:"#6fbf9a", confid:"#c9a03c" };
 
 /* daylight hours from latitude + date, no network */
 function dayLength(iso, lat) {
@@ -2094,6 +2154,7 @@ async function load() {
   if (typeof CFG.winRequire !== "boolean") CFG.winRequire = true;
   if (typeof CFG.winDownAsk !== "boolean") CFG.winDownAsk = true;
   if (typeof CFG.jrnExport !== "boolean") CFG.jrnExport = false;
+  if ([0, 1, 3, 7].indexOf(+CFG.flagBack) < 0) CFG.flagBack = 3;
   if (!Array.isArray(CFG.themeSrc)) CFG.themeSrc = THEME_SRC_IDS.slice();
   CFG.themeSrc = CFG.themeSrc.filter(id => THEME_SRC_IDS.indexOf(id) > -1);
   if (!CFG.themeSrc.length) CFG.themeSrc = THEME_SRC_IDS.slice();
@@ -2169,6 +2230,14 @@ async function load() {
   if (!STATE.gone || typeof STATE.gone !== "object") STATE.gone = {};
   if (!Array.isArray(STATE.flagLog)) STATE.flagLog = [];      // what was raised, and when
   if (!STATE.flagSeen || typeof STATE.flagSeen !== "object") STATE.flagSeen = {};
+  // was keyed "date|title" and lasted a day, which is why the same sentence came
+  // back every morning. Now keyed by title, and it remembers what the numbers
+  // were when you waved it away.
+  Object.keys(STATE.flagSeen).forEach(k => {
+    const v = STATE.flagSeen[k];
+    if (k.indexOf("|") > -1 || !v || typeof v !== "object") delete STATE.flagSeen[k];
+  });
+  if (!STATE.flagTurn || typeof STATE.flagTurn !== "object") STATE.flagTurn = { date: "", n: 0 };
   // forget tombstones after a month; by then every device has caught up
   const cutoff = Date.now() - 30 * 86400000;
   Object.keys(STATE.gone).forEach(k => { if ((STATE.gone[k] || 0) < cutoff) delete STATE.gone[k]; });
@@ -2621,6 +2690,7 @@ function applyVal(item, v) {
   fill.style.background = col;
 
   markNeeded(key);
+  if (ITEMS.some(x => x.needs && x.needs.key === key)) syncNeeds();
   // moving a slider can put a rating out, or bring one back — either changes the
   // set the shared box covers
   if (it.grp === "core") { try { renderAllNote(); } catch (e) {} }
@@ -3246,6 +3316,7 @@ function renderLog() {
     (draft.tags.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
   $("#eNote").value = draft.note || "";
 
+  syncNeeds();
   renderAllNote();
   renderRead();
   renderWin();
@@ -4683,7 +4754,7 @@ function renderTell() {
 const TAB_LABEL = {
   planCard: "Plan", "ds-dashboard": "Dashboard", "ds-export": "Export",
   "ds-cloudflare": "Cloudflare", "ds-firebase": "Firebase", "ds-check-in-times": "Check-in times",
-  "ds-explain-the-outliers": "Outliers", "ds-wins": "Wins",
+  "ds-explain-the-outliers": "Outliers", "ds-pattern-alerts": "Alerts", "ds-wins": "Wins",
   "ds-tell-someone-about-dose-changes": "Tell someone",
   "ds-screen-time": "Screen time", "ds-what-set-it-off": "Triggers",
   "ds-quick-spike-check": "Spike check", "ds-what-to-track": "What to track",
@@ -5042,6 +5113,97 @@ function renderJournal() {
       + "</div>").join("") + "</div>").join("");
 }
 
+/* ---------- phone calls ---------- */
+let callsRange = 30;
+function callStats(days) {
+  const rows = daily(days).filter(r => r.v.callsn != null);
+  const withOk = rows.filter(r => r.v.callsok != null);
+  // dread runs 1 fine → 10 couldn't face it; outcome runs 1 badly → 10 went well.
+  // Flipping the outcome puts both on the same "how bad" scale so they can be
+  // set against each other honestly.
+  const both = rows.filter(r => r.v.callsok != null && r.v.calls != null)
+    .map(r => ({ date: r.date, dread: r.v.calls, went: 11 - r.v.callsok, ok: r.v.callsok }));
+  const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const mid = rows.length >= 8 ? rows[Math.floor(rows.length / 2)].date : "";
+  return {
+    rows, withOk, both, mid,
+    n: mean(rows.map(r => r.v.callsn)),
+    ok: mean(withOk.map(r => r.v.callsok)),
+    dread: mean(both.map(x => x.dread)),
+    actual: mean(both.map(x => x.went)),
+    beat: both.filter(x => x.dread >= 7 && x.ok >= 6).length,
+    hard: both.filter(x => x.dread >= 7).length,
+    early: mean(rows.filter(r => mid && r.date < mid).map(r => r.v.callsn)),
+    late:  mean(rows.filter(r => mid && r.date >= mid).map(r => r.v.callsn))
+  };
+}
+
+function renderCalls() {
+  const card = $("#callsCard"); if (!card) return;
+  const st = callStats(callsRange);
+  card.style.display = (STATE.__callsEver || st.rows.length) ? "" : "none";
+  if (!st.rows.length) {
+    $("#callsRange").value = String(callsRange);
+    $("#callsSum").innerHTML = '<div class="statnote">Nothing logged in this window. ' +
+      "The two questions are on the evening check-in, under Add detail.</div>";
+    $("#callsBody").innerHTML = "";
+    return;
+  }
+  STATE.__callsEver = 1;
+  $("#callsRange").value = String(callsRange);
+  const f1 = v => v == null ? "\u2014" : (Math.round(v * 10) / 10).toFixed(1);
+  const span = callsRange > 0 ? "the last " + callsRange + " days" : "everything logged";
+  const trend = (st.early != null && st.late != null && Math.abs(st.late - st.early) >= 0.8)
+    ? (st.late < st.early ? "fewer lately" : "more lately") : "";
+
+  $("#callsSum").innerHTML = '<div class="statnote"><b>' + st.rows.length + "</b> day" +
+    (st.rows.length === 1 ? "" : "s") + " with a call count in " + span +
+    ", averaging <b>" + f1(st.n) + "</b> out of 10" +
+    (trend ? " \u2014 " + trend : "") + "." +
+    (st.withOk.length
+      ? " On the <b>" + st.withOk.length + "</b> " + (st.withOk.length === 1 ? "day" : "days") +
+        " you took some, they went <b>" + f1(st.ok) + "</b> out of 10."
+      : " No outcome logged yet \u2014 that question appears once the count is above none.") +
+    "</div>";
+
+  let h = "";
+  if (st.both.length >= 4) {
+    const gap = st.dread - st.actual;
+    h += '<div class="sbar top"><div class="h"><span class="nm">Dreaded</span>' +
+      '<span class="ct">' + f1(st.dread) + " / 10</span></div>" +
+      '<div class="track"><div class="fill" style="width:' + Math.round(st.dread / 10 * 100) +
+      '%"></div></div></div>' +
+      '<div class="sbar"><div class="h"><span class="nm">Actually was</span>' +
+      '<span class="ct">' + f1(st.actual) + " / 10</span></div>" +
+      '<div class="track"><div class="fill" style="width:' + Math.round(st.actual / 10 * 100) +
+      '%;background:#6fbf9a"></div></div></div>' +
+      '<div class="statnote" style="margin-top:12px">' +
+      (gap >= 0.8
+        ? "Across <b>" + st.both.length + "</b> days you dreaded them at <b>" + f1(st.dread) +
+          "</b> and they came in at <b>" + f1(st.actual) + "</b>. Your dread has been running <b>" +
+          f1(gap) + "</b> points hotter than the calls themselves."
+        : gap <= -0.8
+          ? "Across <b>" + st.both.length + "</b> days the calls came in harder than you expected \u2014 " +
+            f1(st.actual) + " against a dread of " + f1(st.dread) +
+            ". Worth saying out loud to someone; that is a different problem from anxiety."
+          : "Across <b>" + st.both.length + "</b> days your dread and the calls themselves have been " +
+            "landing in about the same place. Your read on them is accurate.") +
+      "</div>";
+    if (st.hard >= 2) {
+      h += '<div class="statnote" style="margin-top:8px">On <b>' + st.hard +
+        "</b> day" + (st.hard === 1 ? "" : "s") + " you were dreading them at 7 or more. <b>" +
+        st.beat + "</b> of those went fine anyway" +
+        (st.beat >= Math.ceil(st.hard / 2)
+          ? ". That is the number to remember on a morning you would rather not pick up."
+          : ".") + "</div>";
+    }
+  } else if (st.withOk.length) {
+    h = '<div class="mini">A few more days with both the dread rating and an outcome and this ' +
+      "will start comparing them. Four is enough.</div>";
+  }
+  $("#callsBody").innerHTML = h;
+}
+
 function renderStars() {
   const el = $("#starList"); if (!el) return;
   const l = (STATE.stars || []).slice().sort((a, b) =>
@@ -5275,6 +5437,7 @@ function renderSummary(rows, corr, cut) {
 
 function renderPatterns() {
   renderMissed();
+  renderCalls();
   renderJournal();
   renderStrengthReport();
   renderStars();
@@ -5748,24 +5911,74 @@ function recordFlags(list) {
   if (added) saveState();
 }
 
+/* What this flag is *saying* right now, not merely which flag it is. Two runs of
+   the same condition read the same to a person only while the numbers behind it
+   haven't moved — so that is what a dismissal is taken to mean. */
+const flagSig = f => (f[0] || "") + "|" + f[1] + "|" +
+  ((f[2] || "").match(/\d+(?:\.\d+)?/g) || []).join(",");
+
+/* How many days in a row this title has been raised, so a repeat can at least
+   carry something the last one didn't. */
+function flagRun(title) {
+  const days = {};
+  (STATE.flagLog || []).forEach(x => { if (x && x.title === title && x.date) days[x.date] = 1; });
+  let n = 0, d = todayISO();
+  while (days[d]) { n++; d = addDays(d, -1); }
+  return n;
+}
+
+/* A pattern you have waved away stays away until it changes, or until enough
+   time has passed to be worth raising again — and if you have waved the same one
+   away several times, only a change brings it back. Nothing is lost either way:
+   every flag is still on the Patterns tab and in the record for your appointment. */
+function flagDue(f) {
+  const seen = (STATE.flagSeen || {})[f[1]];
+  if (!seen) return true;
+  if (seen.sig !== flagSig(f)) return true;          // the numbers moved
+  const back = +CFG.flagBack;
+  if (!back) return false;                            // only when it changes
+  if ((seen.n || 1) >= 3) return false;               // dismissed repeatedly — take the hint
+  return Date.now() - (seen.at || 0) > back * 86400000;
+}
+
 function showFlagBanner() {
   const bar = $("#flagBar"); if (!bar || dashOn) return;
-  const unseen = latestFlags.filter(f => !STATE.flagSeen[todayISO() + "|" + f[1]]);
-  if (!unseen.length) { bar.classList.remove("on"); return; }
-  // lead with the most serious one
-  const hi = unseen.find(f => f[0] === "hi") || unseen[0];
-  $("#flagTitle").textContent = hi[1];
-  $("#flagBody").textContent = unseen.length > 1
-    ? hi[2].split(".")[0] + ". Plus " + (unseen.length - 1) + " more."
-    : hi[2];
-  bar.dataset.key = todayISO() + "|" + hi[1];
+  const due = latestFlags.filter(flagDue);
+  if (!due.length) { bar.classList.remove("on"); return; }
+  // Serious ones first, but not the same one every time. Each appearance today
+  // starts one further down the list, so four check-ins surface four different
+  // things rather than the same sentence four times over.
+  const order = due.slice().sort((a, b) => (b[0] === "hi") - (a[0] === "hi"));
+  const t = STATE.flagTurn || { date: "", n: 0 };
+  if (t.date !== todayISO()) { t.date = todayISO(); t.n = 0; STATE.flagTurn = t; }
+  const pick = order[(order.length > 1 ? t.n : 0) % order.length];
+  const run = flagRun(pick[1]);
+  $("#flagTitle").textContent = pick[1];
+  const lead = run > 1 ? "Day " + run + " of this. " : "";
+  $("#flagBody").textContent = lead + (order.length > 1
+    ? pick[2].split(".")[0] + ". " + (order.length - 1) + " other" +
+      (order.length === 2 ? "" : "s") + " waiting."
+    : pick[2]);
+  bar.dataset.key = pick[1];
   bar.classList.add("on");
 }
 function clearFlagBanner(all) {
   const bar = $("#flagBar");
-  const today = todayISO();
-  if (all) latestFlags.forEach(f => { STATE.flagSeen[today + "|" + f[1]] = Date.now(); });
-  else if (bar && bar.dataset.key) STATE.flagSeen[bar.dataset.key] = Date.now();
+  const mark = f => {
+    const prev = (STATE.flagSeen || {})[f[1]];
+    const sig = flagSig(f);
+    STATE.flagSeen[f[1]] = { sig, at: Date.now(),
+      // waving away the same unchanged thing repeatedly is an answer in itself
+      n: (prev && prev.sig === sig ? (prev.n || 1) + 1 : 1) };
+  };
+  if (all) latestFlags.forEach(mark);
+  else if (bar && bar.dataset.key) {
+    const f = latestFlags.find(x => x[1] === bar.dataset.key);
+    if (f) mark(f);
+    // and move the rotation on, so the next check-in leads with something else
+    const t = STATE.flagTurn || { date: todayISO(), n: 0 };
+    t.date = todayISO(); t.n = (t.n || 0) + 1; STATE.flagTurn = t;
+  }
   saveState();
   if (bar) bar.classList.remove("on");
   showFlagBanner();                      // reveal the next one, if any
@@ -6781,6 +6994,8 @@ function printSummary() {
   });
 
   const winSt = winStats(90);
+  const calls90 = callStats(90);
+  const f1 = v => v == null ? "\u2014" : (Math.round(v * 10) / 10).toFixed(1);
   // the journal is the one thing here that has to be opted in to before it leaves
   const thSrc = themeSrcList().filter(id => id !== "jrn" || CFG.jrnExport);
   const corpus90 = noteCorpus(90, thSrc);
@@ -6897,6 +7112,38 @@ function printSummary() {
         "The app asks for an explanation whenever a core rating lands this far out, " +
         "so most of these carry the person\u2019s own words from that moment rather than a later " +
         "reconstruction.</div>"
+      : "") +
+
+    // A deliberate change in behaviour, and whether the fear that drove it is
+    // holding up against what actually happens.
+    (calls90.rows.length
+      ? "<h2>Phone calls</h2>" +
+        '<div class="sm" style="margin-bottom:6px">The patient has narrowed which work calls they ' +
+        "take, to reduce anticipatory anxiety. Both figures are self-rated 1\u201310 at the evening " +
+        "check-in: volume taken, and how the calls went. Dread is rated separately, earlier in the " +
+        "day, before the calls happen.</div>" +
+        "<table><tr><th></th><th>Mean</th><th>Days</th></tr>" +
+        '<tr><td>Calls taken</td><td class="m">' + f1(calls90.n) + '</td><td class="m">' +
+          calls90.rows.length + "</td></tr>" +
+        (calls90.withOk.length
+          ? '<tr><td>How they went</td><td class="m">' + f1(calls90.ok) + '</td><td class="m">' +
+            calls90.withOk.length + "</td></tr>" : "") +
+        (calls90.both.length >= 4
+          ? '<tr><td>Dread beforehand</td><td class="m">' + f1(calls90.dread) +
+              '</td><td class="m">' + calls90.both.length + "</td></tr>" +
+            '<tr><td>Difficulty in the event</td><td class="m">' + f1(calls90.actual) +
+              '</td><td class="m">' + calls90.both.length + "</td></tr>" : "") +
+        "</table>" +
+        (calls90.both.length >= 4
+          ? '<div class="sm">Dread and difficulty are on the same 1\u201310 scale, higher being ' +
+            "worse; the outcome rating has been inverted to match. Anticipated difficulty ran <b>" +
+            f1(calls90.dread - calls90.actual) + "</b> points " +
+            (calls90.dread >= calls90.actual ? "above" : "below") + " what was recorded afterwards." +
+            (calls90.hard >= 2
+              ? " On " + calls90.hard + " days rated 7 or higher for dread, " + calls90.beat +
+                " were rated 6 or better once the calls had happened."
+              : "") + "</div>"
+          : "")
       : "") +
 
     // the other half of the record, which a symptom log otherwise loses entirely
@@ -7146,6 +7393,17 @@ function renderCfg() {
   $("#winAskHint").textContent = CFG.winAsk === false
     ? "Off. The star button on the Log tab still works, and everything already logged is kept."
     : "Asked about the stretch since the last check-in, at the check-ins picked below.";
+  $("#flagBackSel").value = String(+CFG.flagBack);
+  $("#flagBackHint").textContent = +CFG.flagBack
+    ? "It also comes back sooner than this if the numbers behind it move."
+    : "Nothing you have dismissed reappears unless what it is saying has changed.";
+  const quiet = Object.keys(STATE.flagSeen || {}).filter(k => (STATE.flagSeen[k].n || 1) >= 3);
+  $("#flagQuietNote").textContent = quiet.length
+    ? quiet.length + " " + (quiet.length === 1 ? "pattern is" : "patterns are") +
+      " staying quiet until they change: " + quiet.join(", ") +
+      ". They are all still on the Patterns tab and in the record for your appointment."
+    : "Everything raised is kept on the Patterns tab and in the record for your appointment, " +
+      "whether or not the bar is showing it.";
   $("#winWhenWrap").style.display = CFG.winAsk === false ? "none" : "";
   $("#winAltWrap").style.display = CFG.weekend ? "" : "none";
   $("#winAltHint").textContent = "The days you\u2019ve marked as different \u2014 " +
@@ -9025,6 +9283,7 @@ function commit(skip, reason) {
     // otherwise write two dozen fives nobody looked at.
     if (CFG.startAt5 && anyVal) {
       $$("#v-log .item[data-k]").forEach(el => {
+        if (el.style.display === "none") return;      // never shown, never asked
         const k = el.dataset.k;
         if (ITEM[k] && draft.v[k] == null) draft.v[k] = 5;
       });
@@ -9078,7 +9337,11 @@ function commit(skip, reason) {
   refreshDue();
   refreshConn();
   clearNotifs();
-  try { renderFlags(daily(0)); showFlagBanner(); } catch (e) {}
+  try {
+    const t = STATE.flagTurn || { date: todayISO(), n: 0 };
+    t.date = todayISO(); t.n = (t.n || 0) + 1; STATE.flagTurn = t;
+    renderFlags(daily(0)); showFlagBanner();
+  } catch (e) {}
   maybeOfferPlan();
   reportState();                              // stop the nagging straight away
   syncAll(true).then(() => reportState());     // then report the merged picture
@@ -9740,6 +10003,8 @@ function init() {
     touchCfg(); renderCfg(); renderLog(); };
   $("#togWinAsk").onclick = () => { CFG.winAsk = CFG.winAsk === false;
     touchCfg(); renderCfg(); renderLog(); };
+  $("#flagBackSel").onchange = () => { CFG.flagBack = +$("#flagBackSel").value;
+    touchCfg(); renderCfg(); try { showFlagBanner(); } catch (e) {} };
   $("#togJrnExport").onclick = () => { CFG.jrnExport = !CFG.jrnExport;
     touchCfg(); renderCfg(); renderJournal(); };
   $("#togWinDown").onclick = () => { CFG.winDownAsk = CFG.winDownAsk === false;
@@ -9893,6 +10158,7 @@ function init() {
   $("#dataJump").onchange = () => { dataTabTo($("#dataJump").value); };
   $("#themeWin").onchange = () => { themeWin = +$("#themeWin").value; themeOpen = ""; renderThemes(); };
   $("#strRange").onchange = () => { strRange = +$("#strRange").value; renderStrengthReport(); };
+  $("#callsRange").onchange = () => { callsRange = +$("#callsRange").value; renderCalls(); };
   $("#missMedSel").onchange   = () => { missMed = $("#missMedSel").value; renderMissed(); };
   $("#missOrderSel").onchange = () => { missOrder = $("#missOrderSel").value; renderMissed(); };
   $("#missShowAll").onclick   = () => { missAll = !missAll; renderMissed(); };
