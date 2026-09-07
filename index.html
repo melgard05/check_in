@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:87-->
+<!DOCTYPE html><!--build:89-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -188,10 +188,17 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .prnqty{font-family:var(--mono);font-size:17px;min-width:2ch;text-align:center;color:var(--ink-3)}
 .prnqty.on{color:var(--accent);font-weight:600}
 .prnrow .btn{padding:5px 13px}
-.medrow{display:flex;gap:6px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
-.medrow input{flex:1}
+.medrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:9px 0 7px}
+.medrow>input{flex:1 1 150px;min-width:0}
+@media(max-width:600px){.medrow>input{flex:1 1 100%}}
 .medrow .seg{flex:0 0 auto}
 .medrow .seg button{padding:6px 9px;font-size:11px}
+.medfrom{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 9px;
+  border-bottom:1px solid var(--line);margin-bottom:2px}
+.medfrom>span{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-3)}
+.medfrom input{flex:0 0 148px}
+.medfrom em{flex:1 1 160px;font-style:normal;font-size:11.5px;color:var(--ink-3)}
 /* ---------- missed-dose log ---------- */
 .missday{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
 .missday:last-child{border-bottom:0}
@@ -1546,6 +1553,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <p class="sub">Set when each one is taken &mdash; pick more than one for a twice-daily dose,
         and it gets its own tick at each. As-needed doses get a count instead of a tick, so you can
         see how often you actually reach for them.</p>
+      <p class="sub"><b>Started</b> is the day it began. Days before it are left out of adherence
+        entirely &mdash; not counted as taken, not counted as missed. A new one defaults to today;
+        change it if you had been on it a while before adding it here.</p>
       <div id="medEditor"></div>
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm pri" id="medAdd">Add medication</button>
@@ -1826,7 +1836,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 87;
+const BUILD = 89;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2135,6 +2145,9 @@ async function load() {
     m.whens = m.whens.filter(x => ["am", "pm", "prn"].indexOf(x) > -1);
     if (!m.whens.length) m.whens = ["am"];
     m.when = m.whens[0];                     // kept so older builds still read it
+    // blank means "as long as there are records", which is right for the ones
+    // that were on the list before this field existed
+    m.from = /^\d{4}-\d\d-\d\d$/.test(m.from || "") ? m.from : "";
   });
   const e = await Store.get(K_ENT);
   if (e) {
@@ -3175,8 +3188,9 @@ function renderLog() {
     painSummary();
   }
 
-  // meds
-  const list = CFG.medList || [];
+  // meds — only the ones she was actually on that day, so a check-in from before
+  // a medication started doesn't offer a tick that can never be right
+  const list = (CFG.medList || []).filter(m => medOn(m, draft.date));
   $("#medBlock").style.display = list.length ? "" : "none";   // always ask: it confounds everything else
   if (list.length) {
     const isLast = draft.win === lastWinId();
@@ -3490,7 +3504,7 @@ function daily(days) {
         if (wq === "prn") return;
         const d = { key: m.id + "@" + wq, id: m.id, when: wq };
         const st = doseState(date, d, takenToday);
-        if (st === "pending" || st === "unasked") return;
+        if (st === "pending" || st === "unasked" || st === "off") return;
         doses.push(d.key);
       });
     });
@@ -4038,7 +4052,9 @@ function missedRows() {
   keys.forEach(date => {
     const t = takenOn(date);
     const doses = wanted.map(d => Object.assign({}, d,
-      { on: doseOn(t, d), st: doseState(date, d, t) }));
+      { on: doseOn(t, d), st: doseState(date, d, t) }))
+      .filter(d => d.st !== "off");                  // wasn't prescribed yet
+    if (!doses.length) return;
     const missing = doses.filter(d => d.st === "missed").length;
     const unasked = doses.filter(d => d.st === "unasked").length;
     if (!doses.some(d => d.st !== "pending")) return;      // nothing to say about it yet
@@ -4054,7 +4070,18 @@ function missedRows() {
        about — the chips only appear at that check-in
    Both of those turned every evening dose red, which is both wrong and the
    fastest way to make an adherence figure worth ignoring. */
+const medById = id => (CFG.medList || []).find(m => m.id === id);
+/* A medication started on Friday cannot have been missed on Thursday. Without
+   this, adding one to the list rewrote every day you had ever logged as a day you
+   skipped it — which is both wrong and, on a list you keep to show a prescriber,
+   worse than wrong. */
+function medOn(m, date) {
+  if (!m) return true;
+  if (m.from && date < m.from) return false;
+  return true;
+}
 function doseState(date, d, taken) {
+  if (!medOn(medById(d.id), date)) return "off";     // not on it yet that day
   if (doseOn(taken, d)) return "taken";
   const wins = winsOn(date);
   if (!wins.length) return "missed";
@@ -4441,7 +4468,9 @@ function gdocHTML() {
 
   h += "<h2>Currently taking</h2>";
   h += meds.length
-    ? "<ul>" + meds.map(m => "<li><b>" + esc2(m.name) + "</b> &mdash; " + whenTxt(m) + "</li>").join("") + "</ul>"
+    ? "<ul>" + meds.map(m => "<li><b>" + esc2(m.name) + "</b> &mdash; " + whenTxt(m) +
+        (m.from ? ' <span style="color:#666">(since ' + esc2(m.from) + ", earlier days not counted)</span>" : "") +
+        "</li>").join("") + "</ul>"
     : "<p>Nothing listed.</p>";
 
   const changes = rows.filter(r => r.tags.indexOf("Med change") > -1);
@@ -5771,7 +5800,7 @@ function renderFlags(rows) {
   const medDays = last(7).filter(r => r.meds != null);
   const mg = medDays.filter(r => r.meds < 0.75).length;
   if (mg >= 3) {
-    const sched = (CFG.medList || []).filter(m => (m.name || "").trim() &&
+    const schedAll = (CFG.medList || []).filter(m => (m.name || "").trim() &&
       (m.whens || [m.when]).some(x => x !== "prn"));
     const miss = {};
     rows.slice(-7).forEach(r => {
@@ -5779,7 +5808,7 @@ function renderFlags(rows) {
       if (!es.some(e => e.meds && e.meds.taken)) return;
       const tk = {};
       es.forEach(e => Object.keys((e.meds || {}).taken || {}).forEach(k => { tk[k] = true; }));
-      sched.forEach(m => (m.whens || [m.when]).forEach(wq => {
+      schedAll.filter(m => medOn(m, r.date)).forEach(m => (m.whens || [m.when]).forEach(wq => {
         if (wq === "prn") return;
         if (!tk[m.id + "@" + wq] && !tk[m.id])
           miss[m.name + " (" + (wq === "am" ? "morning" : "evening") + ")"] =
@@ -7277,7 +7306,13 @@ function renderCfg() {
           ? '<button class="chip sm" data-medask="' + i + '" aria-pressed="' +
             (m.ask === false ? "false" : "true") + '" title="Ask how you were when you take it">' +
             "snapshot</button>" : "") +
-        '<button class="btn sm dang" data-meddel="' + i + '">&times;</button></div>').join("")
+        '<button class="btn sm dang" data-meddel="' + i + '">&times;</button></div>' +
+        '<div class="medfrom"><span>Started</span>' +
+        '<input type="date" data-medfrom="' + i + '" value="' + esc(m.from || "") + '" max="' +
+          todayISO() + '">' +
+        '<em>' + (m.from ? "Nothing before this counts as a missed dose."
+                         : "Blank \u2014 counted for as far back as you have records.") +
+        "</em></div>").join("")
     : '<div class="mini">Nothing listed yet. Adherence and wear-off questions appear once you add one.</div>';
   $("#cfgLat").value = CFG.lat;
   const dl = dayLength(todayISO(), CFG.lat);
@@ -7723,19 +7758,23 @@ function mergeJournal(remote) {
 }
 function mergeSuggestions(remote) {
   const gone = STATE.gone || {};
-  const before = (STATE.suggestions || []).length;
+  const mine = (STATE.suggestions || []).filter(s => s && s.id);
   const by = {};
-  (STATE.suggestions || []).forEach(s => { if (!gone[s.id]) by[s.id] = s; });
+  mine.forEach(s => { if (!gone[s.id]) by[s.id] = s; });
   (remote || []).forEach(s => {
     if (!s || !s.id || gone[s.id]) return;        // deleted here: don't take it back
     if (!by[s.id]) by[s.id] = s;
     else if (s.done) by[s.id].done = true;
   });
   const out = Object.keys(by).map(k => by[k]).sort((a, b) => a.at < b.at ? -1 : 1);
-  // a sync should only ever add to this list. Anything that removes one without
-  // a tombstone is a bug, and losing what someone typed is the worst way to find out.
-  if (out.length < before) {
-    console.warn("suggestion merge would have dropped", before - out.length, "— keeping them");
+  // This used to refuse any merge that made the list shorter, tombstone or not.
+  // The effect was that deleting a suggestion on one device left the other one
+  // showing it for good, while both reported being in step — a permanent,
+  // invisible disagreement. A deletion is deliberate and carries a tombstone, so
+  // it is honoured; only a disappearance nothing accounts for is still refused.
+  const lost = mine.filter(s => !gone[s.id] && !by[s.id]).length;
+  if (lost) {
+    console.warn("suggestion merge would have dropped", lost, "with no tombstone — keeping them");
     return;
   }
   STATE.suggestions = out;
@@ -8675,6 +8714,7 @@ async function fbSync(quiet) {
       fbLog("adopted a newer schedule from your other device", true);
     }
     const rs = await fetch(fbPath(tok, "/state"), { cache: "no-store" });
+    let stateRead = rs.ok;
     if (rs.ok) {
       const st = (await rs.json()) || {};
       Object.keys(st.skipped || {}).forEach(k => {
@@ -8713,7 +8753,12 @@ async function fbSync(quiet) {
     }
     const skipOut = {}; Object.keys(STATE.skipped).forEach(k => { skipOut[k.replace("|", "_")] = STATE.skipped[k]; });
     const sugOut = {}; (STATE.suggestions || []).forEach(s => { sugOut[s.id] = s; });
-    await fetch(fbPath(tok, "/state"), {
+    // The write below replaces the whole state node. Doing that after a read that
+    // failed would push this device's copy over whatever the other one had, so
+    // say so and leave it alone until a read succeeds.
+    if (!stateRead) fbLog("couldn't read the shared state (" + rs.status +
+      ") — not overwriting it this time", true);
+    if (stateRead) await fetch(fbPath(tok, "/state"), {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skipped: skipOut, suggestions: sugOut, gone: STATE.gone || {},
         spikes: (STATE.spikes || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
@@ -9802,11 +9847,19 @@ function init() {
   });
 
   $("#medAdd").onclick = () => {
-    CFG.medList = (CFG.medList || []).concat([{ id: "m" + Date.now().toString(36), name: "", when: "am" }]);
+    CFG.medList = (CFG.medList || []).concat([{ id: "m" + Date.now().toString(36), name: "",
+      when: "am", from: todayISO() }]);
     touchCfg().then(() => { renderCfg(); renderLog();
       const els = document.querySelectorAll("[data-medname]");
       if (els.length) els[els.length - 1].focus(); });
   };
+  document.addEventListener("change", ev => {
+    const j = ev.target.dataset && ev.target.dataset.medfrom;
+    if (j == null || !CFG.medList[+j]) return;
+    CFG.medList[+j].from = ev.target.value || "";
+    touchCfg().then(() => { renderCfg(); renderLog(); renderMissed();
+      if (CFG.cloud.sync || CFG.fb.on) syncAll(true); });
+  });
   document.addEventListener("input", ev => {
     const i = ev.target.dataset && ev.target.dataset.medname;
     if (i == null) return;
