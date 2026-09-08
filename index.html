@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:91-->
+<!DOCTYPE html><!--build:92-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -655,9 +655,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <div id="crashWrap" style="display:none">
           <div class="eyebrow" style="margin:16px 0 8px">The crash</div>
           <div class="row" style="margin-bottom:6px">
-            <label class="fld" style="flex:0 1 150px"><span>Hit around</span>
-              <input type="time" id="crashAt"></label>
-            <label class="fld" style="flex:0 1 150px"><span>Lifted around</span>
+            <label class="fld" style="flex:0 1 170px"><span>Lifted around</span>
               <input type="time" id="crashEnd"></label>
           </div>
           <div class="row" style="margin-bottom:10px;gap:8px;align-items:center">
@@ -1357,9 +1355,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <p class="sub">When a core rating sits a long way from your usual, the check-in won't save until
         you've said why. Six months later the number on its own won't tell you what the day was.
         &ldquo;Usual&rdquo; means your own median once there are eight readings to go on, not a fixed 5.</p>
-      <div class="sw"><div style="flex:1"><div class="t">Every scale starts at 5</div>
+      <div class="sw"><div style="flex:1"><div class="t">Scales start in the middle</div>
         <div class="d" id="startAtHint"></div></div>
-        <button class="tog" id="togStart5" aria-pressed="true"></button></div>
+        <button class="tog" id="togStart5" aria-pressed="false"></button></div>
       <div class="sw"><div style="flex:1"><div class="t">Require a note on outliers</div>
         <div class="d">Blocks saving. Skipping the check-in entirely still works.</div></div>
         <button class="tog" id="togNeedNote" aria-pressed="true"></button></div>
@@ -1876,7 +1874,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 91;
+const BUILD = 92;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1902,7 +1900,7 @@ const DEFAULT_CFG = {
   needNote: true,             // a core rating far from your usual won't save unexplained
   needNoteAt: 3,              // how far from usual counts as far
   needNoteWin: 60,            // how many days back "usual" is worked out over
-  startAt5: true,             // every rating opens at 5, so you adjust from a baseline
+  startAt5: false,            // false: every rating rests at 1 and fills left to right
   winAsk: true,               // ask what went well
   winRequire: true,           // and don't save until the question has an answer
   winWins: null,              // which check-ins ask on an ordinary day (set on first load)
@@ -2149,7 +2147,9 @@ async function load() {
   if (typeof CFG.needNote !== "boolean") CFG.needNote = true;
   if (!(+CFG.needNoteAt >= 1)) CFG.needNoteAt = 3;
   if (!(+CFG.needNoteWin >= 0)) CFG.needNoteWin = 60;
-  if (typeof CFG.startAt5 !== "boolean") CFG.startAt5 = true;
+  if (typeof CFG.startAt5 !== "boolean") CFG.startAt5 = false;
+  // one-time flip for anyone carrying the old middle-anchored setting
+  if (!CFG.sliderPlain) { CFG.startAt5 = false; CFG.sliderPlain = 1; }
   if (typeof CFG.winAsk !== "boolean") CFG.winAsk = true;
   if (typeof CFG.winRequire !== "boolean") CFG.winRequire = true;
   if (typeof CFG.winDownAsk !== "boolean") CFG.winDownAsk = true;
@@ -2401,7 +2401,9 @@ const BASEPCT = ((5 - 1) / 9) * 100;
    separate from "anchor" on purpose — anchor decides which way the scale runs
    and how it's coloured, and flipping a scale someone uses three times a day
    would quietly turn their own habit into wrong data. */
-const midOf = it => !!(it && it.mid);
+/* The spine at 5 is part of the middle-anchored shape; with the scales resting at
+   1 and running left to right there is no middle to mark. */
+const midOf = it => !!(it && it.mid && CFG.startAt5);
 const midPct = it => pctOf(it, 5);
 /* Low-anchored items measure a symptom: 1 is none, 10 is bad. Those are the
    ones worth reversing, so "further right" always means "better". Centred
@@ -2433,6 +2435,8 @@ const icol = (it, v) => midOf(it) ? vcol(v) : it.anchor === "low" ? lcol(v) : vc
 
 function fillGeom(it, val) {
   const pct = pctOf(it, val);
+  // one ramp, left to right, whatever the scale means
+  if (!CFG.startAt5) return { left: 0, width: pct, dot: pct < 1 };
   if (midOf(it)) {
     const b = midPct(it);
     if (val === 5) return { left: b, width: 0, dot: true };
@@ -2457,6 +2461,7 @@ function sliderHTML(it, val, note) {
   const shown = real ? val : (pre ? 5 : null);
   const has = shown != null;
   const pct = has ? pctOf(it, shown)
+    : !CFG.startAt5 ? 0
     : midOf(it) ? midPct(it) : (it.anchor === "low" ? (isRev(it) ? 100 : 0) : BASEPCT);
   const col = real ? icol(it, shown) : "var(--ink-3)";
   let fill = "";
@@ -2468,7 +2473,8 @@ function sliderHTML(it, val, note) {
   }
   let ticks = "";
   for (let i = 1; i <= 10; i++)
-    ticks += '<i class="' + (i === 5 && (midOf(it) || it.anchor !== "low") ? "mid" : "") +
+    ticks += '<i class="' +
+      (CFG.startAt5 && i === 5 && (midOf(it) || it.anchor !== "low") ? "mid" : "") +
       '" style="left:' + pctOf(it, i) + '%"></i>';
 
   const hasNote = !!(note && note.trim());
@@ -2485,7 +2491,8 @@ function sliderHTML(it, val, note) {
     '<div class="track' + (real ? "" : " unset") + '" role="slider" tabindex="0" aria-label="' + esc(it.label) +
       '" aria-valuemin="1" aria-valuemax="10" aria-valuenow="' + (has ? val : 5) + '">' +
       '<div class="rail">' + fill + "</div>" +
-      (midOf(it) ? '<div class="spine" style="left:' + midPct(it).toFixed(2) + '%"></div>'
+      (!CFG.startAt5 ? ""
+        : midOf(it) ? '<div class="spine" style="left:' + midPct(it).toFixed(2) + '%"></div>'
         : it.anchor === "low" ? "" : '<div class="spine" style="left:' + BASEPCT + '%"></div>') +
       '<div class="ticks">' + ticks + "</div>" +
       '<div class="knob" style="left:' + pct + "%" + (has ? ";background:" + col : "") + '"></div>' +
@@ -3006,8 +3013,9 @@ function cycleDayOf(dateISO) {
 /* how long after the dose stopped working the crash landed */
 /* minutes a crash lasted, or null if it hasn't lifted */
 function crashLen(mo) {
-  if (!mo || !mo.crashAt || !mo.crashEnd) return null;
-  let d = minsOf(mo.crashEnd) - minsOf(mo.crashAt);
+  const from = mo && (mo.crashAt || (mo.st === "time" ? mo.at : ""));
+  if (!mo || !from || !mo.crashEnd) return null;
+  let d = minsOf(mo.crashEnd) - minsOf(from);
   if (d < 0) d += 1440;                     // ran past midnight
   return d > 16 * 60 ? null : d;
 }
@@ -3015,18 +3023,15 @@ const hm = m => (m >= 60 ? Math.floor(m / 60) + "h " + pad(m % 60) : m) + "m";
 
 function crashHint() {
   const el = $("#crashGap"); if (!el) return;
-  const mo = draft.medoff, off = mo.at, cr = mo.crashAt;
+  const mo = draft.medoff, off = mo.at;
   const still = $("#stillIn");
-  if (still) still.setAttribute("aria-pressed", (cr && !mo.crashEnd) ? "true" : "false");
-  if (!cr) { el.textContent = "Roughly when it hit is enough."; return; }
-
+  if (still) still.setAttribute("aria-pressed", (!mo.crashEnd) ? "true" : "false");
   const parts = [];
-  if (mo.st === "time" && off) {
-    let d = minsOf(cr) - minsOf(off);
-    if (d < -720) d += 1440;
-    parts.push(Math.abs(d) < 8 ? "right as it wore off"
-      : d > 0 ? hm(d) + " after it wore off"
-      : '<span style="color:var(--warn)">' + d * -1 + "m before you noticed it wearing off</span>");
+  if (!mo.crashEnd) {
+    el.textContent = (mo.st === "time" && off)
+      ? "Measured from " + off + ", when you said they wore off. Say when it lifted, or leave it."
+      : "Say when it lifted, or leave it.";
+    return;
   }
   const len = crashLen(mo);
   if (len != null) parts.push("<b>lasted " + hm(len) + "</b>" +
@@ -3350,7 +3355,6 @@ function syncCrashBlock() {
   $("#crashFx").innerHTML = CRASH.concat(fx.filter(t => CRASH.indexOf(t) < 0)).map(t =>
     '<button class="chip" data-fx="' + esc(t) + '" aria-pressed="' +
     (fx.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
-  $("#crashAt").value = draft.medoff.crashAt || "";
   $("#crashEnd").value = draft.medoff.crashEnd || "";
   crashHint();
 }
@@ -3520,7 +3524,8 @@ function daily(days) {
       mins: mo.medoff.st === "time" && mo.medoff.at ? minsOf(mo.medoff.at) : null,
       crashAt: mo.medoff.crashAt || "",
       crashEnd: mo.medoff.crashEnd || "",
-      crashMins: mo.medoff.crashAt ? minsOf(mo.medoff.crashAt) : null,
+      crashMins: mo.medoff.crashAt ? minsOf(mo.medoff.crashAt)
+        : (mo.medoff.st === "time" && mo.medoff.at) ? minsOf(mo.medoff.at) : null,
       crashLen: crashLen(mo.medoff),
       fx: (mo.medoff.fx || []).slice() };
     // every place the day was logged from, across all its check-ins
@@ -4017,9 +4022,8 @@ function readoutFor(i) {
   if (r.sleep) bits.unshift("night <b>" + Math.floor(r.sleep.hours) + "h " +
     pad(Math.round((r.sleep.hours % 1) * 60)) + "m</b>" +
     (r.nap ? ", total <b>" + r.total.toFixed(1) + "h</b>" : ""));
-  if (r.medoff && r.medoff.crashAt) bits.push('<span style="color:var(--high-2)">crash at <b>' +
-    esc(r.medoff.crashAt) + "</b>" +
-    (r.medoff.crashLen != null ? " for <b>" + hm(r.medoff.crashLen) + "</b>" : "") +
+  if (r.medoff && r.medoff.crashLen != null) bits.push('<span style="color:var(--high-2)">crash lasted <b>' +
+    hm(r.medoff.crashLen) + "</b>" +
     (r.medoff.fx.length ? " · " + esc(r.medoff.fx.join(", ").toLowerCase()) : "") + "</span>");
   if (r.screen != null) bits.push("screen <b>" + hm(Math.round(r.screen * 60)) + "</b>");
   if (r.medoff && r.medoff.st) bits.push("meds " + (r.medoff.st === "still" ? "<b>lasted all day</b>"
@@ -7384,9 +7388,10 @@ function renderCfg() {
       : "Nothing logged yet. Eight days and it starts appearing in the correlations.";
   $("#togStart5").setAttribute("aria-pressed", CFG.startAt5 ? "true" : "false");
   $("#startAtHint").textContent = CFG.startAt5
-    ? "Sliders open at 5 and stay grey until you move one. Anything you saw and left " +
-      "alone saves as 5, but is kept out of your usual so it can't drag a baseline toward the middle."
-    : "Sliders open unset, at the end of the scale, and record nothing unless moved.";
+    ? "Sliders open at 5 with the fill running outward from the middle, and stay grey until you " +
+      "move one. Anything you saw and left alone saves as 5, kept out of your usual."
+    : "Sliders rest at 1 and fill left to right, 1 through 10. Nothing is recorded until you move " +
+      "one \u2014 a scale you leave alone stays blank rather than becoming a number you didn\u2019t give.";
   $("#togWinAsk").setAttribute("aria-pressed", CFG.winAsk !== false ? "true" : "false");
   $("#togWinReq").setAttribute("aria-pressed", CFG.winRequire !== false ? "true" : "false");
   $("#togWinReq").style.opacity = CFG.winAsk === false ? "0.4" : "";
@@ -9296,7 +9301,6 @@ function commit(skip, reason) {
     else {
       if (draft.medoff.st === "time") draft.medoff.at = $("#medOffAt").value || "";
       if (draft.v.rebound != null && draft.v.rebound >= 3) {
-        draft.medoff.crashAt = $("#crashAt").value || "";
         draft.medoff.crashEnd = $("#crashEnd").value || "";
       } else { draft.medoff.crashAt = ""; draft.medoff.crashEnd = ""; draft.medoff.fx = []; }
     }
@@ -9425,10 +9429,10 @@ function init() {
     renderWakes(); pushSleep();
   };
   $("#medOffAt").onchange = () => { draft.medoff.at = $("#medOffAt").value; medOffHint(); crashHint(); };
-  $("#crashAt").onchange = () => { draft.medoff.crashAt = $("#crashAt").value; crashHint(); };
   $("#crashEnd").onchange = () => { draft.medoff.crashEnd = $("#crashEnd").value; crashHint(); };
   $("#stillIn").onclick = () => {
     // "still in it" simply means no end time yet
+    if (!draft.medoff.crashEnd) { crashHint(); return; }
     if (draft.medoff.crashEnd) { draft.medoff.crashEnd = ""; $("#crashEnd").value = ""; }
     else {
       const now = new Date();
