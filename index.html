@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:92-->
+<!DOCTYPE html><!--build:95-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -978,9 +978,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div class="card" id="callsCard" style="display:none">
       <h2>Phone calls</h2>
-      <p class="sub">How many you took, how they actually went, and how that compares with how
-        much you were dreading them beforehand. The last one is the point: dread is a prediction,
-        and predictions can be checked.</p>
+      <p class="sub">How many you took and how they actually went. If you were also rating how
+        much you dreaded them beforehand, the two get set against each other &mdash; dread is a
+        prediction, and predictions can be checked.</p>
       <div class="row" style="gap:8px;margin-bottom:11px">
         <label class="fld" style="flex:1 1 150px"><span>Look back over</span>
           <select id="callsRange">
@@ -1761,33 +1761,33 @@ const K_JDRAFT = "baseline:jrndraft";
    note:   true = offer a box to say what's actually going on.            */
 const ITEMS = [
   // core — asked at every check-in
-  { key:"mood",     label:"Mood",            low:"Deep depression", high:"Elevated / manic", grp:"core", anchor:"center", note:true },
-  { key:"irrit",    label:"Irritability",    low:"Easy-going",      high:"Ready to snap",    grp:"core", anchor:"center", note:true },
-  { key:"energy",   label:"Energy / drive",  low:"Flat, no motor",  high:"Wired, can't sit", grp:"core", anchor:"center", note:true },
-  { key:"anxiety",  label:"Anxiety",         low:"Calm",            high:"Panicked",         grp:"core", anchor:"low",    mid:true, note:true },
-  { key:"focus",    label:"Focus",           low:"Can't hold a thought", high:"Locked in",   grp:"core", anchor:"center", note:true },
-  { key:"fog",      label:"Brain fog",       low:"Clear",           high:"Thick fog",        grp:"core", anchor:"low",    mid:true, note:true },
-  { key:"confid",   label:"Confidence",      low:"Doubting everything", high:"Invincible",   grp:"core", anchor:"center", note:true },
-  { key:"initiate", label:"Task initiation", low:"Frozen, can't start", high:"Starting easily", grp:"core", anchor:"center", note:true },
+  { key:"mood",     label:"Mood",            low:"Deep depression", high:"Elevated / manic", grp:"core", anchor:"center", dir:"peak", note:true },
+  { key:"irrit",    label:"Irritability",    low:"Easy-going",      high:"Ready to snap",    grp:"core", anchor:"center", dir:"down", note:true },
+  { key:"energy",   label:"Energy / drive",  low:"Flat, no motor",  high:"Wired, can't sit", grp:"core", anchor:"center", dir:"peak", note:true },
+  { key:"anxiety",  label:"Anxiety",         low:"Calm",            high:"Panicked",         grp:"core", anchor:"low",    mid:true, dir:"down", note:true },
+  { key:"focus",    label:"Focus",           low:"Can't hold a thought", high:"Locked in",   grp:"core", anchor:"center", dir:"up",   note:true },
+  { key:"fog",      label:"Brain fog",       low:"Clear",           high:"Thick fog",        grp:"core", anchor:"low",    mid:true, dir:"down", note:true },
+  { key:"confid",   label:"Confidence",      low:"Doubting everything", high:"Invincible",   grp:"core", anchor:"center", dir:"up",   note:true },
+  { key:"initiate", label:"Task initiation", low:"Frozen, can't start", high:"Starting easily", grp:"core", anchor:"center", dir:"up", note:true },
   // body & behavior
   { key:"appetite", label:"Appetite",        low:"No interest",      high:"Ravenous",        grp:"body", anchor:"center", note:true },
   { key:"nausea",   label:"Nausea / gut",    low:"Fine",             high:"Awful",           grp:"body", anchor:"low",    note:true },
   { key:"headache", label:"Headache",        low:"None",             high:"Disabling",       grp:"body", anchor:"low",    note:true },
   { key:"tension",  label:"Muscle tension",  low:"Loose",            high:"Locked up",       grp:"body", anchor:"low",    note:true },
-  { key:"calls",    label:"Phone calls",     low:"Fine, made them",  high:"Couldn't face them", grp:"body", anchor:"low", note:true,
+  { key:"calls",    label:"Dread before calls", low:"Fine, made them", high:"Couldn't face them", grp:"body", anchor:"low", note:true,
     wins:["mid","pm"], days:[1,2,3,4,5] },
-  { key:"callsn",   label:"Calls taken",     low:"None",             high:"A lot",           grp:"body", anchor:"low", note:true,
+  { key:"callsn",   label:"Phone calls taken", low:"None",           high:"A lot",           grp:"body", anchor:"low", note:true,
     wins:["pm"], days:[1,2,3,4,5] },
-  { key:"callsok",  label:"How they went",   low:"Badly",            high:"Went well",       grp:"body", anchor:"center", note:true,
+  { key:"callsok",  label:"How the calls went", low:"Badly",          high:"Went well",       grp:"body", anchor:"center", dir:"up", note:true,
     wins:["pm"], days:[1,2,3,4,5], needs:{ key:"callsn", min:2 } },
-  { key:"social",   label:"Wanting people",  low:"Hiding from everyone", high:"Very social", grp:"body", anchor:"center", note:true },
-  { key:"spend",    label:"Spending urge",   low:"None",             high:"Hard to resist",  grp:"body", anchor:"low",    mid:true, note:true },
-  { key:"medeff",   label:"Meds felt right", low:"Did nothing",      high:"Worked well",     grp:"body", anchor:"center", note:true },
+  { key:"social",   label:"Wanting people",  low:"Hiding from everyone", high:"Very social", grp:"body", anchor:"center", dir:"up",   note:true },
+  { key:"spend",    label:"Spending urge",   low:"None",             high:"Hard to resist",  grp:"body", anchor:"low",    mid:true, dir:"down", note:true },
+  { key:"medeff",   label:"Meds felt right", low:"Did nothing",      high:"Worked well",     grp:"body", anchor:"center", dir:"up",   note:true },
   { key:"caffeine", label:"Caffeine",        low:"None",             high:"A lot",           grp:"body", anchor:"low",    note:true, off:true },
   { key:"binge",    label:"Binge eating",    low:"None",             high:"Lost control",    grp:"body", anchor:"low",    note:true },
   { key:"thc",      label:"THC / nicotine",  low:"None",             high:"A lot",           grp:"body", anchor:"low",    note:true, off:true },
-  { key:"exercise", label:"Movement",        low:"Sedentary",        high:"Hard workout",    grp:"body", anchor:"low",    note:true },
-  { key:"outside",  label:"Time outside",    low:"None",             high:"Hours",           grp:"body", anchor:"low",    mid:true, note:true },
+  { key:"exercise", label:"Movement",        low:"Sedentary",        high:"Hard workout",    grp:"body", anchor:"low",    dir:"up",   note:true },
+  { key:"outside",  label:"Time outside",    low:"None",             high:"Hours",           grp:"body", anchor:"low",    mid:true, dir:"up", note:true },
   { key:"cycle",    label:"Cycle symptoms",  low:"None",             high:"Strong",          grp:"body", anchor:"low",    note:true, off:true },
   // pain — its own section, anchored low
   { key:"pain",     label:"Pain right now",  low:"None",             high:"Worst imaginable", grp:"pain", anchor:"low",   note:true },
@@ -1796,9 +1796,9 @@ const ITEMS = [
   // sleep-only
   { key:"rebound",  label:"Crash as it wore off", low:"None",           high:"Rough",           grp:"med",   anchor:"low",    note:true },
   { key:"manic",    label:"Elevated / revved", low:"None",          high:"Racing, can't stop", grp:"spike", anchor:"low", note:true },
-  { key:"napfeel",  label:"Nap left me",     low:"Groggy, worse",    high:"Refreshed",       grp:"nap",   anchor:"center", note:true },
-  { key:"sleepq",   label:"Sleep quality",   low:"Broken, unrested", high:"Deep, rested",    grp:"sleep", anchor:"center", note:true },
-  { key:"wakefeel", label:"Waking mood",     low:"Dread",            high:"Ready",           grp:"sleep", anchor:"center", note:true }
+  { key:"napfeel",  label:"Nap left me",     low:"Groggy, worse",    high:"Refreshed",       grp:"nap",   anchor:"center", dir:"up", note:true },
+  { key:"sleepq",   label:"Sleep quality",   low:"Broken, unrested", high:"Deep, rested",    grp:"sleep", anchor:"center", dir:"up", note:true },
+  { key:"wakefeel", label:"Waking mood",     low:"Dread",            high:"Ready",           grp:"sleep", anchor:"center", dir:"up", note:true }
 ];
 const ITEM = {}; ITEMS.forEach(i => ITEM[i.key] = i);
 
@@ -1874,7 +1874,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 92;
+const BUILD = 95;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2150,6 +2150,13 @@ async function load() {
   if (typeof CFG.startAt5 !== "boolean") CFG.startAt5 = false;
   // one-time flip for anyone carrying the old middle-anchored setting
   if (!CFG.sliderPlain) { CFG.startAt5 = false; CFG.sliderPlain = 1; }
+  // "Phone calls" asked how much you were dreading them. That has been replaced by
+  // how many you took and how they went, so it stops being asked — but stays in the
+  // catalog, because months of it are already logged and still have to read back.
+  if (!CFG.callsSplit) {
+    CFG.callsSplit = 1;
+    if (CFG.off.indexOf("calls") < 0) CFG.off = CFG.off.concat(["calls"]);
+  }
   if (typeof CFG.winAsk !== "boolean") CFG.winAsk = true;
   if (typeof CFG.winRequire !== "boolean") CFG.winRequire = true;
   if (typeof CFG.winDownAsk !== "boolean") CFG.winDownAsk = true;
@@ -2425,13 +2432,38 @@ let showAll = false;                       // "add detail" expansion, per draft
    these from the centred scales, that ambiguity had to go: symptom scales now
    run green to red and never touch the cool end, so a low reading here can
    never be mistaken for a low reading on a centred scale. */
+/* Green at the low end through amber to red — for scales where more is worse. */
 function lcol(v) {
   if (v == null) return "var(--ink-3)";
   if (v <= 3) return "var(--base)";
   if (v <= 6) return "var(--high-1)";
   return "var(--high-2)";
 }
-const icol = (it, v) => midOf(it) ? vcol(v) : it.anchor === "low" ? lcol(v) : vcol(v);
+/* The same three colours the other way round, for scales where more is better,
+   so a glance down the screen reads the way a traffic light does regardless of
+   which direction a particular scale happens to run. */
+function gcol(v) {
+  if (v == null) return "var(--ink-3)";
+  if (v <= 3) return "var(--high-2)";
+  if (v <= 6) return "var(--high-1)";
+  return "var(--base)";
+}
+/* Red, amber, green — and amber again at the top. For the two scales where the
+   high end is its own kind of warning: mood at 9 is "elevated", energy at 10 is
+   "wired, can't sit". Green through the good middle, amber where it tips over. */
+function pcol(v) {
+  if (v == null) return "var(--ink-3)";
+  if (v <= 3) return "var(--high-2)";
+  if (v <= 6) return "var(--high-1)";
+  if (v <= 8) return "var(--base)";
+  return "var(--high-1)";
+}
+const icol = (it, v) =>
+  !it ? vcol(v)
+  : it.dir === "peak" ? pcol(v)
+  : it.dir === "up"   ? gcol(v)
+  : it.dir === "down" ? lcol(v)
+  : midOf(it) ? vcol(v) : it.anchor === "low" ? lcol(v) : vcol(v);
 
 function fillGeom(it, val) {
   const pct = pctOf(it, val);
@@ -5201,9 +5233,20 @@ function renderCalls() {
           ? ". That is the number to remember on a morning you would rather not pick up."
           : ".") + "</div>";
     }
-  } else if (st.withOk.length) {
+  } else if (st.withOk.length && isOn("calls")) {
     h = '<div class="mini">A few more days with both the dread rating and an outcome and this ' +
       "will start comparing them. Four is enough.</div>";
+  }
+  // the dread scale can be switched off; say so rather than letting a comparison
+  // quietly stop updating and look current
+  if (!isOn("calls")) {
+    const last = st.both.length ? st.both[st.both.length - 1].date : "";
+    h += '<div class="mini" style="margin-top:12px">The dread rating is switched off, so this ' +
+      (last
+        ? "comparison stops at " + esc(fmtDate(last)) + " and won\u2019t take in new days. "
+        : "comparison has nothing to work from. ") +
+      "Turn <b>Dread before calls</b> back on under Data \u2192 What to track if you want it running " +
+      "again \u2014 it is the half that tells you whether the fear is bigger than the thing.</div>";
   }
   $("#callsBody").innerHTML = h;
 }
