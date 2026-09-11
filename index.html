@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:95-->
+<!DOCTYPE html><!--build:97-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -16,6 +16,10 @@
   color-scheme:dark;   /* native pickers, spinners and scrollbars follow the app */
   /* diverging scale: low end cool, baseline steady, high end warm */
   --low-2:#2b6f8f; --low-1:#3f95a8; --base:#5f9e7a; --high-1:#c98b3a; --high-2:#c25a4a;
+  /* The sliders get their own, louder set. The muted ones above still carry the
+     charts and the flag bars, where a screen full of shouting would be worse. */
+  --s-red:#ff3b30; --s-amber:#ffa000; --s-green:#00e06a;
+  --s-blue:#1e90ff; --s-teal:#00d8e0;
   --bg:#0b0d10; --panel:#12161b; --panel-2:#171c23; --line:#232a33; --line-2:#2e3742;
   --ink:#e6ecf2; --ink-2:#9aa8b6; --ink-3:#63707e;
   --accent:#7fd4c1; --warn:#d9a03c; --bad:#c25a4a;
@@ -145,16 +149,17 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .item:last-child{border-bottom:0}
 .ihead{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
 .ilabel{font-size:14.5px;font-weight:600}
-.ival{margin-left:auto;font-family:var(--mono);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;
+.ival{margin-left:auto;font-family:var(--mono);font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;
   min-width:2.2ch;text-align:right}
 .ival.unset{color:var(--ink-3);font-weight:400}
 .iends{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin:0 1px 7px;gap:10px}
 .iends span:last-child{text-align:right}
 .track{position:relative;height:42px;cursor:pointer;user-select:none;touch-action:pan-y}
 #spikeSheet .gatebox{max-width:440px}
-.rail{position:absolute;left:0;right:0;top:17px;height:8px;border-radius:6px;background:var(--panel-2);
+.rail{position:absolute;left:0;right:0;top:16px;height:10px;border-radius:6px;background:#0a0d11;
   border:1px solid var(--line-2);overflow:hidden}
-.fill{position:absolute;top:0;bottom:0;background:var(--base);opacity:.85}
+.fill{position:absolute;top:0;bottom:0;background:var(--s-green)}
+.rail .fill{box-shadow:0 0 10px -1px currentColor}
 .spine{position:absolute;top:9px;bottom:9px;width:2px;background:var(--line-2);left:50%;margin-left:-1px;border-radius:2px}
 .ticks{position:absolute;left:0;right:0;top:29px;height:6px}
 .ticks i{position:absolute;top:0;width:1px;height:4px;background:var(--line-2);transform:translateX(-.5px)}
@@ -188,6 +193,8 @@ main{padding:14px 14px 20px;max-width:760px;margin:0 auto}
 .prnqty{font-family:var(--mono);font-size:17px;min-width:2ch;text-align:center;color:var(--ink-3)}
 .prnqty.on{color:var(--accent);font-weight:600}
 .prnrow .btn{padding:5px 13px}
+.item .rail .fill{box-shadow:0 0 10px -2px currentColor}
+.item .knob{box-shadow:0 1px 3px rgba(0,0,0,.6)}
 .medrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:9px 0 7px}
 .medrow>input{flex:1 1 150px;min-width:0}
 @media(max-width:600px){.medrow>input{flex:1 1 100%}}
@@ -1654,6 +1661,20 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   </div>
 </div>
 
+<div class="gate" id="readSheet">
+  <div class="gatebox" style="border-color:#c9a227">
+    <div class="k" style="color:#e0c453" id="readSheetK">read this first</div>
+    <h3 style="margin-bottom:10px" id="readSheetH">Things you did</h3>
+    <p id="readSheetP" style="margin-bottom:14px"></p>
+    <div id="readSheetList"></div>
+    <div class="row" style="margin-top:16px;gap:8px">
+      <button class="btn pri" style="flex:2 1 160px" id="readSheetGo">Start the check-in</button>
+      <button class="btn gho" style="flex:1 1 120px" id="readSheetMore">Different ones</button>
+    </div>
+    <div class="mini" id="readSheetNote"></div>
+  </div>
+</div>
+
 <div class="gate" id="starSheet">
   <div class="gatebox">
     <div class="k" style="color:#e0c453">gold star</div>
@@ -1874,7 +1895,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 95;
+const BUILD = 97;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2070,11 +2091,11 @@ function sleepWin() { return CFG.windows.find(w => w.sleep) || CFG.windows[0]; }
 /* value -> diverging color */
 function vcol(v) {
   if (v == null) return "var(--ink-3)";
-  if (v <= 2) return "var(--low-2)";
-  if (v <= 4) return "var(--low-1)";
-  if (v === 5) return "var(--base)";
-  if (v <= 7) return "var(--high-1)";
-  return "var(--high-2)";
+  if (v <= 2) return "var(--s-blue)";
+  if (v <= 4) return "var(--s-teal)";
+  if (v === 5) return "var(--s-green)";
+  if (v <= 7) return "var(--s-amber)";
+  return "var(--s-red)";
 }
 const SCOL = { mood:"#7fd4c1", irrit:"#c25a4a", energy:"#c98b3a", anxiety:"#9b7fd4",
   focus:"#5fa8d4", initiate:"#8fbf6a", pain:"#d4657f", sleepq:"#6f8fd4", fog:"#8a93a8",
@@ -2245,6 +2266,7 @@ async function load() {
     if (k.indexOf("|") > -1 || !v || typeof v !== "object") delete STATE.flagSeen[k];
   });
   if (!STATE.flagTurn || typeof STATE.flagTurn !== "object") STATE.flagTurn = { date: "", n: 0 };
+  if (!STATE.readSeen || typeof STATE.readSeen !== "object") STATE.readSeen = {};
   // forget tombstones after a month; by then every device has caught up
   const cutoff = Date.now() - 30 * 86400000;
   Object.keys(STATE.gone).forEach(k => { if ((STATE.gone[k] || 0) < cutoff) delete STATE.gone[k]; });
@@ -2397,6 +2419,9 @@ function setDraft(date, winId) {
   }
   $("#eDate").value = date; $("#eWin").value = winId;
   renderLog();
+  // after the form is up, so it lands on top of a finished screen rather than
+  // racing whatever put us here
+  setTimeout(() => { try { showReadSheet(); } catch (e) {} }, 80);
 }
 
 /* ============================================================
@@ -2435,28 +2460,28 @@ let showAll = false;                       // "add detail" expansion, per draft
 /* Green at the low end through amber to red — for scales where more is worse. */
 function lcol(v) {
   if (v == null) return "var(--ink-3)";
-  if (v <= 3) return "var(--base)";
-  if (v <= 6) return "var(--high-1)";
-  return "var(--high-2)";
+  if (v <= 3) return "var(--s-green)";
+  if (v <= 6) return "var(--s-amber)";
+  return "var(--s-red)";
 }
 /* The same three colours the other way round, for scales where more is better,
    so a glance down the screen reads the way a traffic light does regardless of
    which direction a particular scale happens to run. */
 function gcol(v) {
   if (v == null) return "var(--ink-3)";
-  if (v <= 3) return "var(--high-2)";
-  if (v <= 6) return "var(--high-1)";
-  return "var(--base)";
+  if (v <= 3) return "var(--s-red)";
+  if (v <= 6) return "var(--s-amber)";
+  return "var(--s-green)";
 }
 /* Red, amber, green — and amber again at the top. For the two scales where the
    high end is its own kind of warning: mood at 9 is "elevated", energy at 10 is
    "wired, can't sit". Green through the good middle, amber where it tips over. */
 function pcol(v) {
   if (v == null) return "var(--ink-3)";
-  if (v <= 3) return "var(--high-2)";
-  if (v <= 6) return "var(--high-1)";
-  if (v <= 8) return "var(--base)";
-  return "var(--high-1)";
+  if (v <= 3) return "var(--s-red)";
+  if (v <= 6) return "var(--s-amber)";
+  if (v <= 8) return "var(--s-green)";
+  return "var(--s-amber)";
 }
 const icol = (it, v) =>
   !it ? vcol(v)
@@ -2500,8 +2525,10 @@ function sliderHTML(it, val, note) {
   if (real) {
     const g = fillGeom(it, val);
     fill = g.dot
-      ? '<div class="fill" style="left:calc(' + g.left + '% - 3px);width:6px;background:' + col + '"></div>'
-      : '<div class="fill" style="left:' + g.left + '%;width:' + g.width + '%;background:' + col + '"></div>';
+      ? '<div class="fill" style="left:calc(' + g.left + '% - 3px);width:6px;background:' + col +
+        ";color:" + col + '"></div>'
+      : '<div class="fill" style="left:' + g.left + '%;width:' + g.width + '%;background:' + col +
+        ";color:" + col + '"></div>';
   }
   let ticks = "";
   for (let i = 1; i <= 10; i++)
@@ -2723,6 +2750,7 @@ function applyVal(item, v) {
 
   let fill = rail.querySelector(".fill");
   if (!fill) { fill = document.createElement("div"); fill.className = "fill"; rail.appendChild(fill); }
+  fill.style.color = col;                 // the glow in the stylesheet reads currentColor
   const g = fillGeom(it, v);
   if (g.dot) { fill.style.left = "calc(" + g.left + "% - 3px)"; fill.style.width = "6px"; }
   else { fill.style.left = g.left + "%"; fill.style.width = g.width + "%"; }
@@ -8483,6 +8511,45 @@ function winReadPick(n) {
   return out.sort((a, b) => (a.date + (a.at || "")) < (b.date + (b.at || "")) ? 1 : -1);
 }
 
+/* The card at the bottom of the form was being scrolled past, which is the same
+   as not being there. This is the one thing in the app that is worth interrupting
+   for, so it interrupts — once per reading check-in, then it stays in the form to
+   go back to. */
+function showReadSheet(force) {
+  const sheet = $("#readSheet"); if (!sheet || !draft || dashOn) return;
+  if (!winReadsAt(draft.win) || CFG.winAsk === false) return;
+  const key = draft.date + "|" + draft.win;
+  STATE.readSeen = STATE.readSeen || {};
+  if (!force && STATE.readSeen[key]) return;
+  if (!force && draft.date !== todayISO()) return;      // not when leafing back through old days
+  const l = winReadPick(4);
+  if (!l.length) return;                                 // nothing to hand back yet
+  if (!force && $$(".gate.on").length) return;            // something else is already asking
+  const down = winDownNow().length > 0;
+  $("#readSheetK").textContent = down ? "read this first" : "before you start";
+  $("#readSheetH").textContent = down ? "Read this first" : "Things you did";
+  $("#readSheetP").textContent = down
+    ? "You wrote every one of these yourself, on a day you were living through, before you knew " +
+      "you would need them."
+    : "Nothing has happened since last night except sleep, so this check-in doesn\u2019t ask you " +
+      "for a new one. It hands back what you already wrote.";
+  $("#readSheetList").innerHTML = l.map(x => '<div class="rdrow">' +
+    '<div class="t"><span class="st">\u2605</span> ' + esc(x.what) + "</div>" +
+    '<div class="m">' + esc(fmtDate(x.date)) + " \u00b7 " + DAYS[dowOf(x.date)] +
+      ((x.kinds || []).length ? " \u00b7 " + esc(x.kinds.join(", ").toLowerCase()) : "") +
+    "</div></div>").join("");
+  const all = (STATE.stars || []).filter(x => x && (x.what || "").trim()).length;
+  $("#readSheetNote").textContent = all > l.length
+    ? all + " logged in all. They stay at the bottom of this check-in if you want to look again."
+    : "They stay at the bottom of this check-in if you want to look again.";
+  STATE.readSeen[key] = Date.now();
+  // keep the list from growing without limit
+  const ks = Object.keys(STATE.readSeen);
+  if (ks.length > 120) ks.sort().slice(0, ks.length - 120).forEach(k2 => delete STATE.readSeen[k2]);
+  saveState();
+  sheet.classList.add("on");
+}
+
 /* The morning side of the same idea: hand back what she already proved. */
 function renderRead() {
   const blk = $("#readBlock"); if (!blk || !draft) return;
@@ -9525,6 +9592,8 @@ function init() {
     if (draft.gold.what.trim()) $("#winWhat").classList.remove("need");
   };
   $("#readMore").onclick = () => { readBump++; renderRead(); };
+  $("#readSheetGo").onclick = () => { $("#readSheet").classList.remove("on"); };
+  $("#readSheetMore").onclick = () => { readBump++; showReadSheet(true); renderRead(); };
   $("#winNone").onclick = () => {
     // Not a skip. Turning it on stores an explicit "there wasn't one", which is
     // the thing worth counting on a bad week.
@@ -10013,6 +10082,8 @@ function init() {
     // letting it look like a blank one
     if (ENTRIES.some(x => x.date === todayISO() && x.win === target))
       toast("That one is already saved — check the date and check-in above", true);
+    // the due prompt was in the way when setDraft tried; now it isn't
+    setTimeout(() => { try { showReadSheet(); } catch (e) {} }, 140);
   };
   $("#gateSkip").onclick = () => { const due = dueWindows(todayISO());
     if (!due.length) { $("#gate").classList.remove("on"); return; }
