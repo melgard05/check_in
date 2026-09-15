@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:97-->
+<!DOCTYPE html><!--build:98-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1895,7 +1895,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 97;
+const BUILD = 98;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2257,6 +2257,19 @@ async function load() {
   // ids of things deliberately removed, so a sync can't resurrect them
   if (!STATE.gone || typeof STATE.gone !== "object") STATE.gone = {};
   if (!Array.isArray(STATE.flagLog)) STATE.flagLog = [];      // what was raised, and when
+  // Titles used to carry the day's count — "Doses missed on 6 of the last 7 days"
+  // — so every change of number looked like a new, separate finding, and a
+  // month's worth of them were listed side by side in the doctor summary as if
+  // all were true at once. The number belongs in the body.
+  STATE.flagLog.forEach(x => {
+    if (!x || typeof x.title !== "string") return;
+    const t = x.title;
+    let nt = "";
+    if (/^Doses (missed|unticked) on \d+ of the last \d+ days$/.test(t)) nt = "Doses going unticked";
+    else if (/^Pain at 7\+ on \d+ of the last 7 days$/.test(t)) nt = "Pain at 7+ for several days";
+    else if (/^Bedtime swinging by \d+\+ hours$/.test(t)) nt = "Bedtime swinging";
+    if (nt && nt !== t) { x.body = t + ". " + (x.body || ""); x.title = nt; x.key = x.date + "|" + nt; }
+  });
   if (!STATE.flagSeen || typeof STATE.flagSeen !== "object") STATE.flagSeen = {};
   // was keyed "date|title" and lasted a day, which is why the same sentence came
   // back every morning. Now keyed by title, and it remembers what the numbers
@@ -5749,11 +5762,12 @@ function renderFlagHistory() {
   const log = (STATE.flagLog || []).slice().reverse();
   if (!log.length) { el.innerHTML = '<div class="mini">Nothing flagged yet.</div>'; return; }
   const byTitle = {};
-  log.forEach(x => { (byTitle[x.title] = byTitle[x.title] || []).push(x.date); });
+  log.forEach(x => { const k = x.title.replace(/\d+/g, "#"); (byTitle[k] = byTitle[k] || []).push(x.date);
+    byTitle[k].title = byTitle[k].title && byTitle[k].title >= x.title ? byTitle[k].title : x.title; });
   el.innerHTML = '<div class="scroll"><table class="tbl"><tr><th>What</th><th>Days</th>' +
     "<th>First</th><th>Last</th></tr>" +
     Object.keys(byTitle).map(t => { const ds = byTitle[t].slice().sort();
-      return "<tr><td>" + esc(t) + "</td><td>" + ds.length + "</td><td>" +
+      return "<tr><td>" + esc(byTitle[t].title || t) + "</td><td>" + ds.length + "</td><td>" +
         fmtDate(ds[0]) + "</td><td>" + fmtDate(ds[ds.length - 1]) + "</td></tr>"; }).join("") +
     "</table></div>";
 }
@@ -6104,7 +6118,8 @@ function renderFlags(rows) {
       }));
     });
     const worst = Object.keys(miss).sort((a, c) => miss[c] - miss[a]).slice(0, 3);
-    out.push(["", "Doses unticked on " + mg + " of the last " + medDays.length + " days",
+    out.push(["", "Doses going unticked",
+      mg + " of the last " + medDays.length + " days had at least one scheduled dose left unticked. " +
       (worst.length ? "Most often " + worst.map(x => x.toLowerCase() + " (" + miss[x] + "\u00d7)").join(", ") + ". " : "") +
       "This counts what was ticked, so an untaken dose and an unticked one look the same here."]);
   }
@@ -6113,7 +6128,8 @@ function renderFlags(rows) {
     const m = minsOf(r.sleep.bed); return m > 720 ? m - 1440 : m; });
   if (beds.length >= 5) {
     const mn = Math.min.apply(null, beds), mx2 = Math.max.apply(null, beds);
-    if (mx2 - mn >= 150) out.push(["", "Bedtime swinging by " + Math.round((mx2 - mn) / 60) + "+ hours",
+    if (mx2 - mn >= 150) out.push(["", "Bedtime swinging",
+      "By " + Math.round((mx2 - mn) / 60) + "+ hours across the last ten nights. " +
       "Irregular sleep timing is one of the more actionable things on this whole screen."]);
   }
   // sustained pain
@@ -6121,7 +6137,8 @@ function renderFlags(rows) {
   if (ph.length >= 3) {
     const sites = {}; ph.forEach(r => r.sites.forEach(s => sites[s] = (sites[s] || 0) + 1));
     const top = Object.keys(sites).sort((a, b) => sites[b] - sites[a]).slice(0, 3);
-    out.push(["", "Pain at 7+ on " + ph.length + " of the last 7 days",
+    out.push(["", "Pain at 7+ for several days",
+      ph.length + " of the last 7 days. " +
       (top.length ? "Mostly " + top.join(", ").toLowerCase() + ". " : "") +
       "Sustained pain drags mood down on its own, which can look like a mood episode on these charts."]);
   }
@@ -6680,9 +6697,18 @@ function printDoctor() {
   if (rep.length) bullets.push("Recurring early warning signs: " +
     rep.map(x => x.toLowerCase() + " (" + wn[x] + " days)").join(", ") + ".");
 
-  const flags = (STATE.flagLog || []).filter(x => x.date >= addDays(todayISO(), -28));
-  const flagNames = [];
-  flags.forEach(x => { if (flagNames.indexOf(x.title) < 0) flagNames.push(x.title); });
+  const flags = (STATE.flagLog || []).filter(x => x.date >= addDays(todayISO(), -28))
+    .sort((a, b) => a.date < b.date ? -1 : 1);
+  // one entry per kind of flag — the most recent wording, and how many of the
+  // 28 days it was raised on — rather than every day's version side by side
+  const flagBy = {};
+  flags.forEach(x => {
+    const k = x.title.replace(/\d+/g, "#");
+    if (!flagBy[k]) flagBy[k] = { title: x.title, body: x.body || "", days: 0, last: "" };
+    flagBy[k].days++;
+    if (x.date >= flagBy[k].last) { flagBy[k].last = x.date; flagBy[k].title = x.title; flagBy[k].body = x.body || ""; }
+  });
+  const flagNames = Object.keys(flagBy).map(k => flagBy[k]).sort((a, b) => b.days - a.days);
 
   w.document.write('<!doctype html><meta charset="utf-8"><title>Baseline summary</title><style>' +
     'body{font:13.5px/1.6 -apple-system,system-ui,sans-serif;margin:26px;color:#111;max-width:700px}' +
@@ -6713,8 +6739,11 @@ function printDoctor() {
 
     (flagNames.length
       ? "<h2>Flagged by the app this month</h2><ul>" +
-        flagNames.slice(0, 6).map(t => "<li>" + esc2(t) + "</li>").join("") + "</ul>" +
-        '<div class="sm">Threshold checks on self-reported data, not diagnostic.</div>'
+        flagNames.slice(0, 6).map(f => "<li><b>" + esc2(f.title) + "</b> \u2014 " +
+          esc2(f.body.split(".")[0]) + '. <span class="sm">Raised on ' + f.days + " of the last 28 days; " +
+          "last on " + esc2(f.last) + ".</span></li>").join("") + "</ul>" +
+        '<div class="sm">Threshold checks on self-reported data, not diagnostic. Each line is the ' +
+        "most recent wording of that check; the day count is how often it fired.</div>"
       : "") +
 
     "<h2>What I would like to ask about</h2>" +
