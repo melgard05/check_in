@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:98-->
+<!DOCTYPE html><!--build:100-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -675,6 +675,25 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
+    <div id="screenAtBlock" style="display:none">
+      <div class="eyebrow">Screen time so far</div>
+      <div class="card">
+        <p class="sub" style="margin-bottom:10px" id="screenAtSub"></p>
+        <div class="wheelwrap" style="margin-top:4px">
+          <div class="wcol"><div class="wcap">hours</div>
+            <div class="wheel" id="wAH"><div class="wsel"></div></div>
+            <div class="wstep"><button type="button" data-wstep="wAH:-1" aria-label="One hour less">&minus;</button><button type="button" data-wstep="wAH:1" aria-label="One hour more">+</button></div>
+          </div>
+          <div class="wcol"><div class="wcap">minutes</div>
+            <div class="wheel" id="wAM"><div class="wsel"></div></div>
+            <div class="wstep"><button type="button" data-wstep="wAM:-1" aria-label="Five minutes less">&minus;</button><button type="button" data-wstep="wAM:1" aria-label="Five minutes more">+</button></div>
+          </div>
+        </div>
+        <div class="wtotal" id="screenAtTotal">&mdash;</div>
+        <div class="row" style="margin-top:9px"><button class="btn sm gho" id="screenAtNone">Didn&rsquo;t check / skip</button></div>
+      </div>
+    </div>
+
     <div id="screenBlock" style="display:none">
       <div class="eyebrow">Screen time</div>
       <div class="card">
@@ -690,6 +709,9 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           </div>
         </div>
         <div class="wtotal" id="screenTotal">&mdash;</div>
+        <p class="sub" style="margin:12px 0 7px" id="screenWorkSub">How much of that was work?</p>
+        <div class="chips" id="screenWorkChips"></div>
+        <div class="mini" id="screenWorkNote" style="margin-top:7px"></div>
         <div class="row" style="margin-top:11px;gap:8px">
           <button class="btn sm gho" id="screenNone">Didn't check / skip</button>
         </div>
@@ -1542,6 +1564,17 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="sw"><div style="flex:1"><div class="t">Ask for a daily total</div>
         <div class="d">Skippable on any given day without holding up the check-in.</div></div>
         <button class="tog" id="togScreen" aria-pressed="true"></button></div>
+      <div class="sw"><div style="flex:1"><div class="t">Ask for the running figure at</div>
+        <div class="d" id="screenAtHint"></div></div>
+        <select id="screenAtWinSel" style="flex:0 0 152px"></select></div>
+      <div class="sw"><div style="flex:1"><div class="t">On a working day, how much is work</div>
+        <div class="d" id="screenWorkHint"></div></div>
+        <select id="screenWorkSel" style="flex:0 0 152px">
+          <option value="0">None</option>
+          <option value="0.25">About a quarter</option>
+          <option value="0.5">About half</option>
+          <option value="0.75">Most of it</option>
+        </select></div>
       <div class="sw"><div style="flex:1"><div class="t">Which day it's about</div>
         <div class="d" id="screenForHint"></div></div>
         <select id="screenForSel" style="flex:0 0 152px">
@@ -1895,7 +1928,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 98;
+const BUILD = 100;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1931,6 +1964,8 @@ const DEFAULT_CFG = {
   themeSrc: null,             // which kinds of writing feed "what you keep writing"
   jrnExport: false,           // keep the journal out of the doctor export unless asked
   flagBack: 3,                // days before a dismissed pattern may come back; 0 = only if it changes
+  screenWork: 0.5,            // share of a work day's screen time that is work, unless told otherwise
+  screenAtWin: null,          // the check-in that asks for the running figure at the end of work
   strengths: null,            // set from STRENGTHS on first load; editable after
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
@@ -1980,7 +2015,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "flagBack", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -2183,6 +2218,14 @@ async function load() {
   if (typeof CFG.winDownAsk !== "boolean") CFG.winDownAsk = true;
   if (typeof CFG.jrnExport !== "boolean") CFG.jrnExport = false;
   if ([0, 1, 3, 7].indexOf(+CFG.flagBack) < 0) CFG.flagBack = 3;
+  if (typeof CFG.screenWork !== "number" || !(CFG.screenWork >= 0 && CFG.screenWork <= 1)) CFG.screenWork = 0.5;
+  // the reading at the end of the working day: the check-in just before the last
+  // one on an ordinary day, which is the after-work one on her schedule
+  if (CFG.screenAtWin === null || CFG.screenAtWin === undefined) {
+    const wd = CFG.windows.filter(runsWd);
+    CFG.screenAtWin = wd.length >= 3 ? wd[wd.length - 2].id : "";
+  }
+  if (CFG.screenAtWin && !CFG.windows.some(w => w.id === CFG.screenAtWin)) CFG.screenAtWin = "";
   if (!Array.isArray(CFG.themeSrc)) CFG.themeSrc = THEME_SRC_IDS.slice();
   CFG.themeSrc = CFG.themeSrc.filter(id => THEME_SRC_IDS.indexOf(id) > -1);
   if (!CFG.themeSrc.length) CFG.themeSrc = THEME_SRC_IDS.slice();
@@ -2357,7 +2400,7 @@ function newDraft(date, winId) {
     ctx: earlier ? ctxOf(earlier) : [],
     medoff: { st: "", at: "", crashAt: "", crashEnd: "", fx: [] },
     recall: false, period: false,
-    sleep: null, screen: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "",
+    sleep: null, screen: null, screenAt: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "",
     tch: {}, gold: { what: "", str: [], none: false } };
 }
 function fixDraft(d) {                       // older records, and anything Firebase handed back
@@ -2398,6 +2441,11 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (d.screen && d.screen.h == null && d.screen.m == null) d.screen = null;
   // readings logged before this was a choice were always about the day they were typed
   if (d.screen && typeof d.screen.prev !== "boolean") d.screen.prev = false;
+  // work share: null means "use the standing default for that kind of day"
+  if (d.screen && !(typeof d.screen.work === "number" && d.screen.work >= 0 && d.screen.work <= 1))
+    d.screen.work = null;
+  if (d.screenAt != null && (typeof d.screenAt !== "object" || Array.isArray(d.screenAt))) d.screenAt = null;
+  if (d.screenAt && d.screenAt.h == null && d.screenAt.m == null) d.screenAt = null;
   if (!d.meds || typeof d.meds !== "object" || Array.isArray(d.meds)) d.meds = {};
   if (!d.meds.taken || typeof d.meds.taken !== "object") {
     const legacy = {};
@@ -3048,6 +3096,47 @@ const screenWinId = () => {
 };
 // the entry is saved on the day it was typed; the reading belongs to the day it measured
 const screenDateOf = e => (e.screen && e.screen.prev) ? addDays(e.date, -1) : e.date;
+/* Was this a working day? Where you were is the honest answer when it was given;
+   failing that, a weekday that isn't on the second schedule is assumed to be. */
+function dayWorked(date) {
+  const es = ENTRIES.filter(e => e.date === date && ctxOf(e).length);
+  if (es.length) return es.some(e => ctxAny(e, "work"));
+  const dow = dowOf(date);
+  if (CFG.weekend && (CFG.altDays || []).indexOf(dow) > -1) return false;
+  return dow >= 1 && dow <= 5;
+}
+/* How much of the day's screen time was work. A per-day answer wins; otherwise
+   the standing estimate applies on working days and nothing on days off. This is
+   an estimate you set, not something the phone measured — it takes the weekday
+   skew out, it can't tell a heavy work day from a light one on its own. */
+function screenWorkShare(e) {
+  if (e && e.screen && typeof e.screen.work === "number") return e.screen.work;
+  return dayWorked(screenDateOf(e)) ? (+CFG.screenWork || 0) : 0;
+}
+const screenHours = e => (e && e.screen) ? (e.screen.h || 0) + (e.screen.m || 0) / 60 : null;
+/* The running figure logged at the end of the working day, for the day itself.
+   Everything on the phone up to that point is taken as work; what comes after
+   is hers. A measurement, where the share above is only an estimate. */
+function screenAtWorkFor(date) {
+  const e = ENTRIES.find(x => x.date === date && x.screenAt &&
+    (x.screenAt.h != null || x.screenAt.m != null));
+  return e ? (e.screenAt.h || 0) + (e.screenAt.m || 0) / 60 : null;
+}
+/* Everything that goes into the day's screen figure, in one place: total, how
+   much of it was work, which way that was decided, and what is left. */
+function screenSplit(e) {
+  const total = screenHours(e);
+  if (total == null) return null;
+  const date = screenDateOf(e);
+  let work, mode;
+  if (typeof e.screen.work === "number") { work = total * e.screen.work; mode = "set"; }
+  else {
+    const at = dayWorked(date) ? screenAtWorkFor(date) : null;
+    if (at != null) { work = Math.min(at, total); mode = "measured"; }
+    else { work = total * screenWorkShare(e); mode = dayWorked(date) ? "estimated" : "off"; }
+  }
+  return { total, work, own: Math.max(0, total - work), share: total ? work / total : 0, mode };
+}
 const napRollsForward = winId => winId === lastWinOn((draft && draft.date) || todayISO());
 function addDays(dateISO, n) {
   const p = String(dateISO).split("-");
@@ -3135,26 +3224,78 @@ function medOffHint() {
 }
 
 let lastScreen = { h: 0, m: 0 };
+const SCREEN_WORK_OPTS = [[0, "None of it"], [0.25, "About a quarter"], [0.5, "About half"],
+  [0.75, "Most of it"], [1, "All of it"]];
+function renderScreenWork() {
+  const box = $("#screenWorkChips"); if (!box || !draft) return;
+  const on = !!draft.screen;
+  box.style.display = on ? "" : "none";
+  $("#screenWorkSub").style.display = on ? "" : "none";
+  $("#screenWorkNote").style.display = on ? "" : "none";
+  if (!on) return;
+  const explicit = typeof draft.screen.work === "number";
+  const sp = screenSplit(draft);
+  const share = sp ? sp.share : screenWorkShare(draft);
+  const worked = dayWorked(screenDateOf(draft));
+  if (sp && sp.mode === "measured") {
+    // a real reading beats a chip; keep the chips reachable but say what is in force
+    box.innerHTML = SCREEN_WORK_OPTS.map(o =>
+      '<button class="chip" data-scwork="' + o[0] + '" aria-pressed="false">' + o[1] + "</button>").join("");
+    $("#screenWorkNote").textContent = "Measured: " + hm(Math.round(sp.work * 60)) +
+      " was on the phone by the end of work, so " + hm(Math.round(sp.own * 60)) +
+      " is yours. Tap a share only if that reading was wrong.";
+    return;
+  }
+  box.innerHTML = SCREEN_WORK_OPTS.map(o =>
+    '<button class="chip" data-scwork="' + o[0] + '" aria-pressed="' +
+    (Math.abs(share - o[0]) < 0.01 ? "true" : "false") + '"' +
+    (!explicit && Math.abs(share - o[0]) < 0.01 ? ' style="opacity:.75"' : "") + ">" + o[1] +
+    "</button>").join("");
+  $("#screenWorkNote").textContent = explicit
+    ? "Set for this day. The charts use what\u2019s left after work."
+    : worked
+      ? "Assumed, from your setting for a working day. Tap one if this day was different."
+      : "Assumed none \u2014 this reads as a day off. Tap one if that\u2019s wrong.";
+}
+function pushScreenAt(skip) {
+  if (!draft) return;
+  const el = $("#screenAtTotal"); if (!el) return;
+  if (skip) { draft.screenAt = null; el.innerHTML = '<span style="color:var(--ink-3)">not recorded</span>'; return; }
+  const h = wheelVal($("#wAH")), m = wheelVal($("#wAM"));
+  draft.screenAt = { h, m };
+  el.innerHTML = (h || m ? hm(h * 60 + m) : "none") +
+    '  <span style="color:var(--ink-3);font-size:13px">by the ' +
+    esc(String((winById(draft.win) || {}).label || "").toLowerCase()) + " check-in</span>";
+}
 function pushScreen(skip) {
   if (!draft) return;
   const el = $("#screenTotal"); if (!el) return;
-  if (skip) { draft.screen = null; el.innerHTML = '<span style="color:var(--ink-3)">not recorded</span>'; return; }
+  if (skip) { draft.screen = null; el.innerHTML = '<span style="color:var(--ink-3)">not recorded</span>';
+    renderScreenWork(); return; }
   const h = wheelVal($("#wSH")), m = wheelVal($("#wSM"));
-  draft.screen = { h, m, prev: screenPrev() };
+  const keep = draft.screen && typeof draft.screen.work === "number" ? draft.screen.work : null;
+  draft.screen = { h, m, prev: screenPrev(), work: keep };
   const tot = h + m / 60;
-  // compared against your own fortnight, not against anybody's idea of a healthy number
+  const sp0 = screenSplit(draft);
+  const share = sp0 ? sp0.share : screenWorkShare(draft);
+  const own = sp0 ? sp0.own : tot * (1 - share);
+  // compared like with like — your own share of the phone against your own
+  // fortnight of the same, not the raw total against anybody's idea of healthy
   const past = daily(15).map(r => r.screen).filter(v => v != null);
   const avg = past.length >= 4 ? past.reduce((a, b) => a + b, 0) / past.length : null;
   let tail = "";
   if (avg != null) {
-    const d = tot - avg;
+    const d = own - avg;
     tail = Math.abs(d) < 0.5
       ? '  <span style="color:var(--ink-3)">about your usual</span>'
       : '  <span style="color:' + (d > 0 ? "var(--high-1)" : "var(--base)") + '">' +
         (d > 0 ? "+" : "\u2212") + hm(Math.round(Math.abs(d) * 60)) + " on your usual " +
         avg.toFixed(1) + "h</span>";
   }
-  el.innerHTML = (tot ? hm(h * 60 + m) : "none") + tail;
+  el.innerHTML = (tot ? hm(h * 60 + m) : "none") +
+    (tot && share > 0 ? ' <span style="color:var(--ink-3);font-size:13px">\u00b7 ' +
+      hm(Math.round(own * 60)) + " yours</span>" : "") + tail;
+  renderScreenWork();
 }
 function pushNap() {
   if (!draft) return;
@@ -3260,6 +3401,19 @@ function renderLog() {
   }
 
   // naps
+  // the running figure at the end of the working day — only on a day that was one
+  const wantAt = CFG.screenOn && !!CFG.screenAtWin && draft.win === CFG.screenAtWin && dayWorked(draft.date);
+  $("#screenAtBlock").style.display = wantAt ? "" : "none";
+  if (wantAt) {
+    const w = winById(draft.win);
+    $("#screenAtSub").innerHTML = "Your phone\u2019s figure for today, as it stands now. Everything up to " +
+      "this check-in counts as work; whatever the total reaches by tomorrow morning, the difference " +
+      "is yours. That gives a measured split instead of a guess.";
+    setWheel($("#wAH"), draft.screenAt && draft.screenAt.h != null ? draft.screenAt.h : 0);
+    setWheel($("#wAM"), draft.screenAt && draft.screenAt.m != null ? draft.screenAt.m : 0);
+    pushScreenAt(draft.screenAt == null);
+    $("#screenAtNone").textContent = draft.screenAt == null ? "Enter it after all" : "Didn\u2019t check / skip";
+  }
   const wantScreen = CFG.screenOn && draft.win === screenWinId();
   $("#screenBlock").style.display = wantScreen ? "" : "none";
   if (wantScreen) {
@@ -3578,7 +3732,7 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", ctxs: [], worked: null, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", ctxs: [], worked: null, screenAll: null, screenWork: 0, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -3586,7 +3740,13 @@ function daily(days) {
     // a morning reading describes yesterday, so it lands on yesterday's row
     const sc = ENTRIES.find(e => e.screen && (e.screen.h != null || e.screen.m != null) &&
       screenDateOf(e) === date);
-    if (sc) row.screen = (sc.screen.h || 0) + (sc.screen.m || 0) / 60;
+    if (sc) {
+      const sp = screenSplit(sc);
+      row.screenAll = sp.total;                            // what the phone said
+      row.screenWork = sp.share;                           // the share that was work
+      row.screenMode = sp.mode;                            // measured, estimated, set, or off
+      row.screen = sp.own;                                 // what the charts and correlations use
+    }
     const se = es.find(e => e.sleep && (e.sleep.h != null));
     if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake,
       wakes: (se.sleep.wakes || []).slice(), awakeMins: wakeMins(se.sleep) };
@@ -4098,7 +4258,11 @@ function readoutFor(i) {
   if (r.medoff && r.medoff.crashLen != null) bits.push('<span style="color:var(--high-2)">crash lasted <b>' +
     hm(r.medoff.crashLen) + "</b>" +
     (r.medoff.fx.length ? " · " + esc(r.medoff.fx.join(", ").toLowerCase()) : "") + "</span>");
-  if (r.screen != null) bits.push("screen <b>" + hm(Math.round(r.screen * 60)) + "</b>");
+  if (r.screen != null) bits.push("screen <b>" + hm(Math.round(r.screen * 60)) + "</b>" +
+    (r.screenWork ? ' <span style="color:var(--ink-3)">of ' + hm(Math.round(r.screenAll * 60)) +
+      ", " + Math.round(r.screenWork * 100) + "% work" +
+      (r.screenMode === "measured" ? ", measured" : r.screenMode === "estimated" ? ", assumed" : "") +
+      "</span>" : ""));
   if (r.medoff && r.medoff.st) bits.push("meds " + (r.medoff.st === "still" ? "<b>lasted all day</b>"
     : r.medoff.st === "none" ? "<b>unclear</b>" : "off at <b>" + esc(r.medoff.at) + "</b>"));
   if (r.nap) bits.push('<span style="color:#9b7fd4">napped <b>' + Math.floor(r.nap.hours) + "h " +
@@ -5484,10 +5648,13 @@ function renderSummary(rows, corr, cut) {
     if (!sc7.length) return "Nothing logged this week.";
     const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
     const a = avg(sc7), d = scPv.length ? a - avg(scPv) : null;
-    return "<b>" + a.toFixed(1) + " h</b> a day across <b>" + sc7.length + "</b> logged days" +
+    const anyWork = rows.slice(-7).some(r => r.screenWork);
+    return "<b>" + a.toFixed(1) + " h</b> a day" + (anyWork ? " of your own" : "") + " across <b>" +
+      sc7.length + "</b> logged days" +
       (d == null ? "." : Math.abs(d) >= 0.5
         ? ", " + (d > 0 ? "up" : "down") + " <b>" + Math.abs(d).toFixed(1) + " h</b> on the week before."
-        : ", level with the week before.");
+        : ", level with the week before.") +
+      (anyWork ? " Work use is set aside first." : "");
   })(), !rows.slice(-7).some(r => r.screen != null), "corrLag");
   push("spikes", sp.length
     ? "<b>" + sp.length + "</b> logged in the last week \u2014 the moments the daily averages flatten out."
@@ -6452,7 +6619,7 @@ function buildExport(kind) {
       "nap_hours", "nap_start", "nap_carried_from_prev_evening", "total_sleep_hours",
       "med_wore_off", "med_wore_off_time", "crash_time", "crash_end", "crash_minutes", "crash_effects",
       "from_memory", "med_adherence", "med_taken_am", "med_taken_pm", "prn_doses",
-      "screen_hours", "spike_count", "spike_times", "daylight_hours"]
+      "screen_hours_own", "screen_hours_total", "spike_count", "spike_times", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
       .concat(noted.map(i => i.key + "_note"))
@@ -6477,6 +6644,7 @@ function buildExport(kind) {
       r.meds == null ? "" : r.meds.toFixed(2),
       r.medAt.am || "", r.medAt.pm || "", r.prn || "",
       r.screen == null ? "" : r.screen.toFixed(2),
+      r.screenAll == null ? "" : r.screenAll.toFixed(2),
       r.spikes.length || "", r.spikes.map(x => x.at).join("; "),
       r.day.toFixed(2)]
       .concat(on.map(i => r.v[i.key] == null ? "" : r.v[i.key].toFixed(2)))
@@ -7480,6 +7648,20 @@ function renderCfg() {
     ? "Morning suits a question about yesterday."
     : "The day's total only exists at the end of it.";
   const scR = daily(30).map(r => r.screen).filter(v => v != null);
+  $("#screenAtWinSel").innerHTML = '<option value="">Don\u2019t ask</option>' +
+    CFG.windows.map(w => '<option value="' + w.id + '"' + (CFG.screenAtWin === w.id ? " selected" : "") +
+      ">" + esc(w.label) + "</option>").join("");
+  $("#screenAtHint").textContent = CFG.screenAtWin
+    ? "On working days, this check-in asks what the phone says so far. Everything up to then counts " +
+      "as work; the next morning\u2019s total minus that is yours. A measured split \u2014 the share " +
+      "below is only used on days without one."
+    : "Off. The share below is used on every working day instead.";
+  $("#screenWorkSel").value = String(+CFG.screenWork || 0);
+  $("#screenWorkHint").textContent = +CFG.screenWork
+    ? "The phone can\u2019t tell work from the rest, so this is your estimate. On a day tagged at " +
+      "work (or an untagged weekday), " + Math.round(CFG.screenWork * 100) + "% is set aside and the " +
+      "charts use what\u2019s left. Days off count in full. Any day can be overridden at the check-in."
+    : "Nothing set aside. The whole total is treated as yours.";
   $("#screenNote").textContent = !CFG.screenOn
     ? "Off — not asked. Anything already logged is kept."
     : scR.length
@@ -9220,7 +9402,7 @@ function draftTouched() {
   if (draft.pain && ((draft.pain.sites || []).length || (draft.pain.kinds || []).length)) return true;
   if (draft.nap && draft.nap.on) return true;
   if (draft.medoff && draft.medoff.st) return true;
-  if (draft.screen) return true;
+  if (draft.screen || draft.screenAt) return true;
   if (draft.meds && Object.keys(draft.meds.taken || {}).length) return true;
   if (ctxOf(draft).length) return true;
   if (draft.gold && ((draft.gold.what || "").trim() || draft.gold.none ||
@@ -9373,7 +9555,7 @@ function commit(skip, reason) {
     const anyCtx = ctxOf(draft).length > 0;
     const anyMedOff = draft.medoff && !!draft.medoff.st;
     const anyPeriod = !!draft.period;
-    const anyScreen = !!draft.screen;
+    const anyScreen = !!draft.screen || !!draft.screenAt;
     const anyWin = !!(draft.gold && ((draft.gold.what || "").trim() || draft.gold.none));
     if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap && !anyCtx && !anyMedOff && !anyPeriod &&
         !anyScreen && !anyWin && !draft.tags.length && !draft.warns.length && !draft.note) {
@@ -9443,8 +9625,12 @@ function commit(skip, reason) {
         draft.medoff.crashEnd = $("#crashEnd").value || "";
       } else { draft.medoff.crashAt = ""; draft.medoff.crashEnd = ""; draft.medoff.fx = []; }
     }
+    if (CFG.screenOn && CFG.screenAtWin && draft.win === CFG.screenAtWin && draft.screenAt)
+      draft.screenAt = { h: wheelVal($("#wAH")), m: wheelVal($("#wAM")) };
+    else if (draft.win !== CFG.screenAtWin) { /* another check-in: leave whatever is there */ }
     if (CFG.screenOn && draft.win === screenWinId() && draft.screen) {
-      draft.screen = { h: wheelVal($("#wSH")), m: wheelVal($("#wSM")), prev: screenPrev() };
+      draft.screen = { h: wheelVal($("#wSH")), m: wheelVal($("#wSM")), prev: screenPrev(),
+        work: typeof draft.screen.work === "number" ? draft.screen.work : null };
     } else if (draft.win !== screenWinId()) { /* another check-in: leave whatever is there */ }
     if ((CFG.napWins || []).indexOf(draft.win) > -1 && draft.nap && draft.nap.on) {
       draft.nap = { on: true, h: wheelVal($("#wNH")), m: wheelVal($("#wNM")),
@@ -9501,6 +9687,8 @@ function init() {
   buildWheel($("#wH"), 14, 1, pushSleep);
   buildWheel($("#wM"), 55, 5, pushSleep);
   buildWheel($("#wSH"), 16, 1, () => pushScreen(false));
+  buildWheel($("#wAH"), 16, 1, () => pushScreenAt(false));
+  buildWheel($("#wAM"), 55, 5, () => pushScreenAt(false));
   buildWheel($("#wSM"), 55, 5, () => pushScreen(false));
   buildWheel($("#wNH"), 5, 1, pushNap);
   buildWheel($("#wNM"), 55, 5, pushNap);
@@ -9717,6 +9905,15 @@ function init() {
         draft.meds.at[g] = pad(n.getHours()) + ":" + pad(n.getMinutes());
       }
       renderLog();
+      return;
+    }
+    const scw = ev.target.closest("[data-scwork]");
+    if (scw && draft && draft.screen) {
+      const v = +scw.dataset.scwork;
+      // tapping the one already assumed makes it explicit; tapping it again lets go
+      draft.screen.work = (typeof draft.screen.work === "number" && Math.abs(draft.screen.work - v) < 0.01)
+        ? null : v;
+      pushScreen(false);
       return;
     }
     const wst = ev.target.closest("[data-wstr]");
@@ -10132,6 +10329,15 @@ function init() {
   });
 
   $("#togQuick").onclick = () => { CFG.quick = !CFG.quick; showAll = false;
+    touchCfg(); renderCfg(); renderLog(); };
+  $("#screenAtNone").onclick = () => {
+    if (draft.screenAt == null) { setWheel($("#wAH"), 0); setWheel($("#wAM"), 0); pushScreenAt(false); }
+    else pushScreenAt(true);
+    $("#screenAtNone").textContent = draft.screenAt == null ? "Enter it after all" : "Didn\u2019t check / skip";
+  };
+  $("#screenAtWinSel").onchange = () => { CFG.screenAtWin = $("#screenAtWinSel").value || "";
+    touchCfg(); renderCfg(); renderLog(); };
+  $("#screenWorkSel").onchange = () => { CFG.screenWork = +$("#screenWorkSel").value || 0;
     touchCfg(); renderCfg(); renderLog(); };
   $("#togScreen").onclick = () => { CFG.screenOn = !CFG.screenOn;
     touchCfg(); renderCfg(); renderLog(); };
