@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:101-->
+<!DOCTYPE html><!--build:102-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -771,6 +771,22 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     <div class="eyebrow" id="ebBody">Body &amp; behavior</div>
     <div class="card" id="extraItems"></div>
 
+    <div id="strokeBlock" style="display:none">
+      <div class="eyebrow">Post-stroke</div>
+      <div class="card">
+        <p class="sub" style="margin-bottom:2px" id="strokeSub">Residual symptoms, tracked over weeks.
+          1 is none. These build their own baseline; nothing here asks for an explanation.</p>
+        <div class="flag" id="strokeWarn" style="margin:10px 0 6px;display:none">
+          <b>If any of these is sudden or new, that&rsquo;s a call, not a check-in.</b>
+          <span>These scales are for slow change over weeks. A new symptom that arrives in minutes,
+            or one that sharply worsens, is an emergency &mdash; ring for help first and log it
+            afterwards.</span>
+          <button class="btn sm gho" id="strokeWarnOk" style="margin-top:8px">Understood</button>
+        </div>
+        <div id="strokeItems"></div>
+      </div>
+    </div>
+
     <div id="painBlock">
       <div class="eyebrow">Pain</div>
       <div class="card">
@@ -1004,6 +1020,15 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         because a 6 out of 10 day with one genuinely good hour in it is not the same as a flat 6,
         and only one of those is worth reading back on a bad day.</p>
       <div id="starList"></div>
+    </div>
+
+    <div class="card" id="strokeCard" style="display:none">
+      <h2>Post-stroke</h2>
+      <p class="sub">The six residual-symptom scales, averaged over the last two weeks against the two
+        before. Slow change is the thing to watch here, so this deliberately doesn&rsquo;t react
+        to single days.</p>
+      <div id="strokeSum" class="statnote"></div>
+      <div id="strokeBody"></div>
     </div>
 
     <div class="card" id="callsCard" style="display:none">
@@ -1617,6 +1642,20 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="mini" id="spikeTotal" style="margin-top:4px"></div>
     </div>
 
+    <div class="card" id="ds-post-stroke">
+      <h2>Post-stroke</h2>
+      <p class="sub">Six scales for residual symptoms, asked at the after-work and evening check-ins
+        on a working day and the evening check-in on a day off. Turn any off, or move them, under
+        What to track below. The date and the imaging wording go into the doctor export so a
+        neurologist sees what is being tracked and since when.</p>
+      <label class="fld"><span>Found on imaging</span>
+        <input type="date" id="strokeFrom"></label>
+      <label class="fld" style="margin-top:11px"><span>Imaging impression, in the report&rsquo;s words</span>
+        <textarea id="strokeNote" rows="3" placeholder="Paste the impression line from the report."></textarea></label>
+      <div class="mini" style="margin-top:7px">Stored in your settings and synced to your other device
+        &mdash; never in the app&rsquo;s own code, which is public.</div>
+    </div>
+
     <div class="card" id="ds-what-to-track">
       <h2>What to track</h2>
       <p class="sub">Turn off anything that's noise. Fewer, honest entries beat many guessed ones.</p>
@@ -1844,6 +1883,17 @@ const ITEMS = [
   { key:"exercise", label:"Movement",        low:"Sedentary",        high:"Hard workout",    grp:"body", anchor:"low",    dir:"up",   note:true },
   { key:"outside",  label:"Time outside",    low:"None",             high:"Hours",           grp:"body", anchor:"low",    mid:true, dir:"up", note:true },
   { key:"cycle",    label:"Cycle symptoms",  low:"None",             high:"Strong",          grp:"body", anchor:"low",    note:true, off:true },
+  // post-stroke — residual symptoms, tracked over weeks. Chosen for a left
+  // fronto-striatal lesion, where what shows is executive and language rather
+  // than the classic motor picture; the one motor scale is there for the capsule.
+  // Nothing here is core: these want a baseline of their own before anything
+  // starts asking for explanations.
+  { key:"stWord",   label:"Word-finding",      low:"Words came easily",   high:"Couldn't find them",   grp:"stroke", anchor:"low", dir:"down", note:true },
+  { key:"stSpeed",  label:"Mental speed",      low:"Normal pace",         high:"Everything took longer", grp:"stroke", anchor:"low", dir:"down", note:true },
+  { key:"stThread", label:"Holding a thread",  low:"Kept it",             high:"Lost it mid-task",     grp:"stroke", anchor:"low", dir:"down", note:true },
+  { key:"stPlan",   label:"Planning & sequencing", low:"Steps in order",  high:"Couldn't sequence it", grp:"stroke", anchor:"low", dir:"down", note:true },
+  { key:"stTired",  label:"Wiped out by thinking", low:"Fine after effort", high:"Flattened by it",    grp:"stroke", anchor:"low", dir:"down", note:true },
+  { key:"stRight",  label:"Right side",        low:"Normal",              high:"Weak or clumsy",       grp:"stroke", anchor:"low", dir:"down", note:true },
   // pain — its own section, anchored low
   { key:"pain",     label:"Pain right now",  low:"None",             high:"Worst imaginable", grp:"pain", anchor:"low",   note:true },
   { key:"painworst",label:"Worst it got",    low:"None",             high:"Worst imaginable", grp:"pain", anchor:"low",   note:true },
@@ -1929,7 +1979,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 101;
+const BUILD = 102;
 
 const DEFAULT_CFG = {
   windows: [
@@ -1967,6 +2017,8 @@ const DEFAULT_CFG = {
   flagBack: 3,                // days before a dismissed pattern may come back; 0 = only if it changes
   screenWork: 0.5,            // share of a work day's screen time that is work, unless told otherwise
   screenAtWin: null,          // the check-in that asks for the running figure at the end of work
+  strokeFrom: "",             // the day the infarct was found on imaging
+  strokeNote: "",             // the imaging impression, in her words — kept in settings, never in the source
   strengths: null,            // set from STRENGTHS on first load; editable after
   quickItems: ["mood", "irrit", "energy", "anxiety", "fog"],
   plan: { helps: "", avoid: "", contacts: "", note: "", notes: [], updated: 0 },
@@ -2016,7 +2068,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "strokeFrom", "strokeNote", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -2107,7 +2159,7 @@ function syncNeeds() {
 }
 const activeItems = grp => ITEMS.filter(i => i.grp === grp && isOn(i.key) &&
   (!draft || itemShows(i.key, draft.win, draft.date)) &&
-  (!CFG.quick || showAll || grp === "sleep" || inQuick(i.key)));
+  (!CFG.quick || showAll || grp === "sleep" || grp === "stroke" || inQuick(i.key)));
 const fmtDate = iso => { const p = iso.split("-");
   return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { month:"short", day:"numeric" }); };
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
@@ -2227,6 +2279,22 @@ async function load() {
     CFG.screenAtWin = wd.length >= 3 ? wd[wd.length - 2].id : "";
   }
   if (CFG.screenAtWin && !CFG.windows.some(w => w.id === CFG.screenAtWin)) CFG.screenAtWin = "";
+  if (typeof CFG.strokeFrom !== "string") CFG.strokeFrom = "";
+  if (typeof CFG.strokeNote !== "string") CFG.strokeNote = "";
+  // First time these scales exist: put them on the after-work and evening
+  // check-ins, whatever those are called here. The evening one runs at the
+  // weekend and the after-work one doesn't, which gives evening-only there.
+  if (!CFG.strokeSet) {
+    CFG.strokeSet = 1;
+    const wd = CFG.windows.filter(runsWd);
+    const wins = [];
+    if (wd.length >= 3) wins.push(wd[wd.length - 2].id);
+    if (wd.length) wins.push(wd[wd.length - 1].id);
+    CFG.sched = CFG.sched || {};
+    ITEMS.filter(i => i.grp === "stroke").forEach(i => {
+      if (!CFG.sched[i.key]) CFG.sched[i.key] = { wins: wins.slice(), days: [] };
+    });
+  }
   if (!Array.isArray(CFG.themeSrc)) CFG.themeSrc = THEME_SRC_IDS.slice();
   CFG.themeSrc = CFG.themeSrc.filter(id => THEME_SRC_IDS.indexOf(id) > -1);
   if (!CFG.themeSrc.length) CFG.themeSrc = THEME_SRC_IDS.slice();
@@ -3483,6 +3551,13 @@ function renderLog() {
   }
   $("#extraItems").innerHTML = activeItems("body").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
 
+  // post-stroke — asked for by name, so it stays in front of the short check-in
+  const stroke = activeItems("stroke");
+  $("#strokeBlock").style.display = stroke.length ? "" : "none";
+  if (stroke.length) {
+    $("#strokeItems").innerHTML = stroke.map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
+    $("#strokeWarn").style.display = STATE.strokeWarnOk ? "none" : "";
+  }
   // pain
   const pain = activeItems("pain");
   $("#painBlock").style.display = pain.length && (!CFG.quick || showAll) ? "" : "none";
@@ -5005,7 +5080,7 @@ const TAB_LABEL = {
   "ds-explain-the-outliers": "Outliers", "ds-pattern-alerts": "Alerts", "ds-wins": "Wins",
   "ds-tell-someone-about-dose-changes": "Tell someone",
   "ds-screen-time": "Screen time", "ds-what-set-it-off": "Triggers",
-  "ds-quick-spike-check": "Spike check", "ds-what-to-track": "What to track",
+  "ds-quick-spike-check": "Spike check", "ds-post-stroke": "Post-stroke", "ds-what-to-track": "What to track",
   "ds-medication-list": "Medications", "ds-location": "Location",
   "ds-backup": "Backup", "ds-entries": "Entries"
 };
@@ -5361,6 +5436,45 @@ function renderJournal() {
       + "</div>").join("") + "</div>").join("");
 }
 
+/* ---------- post-stroke ---------- */
+function strokeStats() {
+  const rows = daily(28);
+  const items = ITEMS.filter(i => i.grp === "stroke" && isOn(i.key));
+  const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const cut = addDays(todayISO(), -13);
+  const out = items.map(i => {
+    const now = rows.filter(r => r.date >= cut && r.v[i.key] != null).map(r => r.v[i.key]);
+    const before = rows.filter(r => r.date < cut && r.v[i.key] != null).map(r => r.v[i.key]);
+    return { key: i.key, label: i.label, n: now.length, nb: before.length,
+      now: mean(now), before: mean(before),
+      delta: (now.length >= 4 && before.length >= 4) ? mean(now) - mean(before) : null };
+  });
+  const anyData = out.some(x => x.n || x.nb);
+  const days = Object.keys(rows.filter(r => items.some(i => r.v[i.key] != null))
+    .reduce((a, r) => { a[r.date] = 1; return a; }, {})).length;
+  return { items: out, anyData, days };
+}
+function renderStroke() {
+  const card = $("#strokeCard"); if (!card) return;
+  const st = strokeStats();
+  card.style.display = st.anyData ? "" : "none";
+  if (!st.anyData) return;
+  const f1 = v => v == null ? "\u2014" : (Math.round(v * 10) / 10).toFixed(1);
+  $("#strokeSum").innerHTML = "<b>" + st.days + "</b> day" + (st.days === 1 ? "" : "s") +
+    " logged in the last four weeks" +
+    (CFG.strokeFrom ? ", tracked since <b>" + esc(fmtDate(CFG.strokeFrom)) + "</b>" : "") + ". " +
+    "Higher is worse on every one of these. A change under about a point is noise.";
+  $("#strokeBody").innerHTML = '<div class="scroll"><table class="tbl"><tr><th></th><th>Last 14 days</th>' +
+    "<th>The 14 before</th><th>Change</th></tr>" +
+    st.items.map(x => {
+      const col = x.delta == null ? "var(--ink-3)" : x.delta >= 1 ? "var(--high-2)" : x.delta <= -1 ? "var(--base)" : "var(--ink-3)";
+      return "<tr><td>" + esc(x.label) + "</td><td>" + f1(x.now) + (x.n ? ' <span class="mini">(' + x.n + ")</span>" : "") +
+        "</td><td>" + f1(x.before) + (x.nb ? ' <span class="mini">(' + x.nb + ")</span>" : "") +
+        '</td><td style="color:' + col + '">' + (x.delta == null ? "\u2014" : (x.delta > 0 ? "+" : "") + f1(x.delta)) + "</td></tr>";
+    }).join("") + "</table></div>" +
+    '<div class="mini">Counts in brackets are days with an answer. Change is only shown once both halves have at least four.</div>';
+}
+
 /* ---------- phone calls ---------- */
 let callsRange = 30;
 function callStats(days) {
@@ -5699,6 +5813,7 @@ function renderSummary(rows, corr, cut) {
 
 function renderPatterns() {
   renderMissed();
+  renderStroke();
   renderCalls();
   renderJournal();
   renderStrengthReport();
@@ -7340,6 +7455,7 @@ function printSummary() {
 
   const winSt = winStats(90);
   const calls90 = callStats(90);
+  const strokeSt = strokeStats();
   const f1 = v => v == null ? "\u2014" : (Math.round(v * 10) / 10).toFixed(1);
   // the journal is the one thing here that has to be opted in to before it leaves
   const thSrc = themeSrcList().filter(id => id !== "jrn" || CFG.jrnExport);
@@ -7461,6 +7577,20 @@ function printSummary() {
 
     // A deliberate change in behaviour, and whether the fear that drove it is
     // holding up against what actually happens.
+    (strokeSt.anyData
+      ? "<h2>Post-stroke residual symptoms</h2>" +
+        '<div class="sm" style="margin-bottom:6px">' +
+        (CFG.strokeNote ? "Imaging: " + esc2(CFG.strokeNote) + " " : "") +
+        (CFG.strokeFrom ? "Found " + esc2(CFG.strokeFrom) + ". " : "") +
+        "Self-rated 1\u201310 at the after-work and evening check-ins, 1 being none. " +
+        "Means over the last 14 days against the 14 before; a difference under a point is noise.</div>" +
+        "<table><tr><th>Scale</th><th>Last 14 d</th><th>Prior 14 d</th><th>Change</th></tr>" +
+        strokeSt.items.map(x => "<tr><td>" + esc2(x.label) + '</td><td class="m">' + f1(x.now) +
+          '</td><td class="m">' + f1(x.before) + '</td><td class="m">' +
+          (x.delta == null ? "\u2014" : (x.delta > 0 ? "+" : "") + f1(x.delta)) + "</td></tr>").join("") +
+        "</table>"
+      : "") +
+
     (calls90.rows.length
       ? "<h2>Phone calls</h2>" +
         '<div class="sm" style="margin-bottom:6px">The patient has narrowed which work calls they ' +
@@ -7721,6 +7851,8 @@ function renderCfg() {
     ? "Morning suits a question about yesterday."
     : "The day's total only exists at the end of it.";
   const scR = daily(30).map(r => r.screen).filter(v => v != null);
+  if (document.activeElement !== $("#strokeFrom")) $("#strokeFrom").value = CFG.strokeFrom || "";
+  if (document.activeElement !== $("#strokeNote")) $("#strokeNote").value = CFG.strokeNote || "";
   $("#screenAtWinSel").innerHTML = '<option value="">Don\u2019t ask</option>' +
     CFG.windows.map(w => '<option value="' + w.id + '"' + (CFG.screenAtWin === w.id ? " selected" : "") +
       ">" + esc(w.label) + "</option>").join("");
@@ -7850,9 +7982,9 @@ function renderCfg() {
   setDot("#dCloud", cloudBase() ? (CFG.cloud.push ? "ok" : "warn") : "");
   setDot("#dPush", CFG.cloud.push ? "ok" : "");
 
-  const grpName = { core:"Core", body:"Body &amp; behavior", pain:"Pain", med:"Medication", nap:"Naps", sleep:"Sleep" };
+  const grpName = { core:"Core", body:"Body &amp; behavior", stroke:"Post-stroke", pain:"Pain", med:"Medication", nap:"Naps", sleep:"Sleep" };
   let h = "";
-  ["core", "body", "pain", "med", "nap", "sleep"].forEach(g => {
+  ["core", "body", "stroke", "pain", "med", "nap", "sleep"].forEach(g => {
     h += '<div class="eyebrow" style="margin-top:16px">' + grpName[g] + "</div>";
     h += ITEMS.filter(i => i.grp === g).map(i => {
       const st = schedText(i.key);
@@ -9882,6 +10014,8 @@ function init() {
     if (draft.gold.what.trim()) $("#winWhat").classList.remove("need");
   };
   $("#readMore").onclick = () => { readBump++; renderRead(); };
+  $("#strokeWarnOk").onclick = () => { STATE.strokeWarnOk = Date.now(); saveState();
+    $("#strokeWarn").style.display = "none"; };
   $("#readSheetGo").onclick = () => { $("#readSheet").classList.remove("on"); };
   $("#readSheetMore").onclick = () => { readBump++; showReadSheet(true); renderRead(); };
   $("#winNone").onclick = () => {
@@ -10426,6 +10560,13 @@ function init() {
     else pushScreenAt(true);
     $("#screenAtNone").textContent = draft.screenAt == null ? "Enter it after all" : "Didn\u2019t check / skip";
   };
+  $("#strokeFrom").onchange = () => { CFG.strokeFrom = $("#strokeFrom").value || "";
+    touchCfg().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }); };
+  $("#strokeNote").addEventListener("input", () => {
+    CFG.strokeNote = $("#strokeNote").value;
+    clearTimeout(window.__stnT);
+    window.__stnT = setTimeout(() => touchCfg().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }), 700);
+  });
   $("#screenAtWinSel").onchange = () => { CFG.screenAtWin = $("#screenAtWinSel").value || "";
     touchCfg(); renderCfg(); renderLog(); };
   $("#screenWorkSel").onchange = () => { CFG.screenWork = +$("#screenWorkSel").value || 0;
