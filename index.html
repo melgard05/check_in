@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:102-->
+<!DOCTYPE html><!--build:103-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -703,9 +703,11 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           </div>
         </div>
         <div class="wtotal" id="screenTotal">&mdash;</div>
-        <p class="sub" style="margin:12px 0 7px" id="screenWorkSub">How much of that was work?</p>
-        <div class="chips" id="screenWorkChips"></div>
         <div class="mini" id="screenWorkNote" style="margin-top:7px"></div>
+        <p class="sub" style="margin:12px 0 7px" id="screenForSub">What was the screen time on?</p>
+        <div class="chips" id="screenOnChips"></div>
+        <input type="text" id="screenOnOther" placeholder="Something else — say what"
+          style="margin-top:8px;display:none" autocapitalize="sentences">
         <div class="row" style="margin-top:11px;gap:8px">
           <button class="btn sm gho" id="screenNone">Didn't check / skip</button>
         </div>
@@ -1979,7 +1981,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 102;
+const BUILD = 103;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2514,6 +2516,11 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (d.screen && !(typeof d.screen.work === "number" && d.screen.work >= 0 && d.screen.work <= 1))
     d.screen.work = null;
   if (d.screenAt != null && (typeof d.screenAt !== "object" || Array.isArray(d.screenAt))) d.screenAt = null;
+  if (d.screen) {
+    if (!Array.isArray(d.screen.on)) d.screen.on = [];
+    d.screen.on = d.screen.on.map(x => String(x || "").trim()).filter(Boolean);
+    if (typeof d.screen.other !== "string") d.screen.other = "";
+  }
   if (d.screenAt && d.screenAt.h == null && d.screenAt.m == null) d.screenAt = null;
   if (!d.meds || typeof d.meds !== "object" || Array.isArray(d.meds)) d.meds = {};
   if (!d.meds.taken || typeof d.meds.taken !== "object") {
@@ -2532,6 +2539,7 @@ function fixDraft(d) {                       // older records, and anything Fire
 }
 function setDraft(date, winId) {
   showAll = false;
+  Object.keys(noteOpen).forEach(k => delete noteOpen[k]);   // every note box starts closed
   if (typeof sleepWheels === "function") sleepWheels();                          // start short again on each check-in
   try { draft = fixDraft(newDraft(date, winId)); }
   catch (e) { draft = newDraft(date, winId); }
@@ -2667,7 +2675,9 @@ function sliderHTML(it, val, note) {
       '" style="left:' + pctOf(it, i) + '%"></i>';
 
   const hasNote = !!(note && note.trim());
-  const open = noteOpen[it.key] || hasNote;
+  // closed unless she opened it this check-in — a saved note shows as "note
+  // added" on the button rather than as an open box pushing the sliders apart
+  const open = !!noteOpen[it.key];
   const words = it.grp === "pain" && has ? ' <span class="pw">' + esc(PAIN_WORDS[val] || "") + "</span>" : "";
 
   return '<div class="item' + (pre ? " pre" : "") + '" data-k="' + it.key + '">' +
@@ -2823,7 +2833,7 @@ function renderAllNote(keepValue) {
 
 /* the sliders update in place rather than re-rendering, so the badge has to be
    nudged by hand whenever a value moves across the line */
-function markNeeded(key) {
+function markNeeded(key, openBoxes) {
   const keys = key ? [key] : Object.keys(ITEM);
   keys.forEach(k => {
     const item = document.querySelector('.item[data-k="' + k + '"]');
@@ -2834,7 +2844,7 @@ function markNeeded(key) {
     item.classList.toggle("done", need && has);
     const btn = item.querySelector(".notebtn");
     if (btn) btn.classList.toggle("need", need && !has);
-    if (need && !has) {                       // open the box rather than make them hunt for it
+    if (need && !has && openBoxes) {          // the save gate: open the box rather than make them hunt
       const wrap = item.querySelector(".notewrap");
       if (wrap && wrap.style.display === "none") {
         wrap.style.display = ""; noteOpen[k] = true;
@@ -3293,44 +3303,35 @@ function medOffHint() {
 }
 
 let lastScreen = { h: 0, m: 0 };
-const SCREEN_WORK_OPTS = [[0, "None of it"], [0.25, "About a quarter"], [0.5, "About half"],
-  [0.75, "Most of it"], [1, "All of it"]];
+const SCREEN_ON = ["News", "Break", "Fantasy", "Messages"];
 function renderScreenWork() {
-  const box = $("#screenWorkChips"); if (!box || !draft) return;
+  const box = $("#screenOnChips"); if (!box || !draft) return;
   const on = !!draft.screen;
-  box.style.display = on ? "" : "none";
-  $("#screenWorkSub").style.display = on ? "" : "none";
-  $("#screenWorkNote").style.display = on ? "" : "none";
+  [box, $("#screenForSub"), $("#screenWorkNote")].forEach(el => { el.style.display = on ? "" : "none"; });
+  $("#screenOnOther").style.display = "none";
   if (!on) return;
-  const explicit = typeof draft.screen.work === "number";
+  // The work split is worked out, not asked: the after-work reading when there is
+  // one, the standing estimate when there isn't. Said in one line, then left alone.
   const sp = screenSplit(draft);
-  const share = sp ? sp.share : screenWorkShare(draft);
-  const worked = dayWorked(screenDateOf(draft));
   const atLbl = String((winById(CFG.screenAtWin) || {}).label || "afternoon").toLowerCase();
-  if (sp && sp.mode === "measured") {
-    // a real reading is in force — the chips are only a way to overrule it, so
-    // they sit behind a link rather than looking like a question
-    box.innerHTML = '<button class="chip" data-scwork="__show">That reading was wrong \u2014 set a share instead</button>';
-    $("#screenWorkSub").textContent = "Work use, measured";
-    $("#screenWorkNote").textContent = "From your " + atLbl + " check-in: " + hm(Math.round(sp.work * 60)) +
-      " was on the phone by the end of work, so " + hm(Math.round(sp.own * 60)) + " of this is yours.";
-    return;
-  }
-  $("#screenWorkSub").textContent = "How much of that was work?";
-  box.innerHTML = SCREEN_WORK_OPTS.map(o =>
-    '<button class="chip" data-scwork="' + o[0] + '" aria-pressed="' +
-    (Math.abs(share - o[0]) < 0.01 ? "true" : "false") + '"' +
-    (!explicit && Math.abs(share - o[0]) < 0.01 ? ' style="opacity:.75"' : "") + ">" + o[1] +
-    "</button>").join("");
-  $("#screenWorkNote").textContent = explicit
-    ? "Set for this day. The charts use what\u2019s left after work."
-    : worked
-      ? (CFG.screenAtWin
-          ? "No " + atLbl + " reading was logged for this day, so there is nothing to subtract from. " +
-            "Your standing estimate applies instead \u2014 tap one if you know better. Log the running " +
-            "figure at the " + atLbl + " check-in and this becomes a measurement."
-          : "Assumed, from your setting for a working day. Tap one if this day was different.")
-      : "Assumed none \u2014 this reads as a day off. Tap one if that\u2019s wrong.";
+  $("#screenWorkNote").textContent = !sp ? ""
+    : sp.mode === "measured"
+      ? "Work: " + hm(Math.round(sp.work * 60)) + " by the " + atLbl + " check-in, so " +
+        hm(Math.round(sp.own * 60)) + " of this is yours."
+    : sp.mode === "estimated"
+      ? "No " + atLbl + " reading for this day, so about " + Math.round(sp.share * 100) +
+        "% is taken as work and " + hm(Math.round(sp.own * 60)) + " as yours."
+    : "A day off, so all of it is yours.";
+  // what the time went on — the thing the phone's number can't say
+  const picked = draft.screen.on || [];
+  const other = draft.screen.other || "";
+  const hasOther = picked.indexOf("Other") > -1;
+  box.innerHTML = SCREEN_ON.concat(["Other"]).map(t =>
+    '<button class="chip" data-scon="' + esc(t) + '" aria-pressed="' +
+    (picked.indexOf(t) > -1 ? "true" : "false") + '">' + esc(t) + "</button>").join("");
+  const oth = $("#screenOnOther");
+  oth.style.display = hasOther ? "" : "none";
+  if (document.activeElement !== oth) oth.value = other;
 }
 function pushScreenAt(skip) {
   if (!draft) return;
@@ -3348,8 +3349,8 @@ function pushScreen(skip) {
   if (skip) { draft.screen = null; el.innerHTML = '<span style="color:var(--ink-3)">not recorded</span>';
     renderScreenWork(); return; }
   const h = wheelVal($("#wSH")), m = wheelVal($("#wSM"));
-  const keep = draft.screen && typeof draft.screen.work === "number" ? draft.screen.work : null;
-  draft.screen = { h, m, prev: screenPrev(), work: keep };
+  const prevOn = draft.screen ? (draft.screen.on || []) : [], prevOther = draft.screen ? (draft.screen.other || "") : "";
+  draft.screen = { h, m, prev: screenPrev(), work: null, on: prevOn, other: prevOther };
   const tot = h + m / 60;
   const sp0 = screenSplit(draft);
   const share = sp0 ? sp0.share : screenWorkShare(draft);
@@ -3814,7 +3815,7 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", ctxs: [], worked: null, screenAll: null, screenWork: 0, reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", ctxs: [], worked: null, screenAll: null, screenWork: 0, screenOn: [], screenOther: "", reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -3828,6 +3829,8 @@ function daily(days) {
       row.screenWork = sp.share;                           // the share that was work
       row.screenMode = sp.mode;                            // measured, estimated, set, or off
       row.screen = sp.own;                                 // what the charts and correlations use
+      row.screenOn = (sc.screen.on || []).slice();
+      row.screenOther = sc.screen.other || "";
     }
     const se = es.find(e => e.sleep && (e.sleep.h != null));
     if (se) row.sleep = { hours: se.sleep.h + (se.sleep.m || 0) / 60, bed: se.sleep.bed, wake: se.sleep.wake,
@@ -4344,6 +4347,9 @@ function readoutFor(i) {
     (r.screenWork ? ' <span style="color:var(--ink-3)">of ' + hm(Math.round(r.screenAll * 60)) +
       ", " + Math.round(r.screenWork * 100) + "% work" +
       (r.screenMode === "measured" ? ", measured" : r.screenMode === "estimated" ? ", assumed" : "") +
+      "</span>" : "") +
+    ((r.screenOn || []).length ? ' <span style="color:var(--ink-3)">\u00b7 ' +
+      esc(r.screenOn.filter(x => x !== "Other").concat(r.screenOther ? [r.screenOther] : []).join(", ").toLowerCase()) +
       "</span>" : ""));
   if (r.medoff && r.medoff.st) bits.push("meds " + (r.medoff.st === "still" ? "<b>lasted all day</b>"
     : r.medoff.st === "none" ? "<b>unclear</b>" : "off at <b>" + esc(r.medoff.at) + "</b>"));
@@ -9774,7 +9780,7 @@ function commit(skip, reason) {
     const winAlso = winRequired(draft.date) &&
       !(draft.gold && ((draft.gold.what || "").trim() || draft.gold.none));
     if (miss.length) {
-      markNeeded();
+      markNeeded(null, true);
       renderAllNote();
       // more than one out means the one box at the top covers them all, so send
       // her there rather than to the first of several identical empty boxes
@@ -9834,8 +9840,9 @@ function commit(skip, reason) {
       draft.screenAt = { h: wheelVal($("#wAH")), m: wheelVal($("#wAM")) };
     else if (draft.win !== CFG.screenAtWin) { /* another check-in: leave whatever is there */ }
     if (CFG.screenOn && draft.win === screenWinId() && draft.screen) {
-      draft.screen = { h: wheelVal($("#wSH")), m: wheelVal($("#wSM")), prev: screenPrev(),
-        work: typeof draft.screen.work === "number" ? draft.screen.work : null };
+      draft.screen = { h: wheelVal($("#wSH")), m: wheelVal($("#wSM")), prev: screenPrev(), work: null,
+        on: (draft.screen.on || []).slice(),
+        other: (draft.screen.on || []).indexOf("Other") > -1 ? ($("#screenOnOther").value || "").trim() : "" };
     } else if (draft.win !== screenWinId()) { /* another check-in: leave whatever is there */ }
     if ((CFG.napWins || []).indexOf(draft.win) > -1 && draft.nap && draft.nap.on) {
       draft.nap = { on: true, h: wheelVal($("#wNH")), m: wheelVal($("#wNM")),
@@ -9981,6 +9988,9 @@ function init() {
   $("#sWake").onchange = () => { draft.sleep = Object.assign(draft.sleep || {}, { wake: $("#sWake").value });
     fillFromTimes(); };
   $("#eNote").oninput  = () => { draft.note = $("#eNote").value; };
+  $("#screenOnOther").addEventListener("input", () => {
+    if (draft && draft.screen) draft.screen.other = $("#screenOnOther").value;
+  });
   $("#jrnAdd").onclick = () => jrnSave();
   $("#jrnIn").addEventListener("input", () => {
     clearTimeout(window.__jdT);
@@ -10114,20 +10124,14 @@ function init() {
       renderLog();
       return;
     }
-    const scw = ev.target.closest("[data-scwork]");
-    if (scw && draft && draft.screen && scw.dataset.scwork === "__show") {
-      // overrule the measurement: reveal the shares, pre-set to what was measured
-      const sp = screenSplit(draft);
-      draft.screen.work = sp ? Math.round(sp.share * 4) / 4 : 0.5;
-      pushScreen(false);
-      return;
-    }
-    if (scw && draft && draft.screen) {
-      const v = +scw.dataset.scwork;
-      // tapping the one already assumed makes it explicit; tapping it again lets go
-      draft.screen.work = (typeof draft.screen.work === "number" && Math.abs(draft.screen.work - v) < 0.01)
-        ? null : v;
-      pushScreen(false);
+    const sco = ev.target.closest("[data-scon]");
+    if (sco && draft && draft.screen) {
+      const t = sco.dataset.scon, l = draft.screen.on || (draft.screen.on = []);
+      const i = l.indexOf(t);
+      i > -1 ? l.splice(i, 1) : l.push(t);
+      if (t === "Other" && i > -1) draft.screen.other = "";
+      renderScreenWork();
+      if (t === "Other" && i < 0) setTimeout(() => $("#screenOnOther").focus(), 40);
       return;
     }
     const wst = ev.target.closest("[data-wstr]");
