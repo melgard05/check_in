@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:104-->
+<!DOCTYPE html><!--build:105-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1984,7 +1984,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 104;
+const BUILD = 105;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2542,6 +2542,7 @@ function fixDraft(d) {                       // older records, and anything Fire
 }
 function setDraft(date, winId) {
   showAll = false;
+  draftFor = todayISO();
   Object.keys(noteOpen).forEach(k => delete noteOpen[k]);   // every note box starts closed
   allNoteOpen = false;
   if (typeof sleepWheels === "function") sleepWheels();                          // start short again on each check-in
@@ -3795,15 +3796,17 @@ function refreshDue() {
   if (!due.length) clearNotifs();                  // nothing open: take the prompts down
   // blocking gate for the most overdue window
   if (CFG.nag && due.length && !dashOn) {
-    // prompt for the oldest one still open — that's the one at risk of being lost
-    const w = due[0], key = today + "|" + w.id;
+    // prompt for the one you're in; the earlier ones are named, not forced
+    const cur = bestWindow(today);
+    const w = due.find(x => x.id === cur) || due[0], key = today + "|" + w.id;
     if (key !== gateKey) {
       gateKey = key;
       gateWin = w.id;
       $("#gateH").textContent = w.label + " check-in";
       $("#gateGo").textContent = "Do the " + w.label.toLowerCase() + " one";
-      $("#gateK").textContent = due.length > 1
-        ? due.length + " check-ins due · this one first" : "check-in due";
+      const others = due.filter(x => x.id !== w.id).map(x => x.label.toLowerCase());
+      $("#gateK").textContent = others.length
+        ? "check-in due \u00b7 " + others.join(" and ") + " still open too" : "check-in due";
       $("#gate").classList.add("on");
     }
   } else { $("#gate").classList.remove("on"); gateKey = null; gateWin = null; }
@@ -8338,7 +8341,7 @@ async function pushEnable() {
   });
   // give the service worker what it needs to answer /due after being killed
   if (reg.active) reg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
-  CFG.cloud.push = true; await saveCfg();
+  CFG.cloud.push = true; CFG.cloud.pushWas = true; await saveCfg();
   workerHandlesPush = true; scheduleNotifs();
   setDot("#dPush", "ok"); setDot("#dCloud", "ok");
   cloudLog("subscribed — reminders will fire with the app closed", true);
@@ -8682,7 +8685,10 @@ function connState() {
   if (Notification.permission === "denied") return { level: "perm",
     msg: "Notifications are blocked for this site, so reminders can't reach you here." };
   if (!workerHandlesPush) return { level: "push",
-    msg: "Reminders aren't set up on this device. They'll only appear while the app is open." };
+    msg: CFG.cloud.pushWas
+      ? "Reminders have stopped on this device \u2014 the phone let go of its subscription. " +
+        "Fix it puts them back with one tap."
+      : "Reminders aren't set up on this device. They'll only appear while the app is open." };
   return { level: "ok" };
 }
 function renderCredLog() {
@@ -9649,8 +9655,7 @@ function afterPull() {
     // Rebuilding the draft throws away anything half-entered. A sync that fires
     // while someone is mid-check-in — coming back to the app is enough to trigger
     // one — would silently reset every slider they had just moved.
-    if (draft && !draftTouched()) setDraft(d, winRunsOn(draft.win, d) ? draft.win : firstWinOn(d));
-    else if (draft) { $("#eDate").value = draft.date; $("#eWin").value = draft.win; }
+    if (draft && draftTouched()) { $("#eDate").value = draft.date; $("#eWin").value = draft.win; }
     renderEntries();
     if ($("#v-chart") && $("#v-chart").classList.contains("on")) {
       drawMain(); drawSleep(); drawDay(); drawCoverage();
@@ -9905,11 +9910,26 @@ function commit(skip, reason) {
   maybeOfferPlan();
   reportState();                              // stop the nagging straight away
   syncAll(true).then(() => reportState());     // then report the merged picture
-  const due = dueWindows(todayISO());
-  // work through them oldest first rather than jumping to the current hour
+  // Saved: move on to the check-in you're in if it's still open, else the
+  // earliest one still open today, else just the current hour's.
   const stillDue = dueWindows(todayISO());
-  setDraft(todayISO(), stillDue.length ? stillDue[0].id : bestWindow(todayISO()));
-  if (stillDue.length) toast(stillDue.length + " still open — " + stillDue[0].label + " next");
+  setDraft(todayISO(), bestWindow(todayISO()));
+  if (stillDue.length)
+    toast(stillDue.length + " still open today \u2014 " + stillDue.map(w => w.label).join(", "));
+}
+/* The blank form sat there while the day, or the time of day, moved on.
+   Coming back to it after a while should mean coming back to now. Anything
+   already entered is left exactly as it was. */
+let draftFor = "", hiddenAt = 0;
+function rollDraft(force) {
+  if (!draft || dashOn || draftTouched()) return;
+  const today = todayISO(), want = bestWindow(today);
+  const dayMoved = draftFor && draftFor !== today;
+  if (!dayMoved && !force) return;
+  if (draft.date === today && draft.win === want && !dayMoved) return;
+  fillWinSelect(today);
+  setDraft(today, want);
+  refreshDue();
 }
 
 function init() {
@@ -9925,18 +9945,24 @@ function init() {
   buildWheel($("#wNM"), 55, 5, pushNap);
   bindSliders($("#v-log"));   // delegated, so every slider group is covered
 
-  const due = dueWindows(todayISO());
-  // start on the oldest one still open, then work forward through the day
-  setDraft(todayISO(), due.length ? due[0].id : bestWindow(todayISO()));
+  // start on the check-in you're in; anything earlier still open is in the badge
+  setDraft(todayISO(), bestWindow(todayISO()));
   refreshDue();
   // ...but local storage alone can't know what another device closed, so ask
   // before this stands as the answer
   pullDue().then(() => {
-    const now = dueWindows(todayISO());
-    const want = now.length ? now[0].id : bestWindow(todayISO());
-    if (draft && draft.win !== want) setDraft(todayISO(), want);
+    const want = bestWindow(todayISO());
+    if (draft && draft.win !== want && !draftTouched()) setDraft(todayISO(), want);
     refreshDue();
-    if (!now.length) clearNotifs();
+    if (!dueWindows(todayISO()).length) clearNotifs();
+  });
+  // a form left open past midnight, or brought back after a long while in the
+  // background, comes back on today's check-in rather than the one it was left on
+  setInterval(() => rollDraft(false), 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt > 10 * 60000) rollDraft(true);
+    hiddenAt = 0;
   });
   scheduleNotifs();
   // whatever was being written when the tab was last closed
@@ -10554,7 +10580,7 @@ function init() {
     // open the one the prompt actually named, not whichever is nearest now
     const due = dueWindows(todayISO());
     const target = (gateWin && due.some(w => w.id === gateWin)) ? gateWin
-      : (due[0] ? due[0].id : bestWindow(todayISO()));
+      : bestWindow(todayISO());
     setDraft(todayISO(), target);
     show("log");
     // if what it opened is already filled in, that is worth a word rather than
@@ -10980,7 +11006,7 @@ function init() {
         // the notification carries which windows it was raised for
         const named = (ev.data.due || []).map(w => w && w.id).filter(Boolean);
         const target = named.find(id => due.some(w => w.id === id))
-          || (due[0] ? due[0].id : bestWindow(todayISO()));
+          || bestWindow(todayISO());
         setDraft(todayISO(), target);
         show("log"); refreshDue();
       }
@@ -10991,10 +11017,7 @@ function init() {
         swReg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
     });
   }
-  if (/[?&]due=1/.test(location.search)) {
-    const due = dueWindows(todayISO());
-    if (due.length) setDraft(todayISO(), due[0].id);
-  }
+  if (/[?&]due=1/.test(location.search)) setDraft(todayISO(), bestWindow(todayISO()));
   // Firebase's handler bounces the code back to us on the query string, so a clicked
   // link should just work. Do it before anything else touches the address bar.
   const oobParam = (location.search.match(/[?&]oobCode=([^&]+)/) || [])[1];
@@ -11116,7 +11139,16 @@ function init() {
     CFG.plan.updated = Date.now();
     await touchCfg(); renderCfg(); toast("Plan saved");
   };
-  $("#connGo").onclick = () => {
+  $("#connGo").onclick = async () => {
+    const st = connState();
+    if (st.level === "push" && CFG.cloud.pushWas && Notification.permission !== "denied") {
+      $("#connGo").disabled = true;
+      const ok = await pushRepair().catch(() => false);
+      $("#connGo").disabled = false;
+      refreshConn();
+      toast(ok ? "Reminders are back on" : "Couldn\u2019t \u2014 Data \u2192 Cloudflare has the details", !ok);
+      if (ok) return;
+    }
     if (Notification.permission === "denied") {
       alert("Chrome is blocking notifications for this site.\n\nClick the padlock in the address bar " +
         "\u2192 Site settings \u2192 Notifications \u2192 Allow, then reload.");
