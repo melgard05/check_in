@@ -1,9 +1,11 @@
 /* Baseline service worker — sticky check-in notifications + offline shell */
 
-const CACHE = "baseline-v3";
+const CACHE = "baseline-v4";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
-/* WORKER_URL and UID are written in by the app on first subscribe. */
+/* Written in by the app on subscribe and on every open: the worker URL, this
+   device's id, and the whole registration record (account, key, schedule), so a
+   re-subscribe made from here is as complete as one made by the app. */
 let CFG = { worker: "", uid: "" };
 
 self.addEventListener("install", e => {
@@ -31,8 +33,9 @@ self.addEventListener("message", e => {
     return;
   }
   if (d.type === "config") {
-    CFG.worker = d.worker || "";
-    CFG.uid = d.uid || "";
+    CFG = { worker: d.worker || "", uid: d.uid || "", account: d.account || "", key: d.key || "",
+      tz: d.tz || "", windows: Array.isArray(d.windows) ? d.windows : [],
+      altDays: Array.isArray(d.altDays) ? d.altDays : [], nagMins: d.nagMins || 20 };
     // stash it so it survives the SW being killed between pushes
     caches.open(CACHE).then(c =>
       c.put("__cfg", new Response(JSON.stringify(CFG), { headers: { "Content-Type": "application/json" } })));
@@ -184,18 +187,27 @@ self.addEventListener("notificationclose", e => {
   // dismissing does not count as done — the cron will bring it back
 });
 
-/* let the page force a re-check */
+/* The browser rotated or dropped the subscription while the app was closed.
+   Re-register the complete record — schedule and key included — or the worker
+   is left with a device it can never remind. */
 self.addEventListener("pushsubscriptionchange", e => {
   e.waitUntil((async () => {
     const cfg = await loadCfg();
     if (!cfg.worker || !cfg.uid) return;
     try {
-      const sub = await self.registration.pushManager.getSubscription();
+      let sub = e.newSubscription || await self.registration.pushManager.getSubscription();
+      if (!sub && e.oldSubscription && e.oldSubscription.options &&
+          e.oldSubscription.options.applicationServerKey) {
+        sub = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true, applicationServerKey: e.oldSubscription.options.applicationServerKey
+        }).catch(() => null);
+      }
       if (!sub) return;
       await fetch(cfg.worker.replace(/\/+$/, "") + "/subscribe", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: cfg.uid, sub: sub.toJSON(),
-          tz: Intl.DateTimeFormat().resolvedOptions().timeZone })
+        body: JSON.stringify({ uid: cfg.uid, account: cfg.account || cfg.uid, key: cfg.key || undefined,
+          sub: sub.toJSON(), tz: cfg.tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
+          windows: cfg.windows || [], altDays: cfg.altDays || [], nagMins: cfg.nagMins || 20 })
       });
     } catch (err) {}
   })());
