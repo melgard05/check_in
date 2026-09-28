@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:105-->
+<!DOCTYPE html><!--build:106-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1984,7 +1984,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 105;
+const BUILD = 106;
 
 const DEFAULT_CFG = {
   windows: [
@@ -8183,6 +8183,29 @@ async function pushRepair() {
   } catch (e) { cloudLog("repair failed: " + e.message, true); return false; }
 }
 
+/* Everything the worker needs to know about this device. The service worker
+   keeps a copy so that, if the browser rotates the subscription while the app
+   is closed, it can re-register a complete record rather than an empty one
+   (a re-subscribe without the schedule would leave the worker with no windows
+   for this device, and it would never remind it again). */
+function subPayload() {
+  return {
+    uid: CFG.cloud.uid, account: CFG.cloud.account || CFG.cloud.uid,
+    key: CFG.cloud.key || undefined,
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time,
+      timeWe: CFG.weekend ? (w.timeWe || w.time) : "" })),
+    altDays: CFG.weekend ? (CFG.altDays || []) : [],
+    nagMins: CFG.nagMins
+  };
+}
+function swConfig(reg) {
+  const t = (reg && reg.active) || (navigator.serviceWorker && navigator.serviceWorker.controller);
+  if (!t) return;
+  try { t.postMessage(Object.assign({ type: "config", worker: cloudBase() }, subPayload())); } catch (e) {}
+}
+const subTail = sub => { try { return new URL(sub.endpoint).pathname.slice(-8); } catch (e) { return ""; } };
+
 async function verifyPush() {
   workerHandlesPush = false;
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
@@ -8196,6 +8219,17 @@ async function verifyPush() {
     const reg = swReg || await navigator.serviceWorker.getRegistration();
     const sub = reg && await reg.pushManager.getSubscription();
     workerHandlesPush = !!(sub && cloudBase() && CFG.cloud.uid);
+    // What state was the subscription in when the app opened? A missing one
+    // with permission still granted is the browser dropping it; a missing one
+    // with permission gone is the phone revoking it; a different endpoint is
+    // a rotation. Written down with the time, so a quiet stretch can be read.
+    if (CFG.cloud.pushWas) {
+      const perm = ("Notification" in window) ? Notification.permission : "unsupported";
+      if (!sub) credNote("reminder subscription missing on open \u2014 notification permission: " + perm);
+      else if (CFG.cloud.subTail && subTail(sub) !== CFG.cloud.subTail)
+        credNote("reminder subscription changed since last open (\u2026" + CFG.cloud.subTail +
+          " \u2192 \u2026" + subTail(sub) + ")");
+    }
     // the stored flag can drift from reality — e.g. after clearing site data
     if (CFG.cloud.push !== workerHandlesPush) {
       CFG.cloud.push = workerHandlesPush;
@@ -8329,18 +8363,15 @@ async function pushEnable() {
 
   await api("/subscribe", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      uid: CFG.cloud.uid, account: CFG.cloud.account || CFG.cloud.uid,
-      key: CFG.cloud.key || undefined, sub: sub.toJSON(),
-      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time,
-        timeWe: CFG.weekend ? (w.timeWe || w.time) : "" })),
-      altDays: CFG.weekend ? (CFG.altDays || []) : [],
-      nagMins: CFG.nagMins
-    })
+    body: JSON.stringify(Object.assign({ sub: sub.toJSON() }, subPayload()))
   });
-  // give the service worker what it needs to answer /due after being killed
-  if (reg.active) reg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
+  // give the service worker what it needs to answer /due, and to re-register
+  // a complete record on its own, after being killed
+  swConfig(reg);
+  if (CFG.cloud.subTail && subTail(sub) !== CFG.cloud.subTail)
+    credNote("re-subscribed under a new endpoint (\u2026" + CFG.cloud.subTail + " \u2192 \u2026" + subTail(sub) + ")");
+  else if (!CFG.cloud.subTail) credNote("reminders subscribed on this device (\u2026" + subTail(sub) + ")");
+  CFG.cloud.subTail = subTail(sub);
   CFG.cloud.push = true; CFG.cloud.pushWas = true; await saveCfg();
   workerHandlesPush = true; scheduleNotifs();
   setDot("#dPush", "ok"); setDot("#dCloud", "ok");
@@ -11013,8 +11044,7 @@ function init() {
     });
     swRegister().then(reg => {
       watchForUpdate(reg);
-      if (CFG.cloud.push && swReg && swReg.active)
-        swReg.active.postMessage({ type: "config", worker: cloudBase(), uid: CFG.cloud.uid });
+      if (CFG.cloud.push) swConfig(swReg);
     });
   }
   if (/[?&]due=1/.test(location.search)) setDraft(todayISO(), bestWindow(todayISO()));
