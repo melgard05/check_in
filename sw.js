@@ -1,6 +1,6 @@
 /* Baseline service worker — sticky check-in notifications + offline shell */
 
-const CACHE = "baseline-v4";
+const CACHE = "baseline-v5";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
 /* Written in by the app on subscribe and on every open: the worker URL, this
@@ -114,13 +114,20 @@ self.addEventListener("push", e => {
         const open = await self.registration.getNotifications();
         open.forEach(n => { if (n.tag && n.tag.indexOf("baseline") === 0 && n.tag !== "baseline-digest") n.close(); });
       } catch (err) {}
-      // userVisibleOnly still has to be honoured, so leave one quiet, self-explanatory note
-      return self.registration.showNotification("All caught up", {
+      // userVisibleOnly still has to be honoured, so leave one quiet, self-explanatory
+      // note — and take it down again a few seconds later, so the tray ends up empty
+      await self.registration.showNotification("All caught up", {
         body: "That check-in was logged on another device.",
         tag: "baseline-checkin", renotify: false, requireInteraction: false,
         silent: true, icon: "./icon-192.png", badge: "./icon-badge.png",
         data: { transient: true }
       });
+      await new Promise(r => setTimeout(r, 4000));
+      try {
+        const left = await self.registration.getNotifications({ tag: "baseline-checkin" });
+        left.forEach(n => { if (n.data && n.data.transient) n.close(); });
+      } catch (err) {}
+      return;
     }
 
     const names = due.map(w => w.label).join(", ");
