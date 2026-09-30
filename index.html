@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:107-->
+<!DOCTYPE html><!--build:108-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1984,7 +1984,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 107;
+const BUILD = 108;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2073,7 +2073,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "strokeFrom", "strokeNote", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "strGen", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "strokeFrom", "strokeNote", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -2333,6 +2333,15 @@ async function load() {
   else if (CFG.strengths.length === STRENGTHS_B80.length &&
            CFG.strengths.every((t, i) => t === STRENGTHS_B80[i])) CFG.strengths = STRENGTHS.slice();
   CFG.strengths = CFG.strengths.map(t => String(t || "").trim()).filter(Boolean);
+  // b108: "Was generous" joins the list once, slotted beside "Showed up for someone";
+  // a list she has already edited keeps its order and just gains the one tag
+  if (!CFG.strGen) {
+    if (!CFG.strengths.some(t => t.toLowerCase() === "was generous")) {
+      const at = CFG.strengths.indexOf("Showed up for someone");
+      if (at > -1) CFG.strengths.splice(at + 1, 0, "Was generous"); else CFG.strengths.push("Was generous");
+    }
+    CFG.strGen = true;
+  }
   // migrate the old newline-separated med list into scheduled entries
   if (!Array.isArray(CFG.medList)) CFG.medList = [];
   if (!CFG.medList.length && (CFG.meds || "").trim()) {
@@ -8861,7 +8870,7 @@ async function saveSpike() {
    the thing it took instead, so the tally reads as a list of strengths. */
 const STRENGTHS = ["Got it done", "Pushed through resistance", "Took my meds anyway",
   "Looked after myself", "Asked for help", "Spoke up", "Said no", "Showed up for someone",
-  "Handled something hard", "Worked it out", "Kept a promise to myself", "Stayed steady"];
+  "Was generous", "Handled something hard", "Worked it out", "Kept a promise to myself", "Stayed steady"];
 /* the list as it shipped one build earlier, so an untouched copy can be upgraded
    in place rather than leaving the new tag hidden behind a Reset nobody presses */
 const STRENGTHS_B80 = ["Got it done", "Pushed through resistance", "Looked after myself",
