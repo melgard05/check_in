@@ -1,6 +1,6 @@
 /* Baseline service worker — sticky check-in notifications + offline shell */
 
-const CACHE = "baseline-v6";
+const CACHE = "baseline-v7";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
 /* Written in by the app on subscribe and on every open: the worker URL, this
@@ -74,6 +74,21 @@ self.addEventListener("push", e => {
   e.waitUntil((async () => {
     const cfg = await loadCfg();
     let due = [], count = 0, isTest = false, isDigest = false;
+
+    // No settings to hand: the record this helper keeps was lost (site data
+    // cleared, or another app on the site wiping caches). A push still means
+    // the worker thinks something is open, so say so rather than flashing an
+    // "all caught up" that would be wrong — and ask to be opened, which restores
+    // the record.
+    if (!cfg.worker || !cfg.uid) {
+      try { if (self.navigator && navigator.setAppBadge) await navigator.setAppBadge(1); } catch (err) {}
+      return self.registration.showNotification("Check-in reminder", {
+        body: "A check-in is probably open. Open Baseline to see which \u2014 the reminder helper lost its settings and opening the app puts them back.",
+        tag: "baseline-checkin", renotify: true, requireInteraction: true,
+        icon: "./icon-192.png", badge: "./icon-badge.png", data: { count: 1, due: [], nocfg: true },
+        actions: [{ action: "log", title: "Open" }]
+      });
+    }
 
     if (cfg.worker && cfg.uid) {
       try {
