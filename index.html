@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:108-->
+<!DOCTYPE html><!--build:109-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1984,7 +1984,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 108;
+const BUILD = 109;
 
 const DEFAULT_CFG = {
   windows: [
@@ -11106,7 +11106,10 @@ function init() {
   syncFresh("open");
   // and again whenever you come back to it — a desktop tab sits untouched for
   // hours, and "I opened it and my check-in wasn't there" is the same bug
-  const wake = () => { if (document.visibilityState === "visible") syncFresh("wake", 45000); };
+  const wake = () => { if (document.visibilityState !== "visible") return;
+    syncFresh("wake", 45000);
+    if (CFG.cloud.push) swConfig(swReg);     // cheap, and the helper's copy can be wiped behind our back
+  };
   document.addEventListener("visibilitychange", wake);
   window.addEventListener("focus", wake);
   window.addEventListener("online", () => syncFresh("online", 5000));
