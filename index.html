@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:112-->
+<!DOCTYPE html><!--build:113-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1309,7 +1309,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div class="card" id="ds-weekly-email">
       <h2>Weekly email</h2>
-      <p class="sub">The Patterns page, sent to you on a schedule, so looking at it stops depending on
+      <p class="sub">Your patterns, sent to you on a schedule, so looking at them stops depending on
         remembering to. The app hands the worker a fresh copy whenever you save a check-in; the
         worker emails the latest one it has at the time you pick.</p>
       <div class="sw"><div style="flex:1"><div class="t">Email me the patterns</div>
@@ -1325,6 +1325,10 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         <label class="fld" style="flex:1"><span>Time</span>
           <input type="time" id="repTime" value="07:00"></label>
       </div>
+      <div class="sw" style="margin-top:9px"><div style="flex:1"><div class="t">Send the full Patterns page</div>
+        <div class="d">Off: a short one \u2014 the plain-terms lines, anything worth raising, and the last thing
+          that went well. A few lines, big type. On: the whole page.</div></div>
+        <button class="tog" id="togRepFull" aria-pressed="false"></button></div>
       <div class="row" style="gap:8px;margin-top:10px">
         <button class="btn sm" id="repSave">Save</button>
         <button class="btn sm" id="repNow">Send one now</button>
@@ -2015,7 +2019,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 112;
+const BUILD = 113;
 
 const DEFAULT_CFG = {
   windows: [
@@ -5147,7 +5151,47 @@ function renderTell() {
    drops, so they go; controls go; hidden sections go; the journal goes because
    email is one forward away from anyone. */
 const K_REPAT = "baseline:reportat";
-function reportHTML() {
+/* The short one: the "In plain terms" lines, the flags by name, and the last
+   thing that went well. Big type, few lines, nothing to scroll. Reading has a
+   cost after a stroke, and a summary that has to be read twice isn't one. */
+function reportShortHTML() {
+  try { renderFlags(daily(0)); } catch (e) {}
+  renderPatterns();
+  const plain = $("#plain");
+  const lines = plain ? Array.from(plain.querySelectorAll(".plainline")).map(l => ({
+    icon: (l.querySelector("i") || {}).textContent || "",
+    text: (l.querySelector("span") || l).textContent || "",
+    tone: l.classList.contains("bad") ? "bad" : l.classList.contains("warn") ? "warn" : "" })) : [];
+  const empty = plain && plain.querySelector(".empty") ? plain.querySelector(".empty").textContent : "";
+  const stars = (STATE.stars || []).slice().sort((a, b) => (a.date + a.at) < (b.date + b.at) ? 1 : -1);
+  const win = stars.find(x => x && (x.what || "").trim());
+  const when = new Date();
+  const F = "font-family:-apple-system,Segoe UI,Roboto,sans-serif;";
+  const line = (icon, text, tone) =>
+    '<tr><td style="' + F + 'font-size:19px;line-height:1.35;padding:10px 10px 10px 0;width:26px;vertical-align:top;color:' +
+    (tone === "bad" ? "#b3261e" : tone === "warn" ? "#9a6200" : "#7a8590") + '">' + esc(icon) + "</td>" +
+    '<td style="' + F + 'font-size:19px;line-height:1.4;padding:10px 0;color:#1c2229;vertical-align:top">' + esc(text) + "</td></tr>";
+  const fl = (latestFlags || []).slice(0, 3);
+  // the flags get their own list below, so the plain-terms line that counts them is one line too many
+  if (fl.length) { const i = lines.findIndex(l => /worth raising/i.test(l.text)); if (i > -1) lines.splice(i, 1); }
+  let body = "";
+  if (lines.length) body += "<table style=\"border-collapse:collapse;width:100%\">" + lines.map(l => line(l.icon, l.text, l.tone)).join("") + "</table>";
+  else if (empty) body += '<p style="' + F + 'font-size:19px;line-height:1.4;color:#1c2229">' + esc(empty) + "</p>";
+  if (fl.length) body += '<div style="' + F + 'font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#7a8590;margin:22px 0 6px">Worth raising</div>' +
+    '<table style="border-collapse:collapse;width:100%">' +
+    fl.map(f => line("\u2022", f[1], f[0] === "hi" ? "bad" : "warn")).join("") + "</table>";
+  if (win) body += '<div style="' + F + 'font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#7a8590;margin:22px 0 6px">Went well</div>' +
+    '<p style="' + F + 'font-size:19px;line-height:1.4;color:#1c2229;margin:0">' + esc(win.what) +
+    '<span style="color:#7a8590;font-size:14px"> \u2014 ' + esc(fmtDate(win.date)) + "</span></p>";
+  return '<div style="' + F + 'max-width:560px;margin:0 auto;padding:4px 16px 20px">' +
+    '<div style="font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:#7a8590;margin:14px 0 2px">Baseline</div>' +
+    '<h1 style="' + F + 'font-size:24px;margin:0 0 14px;color:#1c2229">Your week</h1>' + body +
+    '<p style="' + F + 'color:#7a8590;font-size:13px;margin:26px 0 0">As of ' +
+    esc(when.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })) +
+    ". The full working out is on the Patterns tab.</p></div>";
+}
+function reportHTML(full) {
+  if (!full) return reportShortHTML();
   try { renderFlags(daily(0)); } catch (e) {}
   renderPatterns();
   const src = $("#v-pat"); if (!src) return "";
@@ -5197,7 +5241,7 @@ async function pushReport(force, quiet) {
   const last = +(localStorage.getItem(K_REPAT) || 0);
   if (!force && Date.now() - last < 20 * 60000) return false;
   let html = "";
-  try { html = reportHTML(); } catch (e) { if (!quiet) toast("Couldn\u2019t build the report: " + e.message, true); return false; }
+  try { html = reportHTML(!!r.full); } catch (e) { if (!quiet) toast("Couldn\u2019t build the report: " + e.message, true); return false; }
   if (!html) return false;
   try {
     await api("/report", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -5212,6 +5256,7 @@ function renderReportCfg() {
   const r = CFG.report || {};
   if (!$("#togReport")) return;
   $("#togReport").setAttribute("aria-pressed", r.on ? "true" : "false");
+  $("#togRepFull").setAttribute("aria-pressed", r.full ? "true" : "false");
   $("#repTo").value = r.to || "";
   $("#repDow").value = String(r.dow == null ? 1 : r.dow);
   const m = +r.mins || 0;
@@ -11078,6 +11123,12 @@ function init() {
   $("#togReport").onclick = async () => {
     CFG.report = CFG.report || {};
     CFG.report.on = $("#togReport").getAttribute("aria-pressed") !== "true";
+    await touchCfg(); renderReportCfg();
+    if (CFG.report.on) pushReport(true, true);
+  };
+  $("#togRepFull").onclick = async () => {
+    CFG.report = CFG.report || {};
+    CFG.report.full = $("#togRepFull").getAttribute("aria-pressed") !== "true";
     await touchCfg(); renderReportCfg();
     if (CFG.report.on) pushReport(true, true);
   };
