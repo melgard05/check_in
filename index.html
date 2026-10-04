@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:113-->
+<!DOCTYPE html><!--build:114-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1284,6 +1284,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
           <option value="10">10 min</option><option value="15">15 min</option>
           <option value="20">20 min</option><option value="30">30 min</option>
           <option value="45">45 min</option><option value="60">60 min</option></select></div>
+      <div class="sw"><div style="flex:1"><div class="t">Repeats per check-in</div>
+        <div class="d">After the first reminder, how many more before it goes quiet until the next
+          check-in comes due. Phones switch off notifications that pile up unread, so fewer is safer.</div></div>
+        <select id="nagMaxSel" style="flex:0 0 104px">
+          <option value="0">none</option><option value="1">1</option><option value="2">2</option>
+          <option value="3">3</option><option value="5">5</option><option value="12">12</option></select></div>
       <div class="sw"><div><div class="t">Store snapshots in Cloudflare</div>
         <div class="d">Uploads your whole dataset to your Worker's KV after each save, so a wiped
           browser doesn't lose it. Off by default — this is health data.</div></div>
@@ -2019,7 +2025,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 113;
+const BUILD = 114;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2065,7 +2071,7 @@ const DEFAULT_CFG = {
   altDays: [0, 6],            // 0 Sun … 6 Sat
   cfgAt: 0,
   off: ITEMS.filter(i => i.off).map(i => i.key),
-  nag: true, lat: 46.8, meds: "", medList: [], nagMins: 20,
+  nag: true, lat: 46.8, meds: "", medList: [], nagMins: 20, nagMax: 2,
   cloud: { url: "", uid: "", account: "", key: "", push: false, sync: false },
   fb: { url: "", apiKey: "", email: "", uid: "", on: false },
   report: { on: false, to: "", dow: 1, mins: 7 * 60 }   // the Patterns page, emailed by the worker
@@ -2109,7 +2115,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "strGen", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "strokeFrom", "strokeNote", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc", "report"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "nagMax", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "strGen", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "strokeFrom", "strokeNote", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc", "report"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -8176,6 +8182,7 @@ function renderCfg() {
   $("#togPush").setAttribute("aria-pressed", CFG.cloud.push ? "true" : "false");
   $("#togSync").setAttribute("aria-pressed", CFG.cloud.sync ? "true" : "false");
   $("#nagSel").value = String(CFG.nagMins || 20);
+  $("#nagMaxSel").value = String(CFG.nagMax == null ? 2 : CFG.nagMax);
   $("#nagLbl").textContent = CFG.nagMins || 20;
   setDot("#dCloud", cloudBase() ? (CFG.cloud.push ? "ok" : "warn") : "");
   setDot("#dPush", CFG.cloud.push ? "ok" : "");
@@ -8367,7 +8374,8 @@ function subPayload() {
     windows: CFG.windows.map(w => ({ id: w.id, label: w.label, time: w.time,
       timeWe: CFG.weekend ? (w.timeWe || w.time) : "" })),
     altDays: CFG.weekend ? (CFG.altDays || []) : [],
-    nagMins: CFG.nagMins
+    nagMins: CFG.nagMins,
+    nagMax: CFG.nagMax == null ? 2 : +CFG.nagMax
   };
 }
 function swConfig(reg) {
@@ -8888,8 +8896,11 @@ function connState() {
     msg: "Notifications are blocked for this site, so reminders can't reach you here." };
   if (!workerHandlesPush) return { level: "push",
     msg: CFG.cloud.pushWas
-      ? "Reminders have stopped on this device \u2014 the phone let go of its subscription. " +
-        "Fix it puts them back with one tap."
+      ? (Notification.permission === "default"
+          ? "This phone has switched Baseline\u2019s notifications off again. Fix it asks for them back. " +
+            "Tapping a reminder when it arrives, rather than the app icon, is what tells the phone they\u2019re wanted."
+          : "Reminders have stopped on this device \u2014 the phone let go of its subscription. " +
+            "Fix it puts them back with one tap.")
       : "Reminders aren't set up on this device. They'll only appear while the app is open." };
   return { level: "ok" };
 }
@@ -11243,6 +11254,11 @@ function init() {
     CFG.nagMins = +$("#nagSel").value; $("#nagLbl").textContent = CFG.nagMins;
     await touchCfg();
     if (CFG.cloud.push) { await pushEnable(); cloudLog("nag interval now " + CFG.nagMins + " min", true); }
+  };
+  $("#nagMaxSel").onchange = async () => {
+    CFG.nagMax = +$("#nagMaxSel").value || 0;
+    await touchCfg();
+    if (CFG.cloud.push) { await pushEnable(); cloudLog("repeats per check-in now " + CFG.nagMax, true); }
   };
   $("#cfPush").onclick = () => cloudSync(false);
   $("#cfPull").onclick = () => cloudDownload();
