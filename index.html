@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:114-->
+<!DOCTYPE html><!--build:115-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -426,6 +426,18 @@ input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visibl
 .gatebox{background:var(--panel);border:1px solid var(--warn);border-radius:14px;max-width:400px;width:100%;
   padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.7);max-height:none}
 .gatebox .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--warn)}
+/* the app's own time picker: the phone's one paints the AM/PM choice the same
+   blue as its banner, so which half of the day is picked can't be seen */
+.ampm{display:flex;gap:8px}
+.ampm button{flex:1;padding:12px 8px;border-radius:10px;border:1px solid var(--line-2);background:var(--panel-2);
+  color:var(--ink-2);font-size:18px;font-weight:700;display:flex;flex-direction:column;align-items:center;
+  gap:2px;cursor:pointer;letter-spacing:.04em}
+.ampm button small{font-size:11px;font-weight:400;color:var(--ink-3);letter-spacing:.04em}
+.ampm button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#08110f}
+.ampm button[aria-pressed="true"] small{color:#08110f;opacity:.75}
+.ampm button[aria-pressed="true"]:before{content:"\2713";font-size:14px;line-height:1}
+#timeSheet .gatebox{border-color:var(--line-2)}
+#timeSheet .gatebox .k{color:var(--accent)}
 .gatebox h3{margin:7px 0 6px;font-size:19px}
 .gatebox p{margin:0 0 15px;font-size:14px;color:var(--ink-2)}
 .gatebox .row{gap:8px}
@@ -1794,6 +1806,26 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   </div>
 </div>
 
+<div class="gate" id="timeSheet">
+  <div class="gatebox" style="max-width:420px">
+    <div class="k">time</div>
+    <h3 id="tsTitle" style="margin-bottom:10px">Set the time</h3>
+    <div class="wheelwrap">
+      <div class="wcol"><div class="wcap">hour</div><div class="wheel" id="tsH" tabindex="0"></div></div>
+      <div class="wcol"><div class="wcap">minute</div><div class="wheel" id="tsM" tabindex="0"></div></div>
+    </div>
+    <div class="ampm" style="margin-top:12px">
+      <button type="button" data-ampm="AM" aria-pressed="false">AM<small>morning</small></button>
+      <button type="button" data-ampm="PM" aria-pressed="false">PM<small>afternoon &amp; evening</small></button>
+    </div>
+    <div class="wtotal" id="tsPreview" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:14px;gap:8px">
+      <button type="button" class="btn pri" id="tsSet" style="flex:1">Set</button>
+      <button type="button" class="btn gho" id="tsClear">Clear</button>
+      <button type="button" class="btn gho" id="tsCancel">Cancel</button>
+    </div>
+  </div>
+</div>
 <div class="gate" id="starSheet">
   <div class="gatebox">
     <div class="k" style="color:#e0c453">gold star</div>
@@ -2025,7 +2057,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 114;
+const BUILD = 115;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3146,6 +3178,66 @@ function wheelVal(el) { const i = wheelIndex(el); return +el._items[i].dataset.v
 function setWheel(el, v) {
   const i = el._items.findIndex(n => +n.dataset.v === v);
   el.scrollTop = (i < 0 ? 0 : i) * 40; markWheel(el);
+}
+
+/* ---------- the time sheet ----------
+   Every time field in the app opens this instead of the phone's own clock.
+   Hours and minutes on wheels, and AM / PM as two buttons where the chosen
+   one is filled and ticked — visible before Set is pressed, not after. */
+let tsTarget = null, tsAmPm = "AM";
+function tsPreview() {
+  const h = wheelVal($("#tsH")), m = wheelVal($("#tsM"));
+  $("#tsPreview").innerHTML = "<b>" + h + ":" + pad(m) + " " + tsAmPm + "</b>";
+}
+function tsSetAmPm(v) {
+  tsAmPm = v;
+  $$("#timeSheet [data-ampm]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ampm === v ? "true" : "false"));
+  tsPreview();
+}
+function openTimeSheet(input) {
+  if (!input || !$("#timeSheet")) return;
+  tsTarget = input;
+  const lbl = input.closest("label.fld"), sp = lbl && lbl.querySelector("span");
+  $("#tsTitle").textContent = sp && sp.textContent.trim() ? sp.textContent.trim() : "Set the time";
+  $("#timeSheet").classList.add("on");
+  const v = /^(\d{1,2}):(\d{2})/.exec(input.value || "");
+  const now = new Date();
+  const H = v ? +v[1] : now.getHours(), M = v ? +v[2] : now.getMinutes();
+  let h12 = H % 12; if (h12 === 0) h12 = 12;
+  setWheel($("#tsH"), h12); setWheel($("#tsM"), M);
+  tsSetAmPm(H >= 12 ? "PM" : "AM");
+}
+function tsCommit(clear) {
+  const t = tsTarget; if (!t) return;
+  if (clear) t.value = "";
+  else { let h = wheelVal($("#tsH")) % 12; if (tsAmPm === "PM") h += 12; t.value = pad(h) + ":" + pad(wheelVal($("#tsM"))); }
+  $("#timeSheet").classList.remove("on"); tsTarget = null;
+  t.dispatchEvent(new Event("input", { bubbles: true }));
+  t.dispatchEvent(new Event("change", { bubbles: true }));
+}
+function initTimeSheet() {
+  const H = $("#tsH"), M = $("#tsM"); if (!H || !M) return;
+  buildWheel(H, 12, 1, tsPreview);
+  const zero = H.querySelector('.wi[data-v="0"]'); if (zero) zero.remove();   // hours run 1 to 12
+  H._items = Array.from(H.querySelectorAll(".wi"));
+  buildWheel(M, 59, 1, tsPreview);
+  $("#tsSet").onclick = () => tsCommit(false);
+  $("#tsClear").onclick = () => tsCommit(true);
+  $("#tsCancel").onclick = () => { $("#timeSheet").classList.remove("on"); tsTarget = null; };
+  $("#timeSheet").addEventListener("click", e => { if (e.target === $("#timeSheet")) $("#tsCancel").onclick(); });
+  $$("#timeSheet [data-ampm]").forEach(b => b.onclick = () => tsSetAmPm(b.dataset.ampm));
+  // every time field, including ones rendered later: take the tap before the
+  // phone's clock gets it
+  document.addEventListener("click", e => {
+    const inp = e.target && e.target.closest && e.target.closest('input[type="time"]');
+    if (!inp || inp.disabled) return;
+    e.preventDefault(); inp.blur();
+    openTimeSheet(inp);
+  }, true);
+  document.addEventListener("keydown", e => {
+    const inp = e.target && e.target.matches && e.target.matches('input[type="time"]');
+    if (inp && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openTimeSheet(e.target); }
+  });
 }
 /* Minutes between bedtime and waking, allowing for the crossing of midnight. */
 function spanMins(bed, wake) {
@@ -10167,6 +10259,7 @@ function init() {
   buildWheel($("#wSM"), 55, 5, () => pushScreen(false));
   buildWheel($("#wNH"), 5, 1, pushNap);
   buildWheel($("#wNM"), 55, 5, pushNap);
+  initTimeSheet();
   bindSliders($("#v-log"));   // delegated, so every slider group is covered
 
   // start on the check-in you're in; anything earlier still open is in the badge
