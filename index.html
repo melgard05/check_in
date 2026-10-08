@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:115-->
+<!DOCTYPE html><!--build:116-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -22,7 +22,7 @@
   --s-blue:#1e90ff; --s-teal:#00d8e0;
   --bg:#0b0d10; --panel:#12161b; --panel-2:#171c23; --line:#232a33; --line-2:#2e3742;
   --ink:#e6ecf2; --ink-2:#9aa8b6; --ink-3:#63707e;
-  --accent:#7fd4c1; --warn:#d9a03c; --bad:#c25a4a;
+  --accent:#7fd4c1; --warn:#d9a03c; --bad:#c25a4a; --am:#f2c94c; --pm:#8fa8ff;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   --r:10px;
@@ -66,10 +66,13 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .connbar .btn{padding:5px 11px;font-size:12.5px}
 .planbar span{flex:1;color:var(--ink)}
 .planbar .btn{padding:5px 11px;font-size:12.5px}
+/* The pattern banner and cards take a different colour each day (set on the
+   root as --flag / --flag-bg by paintDayTone), so the same orange isn't there
+   to be looked past every morning. */
 .flagbar{display:none;align-items:flex-start;gap:10px;margin-top:9px;padding:10px 12px;border-radius:8px;
-  background:#221a10;border:1px solid var(--warn);font-size:13px;line-height:1.45}
+  background:var(--flag-bg,#221a10);border:1px solid var(--flag,var(--warn));font-size:13px;line-height:1.45}
 .flagbar.on{display:flex}
-.flagbar b{color:var(--warn);display:block;font-size:13.5px}
+.flagbar b{color:var(--flag,var(--warn));display:block;font-size:13.5px}
 .flagbar .fbody{color:var(--ink-2);font-size:12.5px;margin-top:2px}
 .flagbar .btn{padding:5px 10px;font-size:12px;flex:0 0 auto}
 .editbar{display:none;align-items:center;gap:10px;background:#2b2119;border:1px solid var(--warn);
@@ -394,6 +397,15 @@ input[type=time]::-webkit-calendar-picker-indicator,
 input[type=date]::-webkit-calendar-picker-indicator{opacity:.9;cursor:pointer}
 input[type=time]::-webkit-calendar-picker-indicator:hover,
 input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:1}
+/* Fields that use the phone's own clock (the sleep times) say which half of
+   the day they hold in a colour the clock itself won't: the field's border and
+   a tag by its name go yellow for AM and blue for PM. */
+input[type=time].am{border-color:var(--am)}
+input[type=time].pm{border-color:var(--pm)}
+.ampmtag{display:none;margin-left:7px;padding:2px 7px;border-radius:4px;font-weight:700;letter-spacing:.1em;
+  font-size:10px;vertical-align:1px;text-transform:none;font-style:normal}
+.ampmtag.am{display:inline-block;background:var(--am);color:#1d1600}
+.ampmtag.pm{display:inline-block;background:var(--pm);color:#0b1030}
 textarea{min-height:74px;resize:vertical;line-height:1.4}
 input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visible,.chip:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
@@ -491,7 +503,7 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 .plainline.bad span{color:var(--ink)}
 .statnote{font-size:12px;color:var(--ink-3);background:var(--panel-2);border:1px solid var(--line);
   border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.5}
-.flag{border-left:3px solid var(--warn);background:#1b1710;padding:11px 13px;border-radius:0 8px 8px 0;
+.flag{border-left:3px solid var(--flag,var(--warn));background:var(--flag-bg,#1b1710);padding:11px 13px;border-radius:0 8px 8px 0;
   margin:0 0 9px;font-size:13.5px}
 .flag.hi{border-color:var(--high-2);background:#1e1413}
 .flag b{display:block;margin-bottom:2px;font-size:13.5px}
@@ -624,14 +636,14 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         </div>
         <div class="wtotal" id="wTotal">—</div>
         <div class="row" style="margin-top:14px">
-          <label class="fld"><span>Bedtime</span><input type="time" id="sBed"></label>
-          <label class="fld"><span>Woke at</span><input type="time" id="sWake"></label>
+          <label class="fld"><span>Bedtime</span><input type="time" id="sBed" data-clock></label>
+          <label class="fld"><span>Woke at</span><input type="time" id="sWake" data-clock></label>
         </div>
         <div class="eyebrow" style="margin:16px 0 8px">Awake in the night</div>
         <div id="wakeList"></div>
         <div class="row" style="gap:8px;margin-top:8px;align-items:flex-end">
           <label class="fld" style="flex:0 1 130px"><span>Woke at</span>
-            <input type="time" id="wakeAt"></label>
+            <input type="time" id="wakeAt" data-clock></label>
           <label class="fld" style="flex:0 1 120px"><span>For how long</span>
             <select id="wakeLen">
               <option value="10">10 min</option><option value="20">20 min</option>
@@ -2057,7 +2069,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 115;
+const BUILD = 116;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3227,18 +3239,39 @@ function initTimeSheet() {
   $("#timeSheet").addEventListener("click", e => { if (e.target === $("#timeSheet")) $("#tsCancel").onclick(); });
   $$("#timeSheet [data-ampm]").forEach(b => b.onclick = () => tsSetAmPm(b.dataset.ampm));
   // every time field, including ones rendered later: take the tap before the
-  // phone's clock gets it
+  // phone's clock gets it. The sleep times are the exception (data-clock):
+  // scrolling a minute wheel to 47 is slower than the clock face, so those
+  // keep the phone's clock and show AM / PM in colour beside the field instead.
   document.addEventListener("click", e => {
     const inp = e.target && e.target.closest && e.target.closest('input[type="time"]');
-    if (!inp || inp.disabled) return;
+    if (!inp || inp.disabled || inp.hasAttribute("data-clock")) return;
     e.preventDefault(); inp.blur();
     openTimeSheet(inp);
   }, true);
   document.addEventListener("keydown", e => {
-    const inp = e.target && e.target.matches && e.target.matches('input[type="time"]');
+    const inp = e.target && e.target.matches && e.target.matches('input[type="time"]:not([data-clock])');
     if (inp && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openTimeSheet(e.target); }
   });
+  ["input", "change"].forEach(ev => document.addEventListener(ev, e => {
+    if (e.target && e.target.matches && e.target.matches('input[type="time"][data-clock]')) paintClock(e.target);
+  }, true));
+  paintClocks();
 }
+/* AM / PM, in colour, for the fields that use the phone's own clock. The
+   clock's dialog can't be styled, so the answer is shown where it can be:
+   the field's border and a tag next to its name — yellow AM, blue PM. */
+function paintClock(inp) {
+  const v = /^(\d{1,2}):/.exec(inp.value || "");
+  const half = v ? (+v[1] >= 12 ? "pm" : "am") : "";
+  inp.classList.toggle("am", half === "am"); inp.classList.toggle("pm", half === "pm");
+  const lbl = inp.closest("label.fld"), sp = lbl && lbl.querySelector(":scope > span");
+  if (!sp) return;
+  let tag = sp.querySelector(".ampmtag");
+  if (!tag) { tag = document.createElement("i"); tag.className = "ampmtag"; sp.appendChild(tag); }
+  tag.className = "ampmtag" + (half ? " " + half : "");
+  tag.textContent = half === "am" ? "AM ☀" : half === "pm" ? "PM ☾" : "";
+}
+function paintClocks() { $$('input[type="time"][data-clock]').forEach(paintClock); }
 /* Minutes between bedtime and waking, allowing for the crossing of midnight. */
 function spanMins(bed, wake) {
   if (!bed || !wake) return null;
@@ -3599,6 +3632,7 @@ function renderLog() {
     setWheel($("#wH"), s.h == null ? 7 : s.h);
     setWheel($("#wM"), s.m == null ? 0 : s.m);
     $("#sBed").value = s.bed || ""; $("#sWake").value = s.wake || "";
+    paintClocks();
     renderWakes();
     pushSleep();   // also folds in any nap that belongs to this night
     $("#sleepItems").innerHTML = activeItems("sleep").map(i => sliderHTML(i, draft.v[i.key], draft.n[i.key])).join("");
@@ -6679,8 +6713,28 @@ function flagDue(f) {
   return Date.now() - (seen.at || 0) > back * 86400000;
 }
 
+/* A different colour for the pattern banner and cards each day. The eye stops
+   seeing a banner that is always the same orange; seven tones, moving on one
+   each day, keep it a new thing to notice. Serious (hi) cards stay red. */
+const DAY_TONES = [
+  ["#d9a03c", "#221a10"],   // amber
+  ["#5ec8b4", "#0f2320"],   // teal
+  ["#b48ee6", "#1b1526"],   // violet
+  ["#e07a8a", "#261417"],   // rose
+  ["#6fb6e8", "#10202b"],   // sky
+  ["#a8d36a", "#1a2212"],   // lime
+  ["#9fb0ff", "#151b30"]];  // periwinkle
+function dayTone(iso) {
+  const d = Math.round(new Date((iso || todayISO()) + "T00:00:00Z").getTime() / 86400000);
+  return DAY_TONES[((d % DAY_TONES.length) + DAY_TONES.length) % DAY_TONES.length];
+}
+function paintDayTone() {
+  const t = dayTone(), r = document.documentElement.style;
+  r.setProperty("--flag", t[0]); r.setProperty("--flag-bg", t[1]);
+}
 function showFlagBanner() {
   const bar = $("#flagBar"); if (!bar || dashOn) return;
+  paintDayTone();
   const due = latestFlags.filter(flagDue);
   if (!due.length) { bar.classList.remove("on"); return; }
   // Serious ones first, but not the same one every time. Each appearance today
@@ -6723,6 +6777,7 @@ function clearFlagBanner(all) {
 }
 
 function renderFlags(rows) {
+  paintDayTone();
   const recent = rows.slice(-14).filter(r => r.n);
   const out = [];
   const last = n => rows.slice(-n).filter(r => r.n);
@@ -8843,7 +8898,15 @@ function mergeSuggestions(remote) {
   (remote || []).forEach(s => {
     if (!s || !s.id || gone[s.id]) return;        // deleted here: don't take it back
     if (!by[s.id]) by[s.id] = s;
-    else if (s.done) by[s.id].done = true;
+    else {
+      // Done used to be one-way: once any device said done, done it stayed, so
+      // unticking an accidental tick here was undone by the next sync. Now the
+      // later change wins, by its time stamp; an old record with no stamp keeps
+      // the old rule.
+      const m = by[s.id];
+      if (s.doneAt && (!m.doneAt || s.doneAt > m.doneAt)) { m.done = !!s.done; m.doneAt = s.doneAt; }
+      else if (!s.doneAt && !m.doneAt && s.done) m.done = true;
+    }
   });
   const out = Object.keys(by).map(k => by[k]).sort((a, b) => a.at < b.at ? -1 : 1);
   // This used to refuse any merge that made the list shorter, tombstone or not.
@@ -9498,7 +9561,7 @@ function renderSug() {
   el.innerHTML = list.slice().reverse().map(s =>
     '<div class="sug' + (s.done ? " done" : "") + '">' +
       '<button class="sugchk" data-sugdone="' + s.id + '" aria-pressed="' + (s.done ? "true" : "false") +
-        '" aria-label="Mark done">' + (s.done ? "&#10003;" : "") + "</button>" +
+        '" aria-label="' + (s.done ? "Not done after all" : "Mark done") + '">' + (s.done ? "&#10003;" : "") + "</button>" +
       '<div class="sugtx"><div>' + esc(s.text) + "</div>" +
         '<div class="sugat">' + new Date(s.at).toLocaleDateString(undefined,
           { month:"short", day:"numeric" }) + "</div></div>" +
@@ -10326,7 +10389,7 @@ function init() {
     if (!Array.isArray(draft.sleep.wakes)) draft.sleep.wakes = [];
     draft.sleep.wakes.push({ at, mins: +$("#wakeLen").value || 30 });
     draft.sleep.wakes.sort((a, c) => minsOf(a.at) - minsOf(c.at));
-    $("#wakeAt").value = "";
+    $("#wakeAt").value = ""; paintClock($("#wakeAt"));
     renderWakes(); pushSleep();
   };
   $("#medOffAt").onchange = () => { draft.medoff.at = $("#medOffAt").value; medOffHint(); crashHint(); };
@@ -10534,7 +10597,7 @@ function init() {
     }
     const sd = ev.target.closest("[data-sugdone]");
     if (sd) { const s = (STATE.suggestions || []).find(x => x.id === sd.dataset.sugdone);
-      if (s) { s.done = !s.done; renderSug();
+      if (s) { s.done = !s.done; s.doneAt = new Date().toISOString(); renderSug();
         saveState().then(() => { if (CFG.cloud.sync || CFG.fb.on) syncAll(true); }); }
       return; }
     const sx = ev.target.closest("[data-sugdel]");
