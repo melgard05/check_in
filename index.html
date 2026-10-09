@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:116-->
+<!DOCTYPE html><!--build:117-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -8,6 +8,20 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Baseline</title>
+<script>
+/* Before anything paints: if a PIN is set and the app has been away longer
+   than its lock-after time, start locked. The real check runs again in init;
+   this only stops the entries being glimpsed while the page loads. */
+(function () {
+  try {
+    var c = JSON.parse(localStorage.getItem("baseline:config") || "{}");
+    if (!c.pin || !c.pin.h) return;
+    var seen = +(localStorage.getItem("baseline:lockseen") || 0);
+    var mins = c.pin.mins == null ? 5 : +c.pin.mins;
+    if (!seen || mins === 0 || Date.now() - seen > mins * 60000) document.documentElement.classList.add("locked");
+  } catch (e) {}
+})();
+</script>
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
@@ -428,6 +442,33 @@ input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visibl
 .tog[aria-pressed="true"]{background:#1f3a34;border-color:var(--accent)}
 .tog[aria-pressed="true"]:after{transform:translateX(19px);background:var(--accent)}
 
+/* ---------- the lock ----------
+   Sits above everything, including the reminder gate, and is shown by a
+   class on <html> set before the page paints, so nothing is glimpsed first. */
+.lock{position:fixed;inset:0;z-index:200;background:var(--bg);display:none;flex-direction:column;
+  align-items:center;justify-content:center;padding:24px 18px calc(24px + env(safe-area-inset-bottom));
+  overflow-y:auto}
+.lock.on,html.locked .lock{display:flex}
+html.locked body{overflow:hidden}
+.lock .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3)}
+.lock h3{font-size:19px;margin:6px 0 4px}
+.lock .lmsg{min-height:20px;font-size:13.5px;color:var(--ink-2);text-align:center;margin:4px 0 10px}
+.lock .lmsg.bad{color:#e0857a}
+.ldots{display:flex;gap:14px;justify-content:center;margin:10px 0 18px;height:16px}
+.ldots i{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--ink-3);display:block}
+.ldots i.f{background:var(--accent);border-color:var(--accent)}
+.ldots.shake{animation:lshake .4s}
+@keyframes lshake{0%,100%{transform:none}20%,60%{transform:translateX(-9px)}40%,80%{transform:translateX(9px)}}
+.lpad{display:grid;grid-template-columns:repeat(3,76px);gap:12px;justify-content:center}
+.lpad button{height:66px;border-radius:14px;border:1px solid var(--line-2);background:var(--panel-2);
+  color:var(--ink);font-size:26px;font-weight:600;cursor:pointer}
+.lpad button:active{background:var(--panel);transform:translateY(1px)}
+.lpad button.gho{background:none;border-color:transparent;font-size:18px;color:var(--ink-2)}
+.lpad button:disabled{opacity:.35}
+.lock .lrow{display:flex;gap:10px;justify-content:center;margin-top:18px;width:100%;max-width:252px}
+.lock .lrow .btn{flex:1}
+.lforgot{margin-top:22px;background:none;border:0;color:var(--ink-3);font-size:13px;text-decoration:underline;cursor:pointer}
+.lbox{width:100%;max-width:360px;margin-top:14px}
 /* ---------- reminder gate ---------- */
 .gate{position:fixed;inset:0;z-index:90;background:rgba(6,8,10,.9);backdrop-filter:blur(5px);
   display:none;align-items:flex-start;justify-content:center;
@@ -1266,6 +1307,27 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <textarea id="expBox" style="display:none;margin-top:10px;min-height:150px;font-family:var(--mono);font-size:11px"></textarea>
     </div>
 
+    <div class="card" id="ds-lock">
+      <h2>Lock</h2>
+      <p class="sub">A PIN for opening Baseline, on every device you use it on. It's asked for after the app
+        has been closed or sitting in the background for a while, so a check-in you're in the middle of
+        isn't interrupted. It keeps a glance or a borrowed phone out of your entries; it isn't encryption,
+        so the phone's own screen lock still matters.</p>
+      <div class="mini" id="lockState" style="margin-bottom:9px"></div>
+      <label class="fld" style="max-width:220px"><span>Ask for it again after</span>
+        <select id="lockMins">
+          <option value="0">every time it opens</option><option value="1">1 minute away</option>
+          <option value="5">5 minutes away</option><option value="15">15 minutes away</option>
+          <option value="60">an hour away</option></select></label>
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn sm pri" id="lockSet">Set a PIN</button>
+        <button class="btn sm" id="lockChange" style="display:none">Change PIN</button>
+        <button class="btn sm dang" id="lockOff" style="display:none">Remove PIN</button>
+      </div>
+      <div class="mini" style="margin-top:8px">Forgotten it? The lock screen takes your reconnect link
+        (the one with <b>?setup=</b> in it) and clears the PIN. Keep that link somewhere safe.</div>
+    </div>
+
     <div class="card" id="ds-cloudflare">
       <h2>Cloudflare</h2>
       <p class="sub">Point this at your Worker and reminders keep firing with the app closed.
@@ -1838,6 +1900,32 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     </div>
   </div>
 </div>
+<div class="lock" id="lockScreen" role="dialog" aria-label="Locked">
+  <div class="k" id="lockK">Baseline</div>
+  <h3 id="lockTitle">Enter your PIN</h3>
+  <div class="lmsg" id="lockMsg"></div>
+  <div class="ldots" id="lockDots"></div>
+  <div class="lpad" id="lockPad">
+    <button type="button" data-pk="1">1</button><button type="button" data-pk="2">2</button><button type="button" data-pk="3">3</button>
+    <button type="button" data-pk="4">4</button><button type="button" data-pk="5">5</button><button type="button" data-pk="6">6</button>
+    <button type="button" data-pk="7">7</button><button type="button" data-pk="8">8</button><button type="button" data-pk="9">9</button>
+    <button type="button" class="gho" data-pk="x" aria-label="Cancel" id="lockCancel">Cancel</button>
+    <button type="button" data-pk="0">0</button>
+    <button type="button" class="gho" data-pk="b" aria-label="Delete the last digit">&#9003;</button>
+  </div>
+  <div class="lrow" id="lockRow" style="display:none"><button class="btn pri" id="lockNext" disabled>Next</button></div>
+  <button class="lforgot" id="lockForgot">Forgotten it?</button>
+  <div class="lbox" id="lockBox" style="display:none">
+    <p class="sub" style="margin:0 0 8px">Paste your reconnect link (the one you were told to bookmark &mdash; it has
+      <b>?setup=</b> in it). If it matches this device's connection, the PIN is cleared and you're in. Nothing is lost.</p>
+    <textarea id="lockLink" rows="3" placeholder="https://&hellip;/index.html?setup=&hellip;" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="row" style="gap:8px;margin-top:8px">
+      <button class="btn sm pri" id="lockLinkGo">Clear the PIN</button>
+      <button class="btn sm gho" id="lockLinkNo">Back</button>
+    </div>
+    <div class="mini" id="lockLinkMsg" style="margin-top:7px"></div>
+  </div>
+</div>
 <div class="gate" id="starSheet">
   <div class="gatebox">
     <div class="k" style="color:#e0c453">gold star</div>
@@ -2069,7 +2157,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 116;
+const BUILD = 117;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2159,7 +2247,7 @@ function winTime(w, dateISO) {
 
 /* Settings that describe the schedule belong to the person and follow them
    between devices. Credentials and device ids deliberately do not. */
-const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "nagMax", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "strGen", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "strokeFrom", "strokeNote", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc", "report"];
+const SHARED_CFG = ["windows", "weekend", "altDays", "napWins", "medWin", "cycle", "plan", "sched", "quick", "quickItems", "spikeItems", "medList", "off", "meds", "lat", "nagMins", "nagMax", "needNote", "needNoteAt", "needNoteWin", "startAt5", "winAsk", "winRequire", "winWins", "winWinsAlt", "winRead", "winDownAsk", "strengths", "strGen", "themeSrc", "jrnExport", "flagBack", "screenWork", "screenAtWin", "strokeFrom", "strokeNote", "spikeTriggers", "screenOn", "screenWin", "screenFor", "tellWho", "gdoc", "report", "pin"];
 function sharedCfg() {
   const o = { cfgAt: CFG.cfgAt || 0 };
   SHARED_CFG.forEach(k => { o[k] = CFG[k]; });
@@ -5405,7 +5493,7 @@ function renderReportCfg() {
    can never drift out of step with the sections it points at. */
 const TAB_LABEL = {
   planCard: "Plan", "ds-dashboard": "Dashboard", "ds-export": "Export",
-  "ds-cloudflare": "Cloudflare", "ds-weekly-email": "Weekly email", "ds-firebase": "Firebase", "ds-check-in-times": "Check-in times",
+  "ds-lock": "Lock", "ds-cloudflare": "Cloudflare", "ds-weekly-email": "Weekly email", "ds-firebase": "Firebase", "ds-check-in-times": "Check-in times",
   "ds-explain-the-outliers": "Outliers", "ds-pattern-alerts": "Alerts", "ds-wins": "Wins",
   "ds-tell-someone-about-dose-changes": "Tell someone",
   "ds-screen-time": "Screen time", "ds-what-set-it-off": "Triggers",
@@ -8124,6 +8212,7 @@ function renderSpikePick() {
 }
 function renderCfg() {
   try { renderReportCfg(); } catch (e) {}
+  try { renderLockCfg(); } catch (e) {}
   $("#winCfg").innerHTML = CFG.windows.map((w, i) => {
     const n = ENTRIES.filter(e => e.win === w.id).length;
     return '<div class="winrow">' +
@@ -9550,6 +9639,171 @@ function renderSpikeCount() {
     : '<span style="color:var(--ink-3)">Anxiety and irritability move faster than three check-ins can catch.</span>';
 }
 
+/* ---------- the lock ----------
+   A PIN that is asked for when the app has been away for a while. It is a
+   screen, not a safe: the entries are still on the device as they were, so
+   it keeps a glance or a borrowed phone out, no more. The PIN itself is never
+   stored — a salted PBKDF2 hash of it travels with the shared settings so
+   both devices ask for the same one. The time last seen stays on the device. */
+const K_LOCKSEEN = "baseline:lockseen";
+let lockMode = null, lockBuf = "", lockFirst = "", lockThen = null, lockBad = 0, lockUntil = 0, lockTick = 0;
+function pinSet() { return !!(CFG.pin && CFG.pin.h); }
+function pinMins() { return CFG.pin && CFG.pin.mins != null ? +CFG.pin.mins : 5; }
+function hexOf(buf) { return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join(""); }
+async function pinHash(pin, saltHex, n) {
+  const salt = new Uint8Array(saltHex.match(/../g).map(h => parseInt(h, 16)));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pin), "PBKDF2", false, ["deriveBits"]);
+  return hexOf(await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: n }, key, 256));
+}
+async function pinCheck(pin) {
+  if (!pinSet()) return true;
+  try { return (await pinHash(pin, CFG.pin.s, CFG.pin.n)) === CFG.pin.h; } catch (e) { return false; }
+}
+async function pinStore(pin) {
+  const s = hexOf(crypto.getRandomValues(new Uint8Array(16))), n = 100000;
+  const mins = $("#lockMins") ? +$("#lockMins").value : pinMins();
+  CFG.pin = { h: await pinHash(pin, s, n), s, n, len: pin.length, mins, at: new Date().toISOString() };
+  lockSeen(); await touchCfg(); renderLockCfg();
+  try { credNote("PIN set on this device"); } catch (e) {}
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+}
+async function pinClear(how) {
+  CFG.pin = null; lockSeen(); await touchCfg(); renderLockCfg();
+  try { credNote("PIN " + how); } catch (e) {}
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+}
+function lockSeen() { try { localStorage.setItem(K_LOCKSEEN, String(Date.now())); } catch (e) {} }
+function lockDue() {
+  if (!pinSet()) return false;
+  let seen = 0; try { seen = +(localStorage.getItem(K_LOCKSEEN) || 0); } catch (e) {}
+  return !seen || pinMins() === 0 || Date.now() - seen > pinMins() * 60000;
+}
+function lockOpen(mode, then) {        // unlock | verify | set1 | set2
+  lockMode = mode; lockBuf = ""; lockThen = then || null;
+  if (mode === "set1") lockFirst = "";
+  $("#lockScreen").classList.add("on"); document.documentElement.classList.add("locked");
+  $("#lockK").textContent = mode === "unlock" ? "Baseline" : mode === "verify" ? "Lock" : "New PIN";
+  $("#lockTitle").textContent = mode === "set1" ? "Choose a PIN" : mode === "set2" ? "Enter it again" : "Enter your PIN";
+  const m = $("#lockMsg"); m.textContent = mode === "set1" ? "4 to 6 digits." : ""; m.classList.remove("bad");
+  $("#lockRow").style.display = mode === "set1" || mode === "set2" ? "" : "none";
+  $("#lockNext").textContent = mode === "set2" ? "Done" : "Next";
+  $("#lockCancel").style.visibility = mode === "unlock" ? "hidden" : "";
+  $("#lockForgot").style.display = mode === "unlock" ? "" : "none";
+  $("#lockBox").style.display = "none"; $("#lockPad").style.display = ""; $("#lockDots").style.display = "";
+  $("#lockLink").value = ""; $("#lockLinkMsg").textContent = "";
+  lockPaint();
+}
+function lockClose() {
+  lockMode = null; lockBuf = ""; lockThen = null;
+  $("#lockScreen").classList.remove("on"); document.documentElement.classList.remove("locked");
+}
+function lockWant() { return lockMode === "unlock" || lockMode === "verify" ? ((CFG.pin && CFG.pin.len) || 4) : 0; }
+function lockPaint() {
+  const n = lockWant() || (lockMode === "set2" ? lockFirst.length : Math.max(4, lockBuf.length));
+  $("#lockDots").innerHTML = Array.from({ length: n }, (_, i) => "<i" + (i < lockBuf.length ? ' class="f"' : "") + "></i>").join("");
+  $("#lockNext").disabled = lockBuf.length < 4;
+  const wait = lockUntil > Date.now();
+  $$("#lockPad [data-pk]").forEach(b => { if (/\d/.test(b.dataset.pk)) b.disabled = wait; });
+}
+function lockKey(k) {
+  if (!lockMode) return;
+  if (k === "x") { if (lockMode !== "unlock") { const t = lockThen; lockClose(); if (t) t(false); } return; }
+  if (k === "b") { lockBuf = lockBuf.slice(0, -1); lockPaint(); return; }
+  if (k === "go") { if (!lockWant() && lockBuf.length >= 4) lockSubmit(); return; }
+  if (!/^\d$/.test(k) || lockUntil > Date.now() || lockBuf.length >= 6) return;
+  lockBuf += k; lockPaint();
+  if (lockWant() && lockBuf.length === lockWant()) lockSubmit();
+}
+function lockFail(msg) {
+  const m = $("#lockMsg"); m.textContent = msg; m.classList.add("bad");
+  const d = $("#lockDots"); d.classList.remove("shake"); void d.offsetWidth; d.classList.add("shake");
+  lockBuf = ""; lockPaint();
+}
+function lockWaitMsg() {
+  clearInterval(lockTick);
+  const paint = () => {
+    const left = Math.ceil((lockUntil - Date.now()) / 1000);
+    if (left <= 0) { clearInterval(lockTick); lockUntil = 0; $("#lockMsg").textContent = ""; $("#lockMsg").classList.remove("bad"); lockPaint(); return; }
+    $("#lockMsg").textContent = "Too many tries. Wait " + left + "s.";
+  };
+  paint(); lockTick = setInterval(paint, 1000);
+}
+async function lockSubmit() {
+  const pin = lockBuf; if (!lockMode) return;
+  if (lockMode === "set1") { if (pin.length < 4) return; lockFirst = pin; lockOpen("set2", lockThen); return; }
+  if (lockMode === "set2") {
+    if (pin !== lockFirst) { const t = lockThen; lockOpen("set1", t); lockFail("They didn't match. Start again."); return; }
+    const t = lockThen; await pinStore(pin); lockClose(); toast("PIN set"); if (t) t(true); return;
+  }
+  const ok = await pinCheck(pin);
+  if (!ok) {
+    lockBad++;
+    if (lockBad >= 5) { lockUntil = Date.now() + 30000 * Math.pow(2, Math.min(4, lockBad - 5)); lockFail(""); lockWaitMsg(); }
+    else lockFail("Not it.");
+    try { if (lockBad === 5) credNote("five wrong PINs in a row"); } catch (e) {}
+    return;
+  }
+  lockBad = 0; lockUntil = 0; clearInterval(lockTick);
+  const t = lockThen; lockSeen(); lockClose(); if (t) t(true);
+}
+function renderLockCfg() {
+  const st = $("#lockState"); if (!st) return;
+  const on = pinSet();
+  st.innerHTML = on
+    ? "PIN set" + (CFG.pin.at ? " on " + new Date(CFG.pin.at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "") +
+      " &middot; " + CFG.pin.len + " digits."
+    : "No PIN set.";
+  if (!CFG.cloud.url) st.innerHTML += ' <span style="color:var(--warn)">This device isn\'t connected to the worker, so it ' +
+    "has no reconnect link to get back in with if the PIN is forgotten.</span>";
+  $("#lockMins").value = String(pinMins());
+  $("#lockSet").style.display = on ? "none" : ""; $("#lockChange").style.display = on ? "" : "none";
+  $("#lockOff").style.display = on ? "" : "none";
+}
+function initLock() {
+  if (!$("#lockScreen")) return;
+  $("#lockPad").addEventListener("click", e => { const b = e.target.closest("[data-pk]"); if (b) lockKey(b.dataset.pk); });
+  $("#lockNext").onclick = () => lockKey("go");
+  document.addEventListener("keydown", e => {
+    if (!lockMode || e.target === $("#lockLink")) return;
+    const k = /^\d$/.test(e.key) ? e.key : e.key === "Backspace" ? "b" : e.key === "Enter" ? "go" : e.key === "Escape" ? "x" : null;
+    if (k) { e.preventDefault(); e.stopPropagation(); lockKey(k); }
+  }, true);
+  $("#lockForgot").onclick = () => {
+    $("#lockBox").style.display = ""; $("#lockPad").style.display = "none"; $("#lockDots").style.display = "none";
+    $("#lockForgot").style.display = "none"; $("#lockTitle").textContent = "Forgotten it?"; $("#lockMsg").textContent = "";
+    $("#lockLink").focus();
+  };
+  $("#lockLinkNo").onclick = () => lockOpen("unlock", lockThen);
+  $("#lockLinkGo").onclick = async () => {
+    const enc = (($("#lockLink").value || "").match(/[?&]setup=([^&\s]+)/) || [])[1];
+    let o = null; try { o = enc ? JSON.parse(b64urlDec(enc)) : null; } catch (e) {}
+    const msg = $("#lockLinkMsg");
+    if (!o || !o.u) { msg.textContent = "That doesn't look like a reconnect link."; return; }
+    const trim = u => String(u || "").replace(/\/+$/, "");
+    const ok = trim(o.u) === trim(CFG.cloud.url) && !!CFG.cloud.url &&
+      (CFG.cloud.key ? o.k === CFG.cloud.key : String(o.a || "") === String(CFG.cloud.account || CFG.cloud.uid || ""));
+    if (!ok) { msg.textContent = "That link doesn't match this device's connection."; return; }
+    await pinClear("cleared with the reconnect link");
+    lockClose(); toast("PIN cleared — set a new one under Data › Lock");
+  };
+  $("#lockSet").onclick = () => lockOpen("set1");
+  $("#lockChange").onclick = () => lockOpen("verify", ok => { if (ok) lockOpen("set1"); });
+  $("#lockOff").onclick = () => lockOpen("verify", async ok => { if (ok) { await pinClear("removed"); toast("PIN removed"); } });
+  $("#lockMins").onchange = async () => { if (pinSet()) { CFG.pin.mins = +$("#lockMins").value; await touchCfg(); } };
+  // the time last seen: kept while the app is open and unlocked, so coming
+  // back after a short break doesn't ask, and a long one does
+  const seen = () => { if (lockMode !== "unlock") lockSeen(); };
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { seen(); return; }
+    if (lockDue() && !lockMode) lockOpen("unlock");
+  });
+  window.addEventListener("pagehide", seen);
+  setInterval(() => { if (!document.hidden) seen(); }, 30000);
+  renderLockCfg();
+  if (lockDue()) lockOpen("unlock");
+  else { document.documentElement.classList.remove("locked"); lockSeen(); }
+}
+
 /* ---------- suggestions ---------- */
 function renderSug() {
   const list = STATE.suggestions || [];
@@ -10313,6 +10567,7 @@ function trackHeader() {
 function init() {
   dashOn = /[?&]dash=1/.test(location.search);
   trackHeader();
+  try { initLock(); } catch (e) { console.error(e); }
   fillWinSelect(todayISO());
   buildWheel($("#wH"), 14, 1, pushSleep);
   buildWheel($("#wM"), 55, 5, pushSleep);
