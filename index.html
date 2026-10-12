@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:117-->
+<!DOCTYPE html><!--build:118-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -36,7 +36,7 @@
   --s-blue:#1e90ff; --s-teal:#00d8e0;
   --bg:#0b0d10; --panel:#12161b; --panel-2:#171c23; --line:#232a33; --line-2:#2e3742;
   --ink:#e6ecf2; --ink-2:#9aa8b6; --ink-3:#63707e;
-  --accent:#7fd4c1; --warn:#d9a03c; --bad:#c25a4a; --am:#f2c94c; --pm:#8fa8ff;
+  --accent:#7fd4c1; --warn:#d9a03c; --bad:#c25a4a; --am:#f28c3b; --pm:#a77bf3;
   --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
   --r:10px;
@@ -411,15 +411,14 @@ input[type=time]::-webkit-calendar-picker-indicator,
 input[type=date]::-webkit-calendar-picker-indicator{opacity:.9;cursor:pointer}
 input[type=time]::-webkit-calendar-picker-indicator:hover,
 input[type=date]::-webkit-calendar-picker-indicator:hover{opacity:1}
-/* Fields that use the phone's own clock (the sleep times) say which half of
-   the day they hold in a colour the clock itself won't: the field's border and
-   a tag by its name go yellow for AM and blue for PM. */
+/* Every time field says which half of the day it holds: the field's border
+   and a tag by its name go orange for AM and purple for PM. */
 input[type=time].am{border-color:var(--am)}
 input[type=time].pm{border-color:var(--pm)}
 .ampmtag{display:none;margin-left:7px;padding:2px 7px;border-radius:4px;font-weight:700;letter-spacing:.1em;
   font-size:10px;vertical-align:1px;text-transform:none;font-style:normal}
-.ampmtag.am{display:inline-block;background:var(--am);color:#1d1600}
-.ampmtag.pm{display:inline-block;background:var(--pm);color:#0b1030}
+.ampmtag.am{display:inline-block;background:var(--am);color:#1f0d00}
+.ampmtag.pm{display:inline-block;background:var(--pm);color:#160a2e}
 textarea{min-height:74px;resize:vertical;line-height:1.4}
 input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visible,.chip:focus-visible{
   outline:2px solid var(--accent);outline-offset:2px}
@@ -442,6 +441,34 @@ input:focus,select:focus,textarea:focus,button:focus-visible,.track:focus-visibl
 .tog[aria-pressed="true"]{background:#1f3a34;border-color:var(--accent)}
 .tog[aria-pressed="true"]:after{transform:translateX(19px);background:var(--accent)}
 
+/* ---------- the clock ----------
+   Baseline's own copy of the phone's clock dialog. Same face, same layout; the
+   one difference is that the chosen AM or PM is filled in (orange / purple)
+   rather than both being white on blue, which is what made them hard to tell
+   apart. */
+.clockbox{margin:auto 0;background:#fff;color:#1f2937;border-radius:22px;max-width:350px;width:100%;overflow:hidden;
+  box-shadow:0 18px 50px rgba(0,0,0,.7)}
+.cbanner{background:#3b7bf0;color:#fff;display:flex;align-items:center;justify-content:center;gap:16px;padding:16px 18px 14px}
+.ctime{display:flex;align-items:center;font-size:58px;font-weight:300;line-height:1;letter-spacing:-.02em}
+.ctime .cseg{background:none;border:0;padding:2px 4px;border-radius:8px;color:rgba(255,255,255,.55);font:inherit;cursor:pointer}
+.ctime .cseg.on{color:#fff;background:rgba(255,255,255,.16)}
+.ctime .ccolon{color:#fff;margin:0 2px 8px}
+.campm{display:flex;flex-direction:column;gap:7px}
+.campm button{border:1.5px solid rgba(255,255,255,.5);background:none;color:rgba(255,255,255,.7);border-radius:9px;
+  padding:5px 11px;font-size:15px;font-weight:700;letter-spacing:.06em;cursor:pointer;min-width:64px}
+.campm button.on{color:#1a1400;border-color:transparent}
+.campm button.on[data-ckap="AM"]{background:var(--am);color:#1f0d00}
+.campm button.on[data-ckap="PM"]{background:var(--pm);color:#160a2e}
+.campm button.on:before{content:"\2713 ";font-size:13px}
+.cface{padding:16px 18px 6px;display:flex;justify-content:center}
+.cface svg{width:100%;max-width:272px;height:auto;touch-action:none;user-select:none;-webkit-user-select:none;display:block}
+.cface text{font-family:var(--sans);font-size:17px;fill:#1f2937;text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.cface text.sel{fill:#fff;font-weight:600}
+.chint{text-align:center;font-size:12.5px;color:#6b7280;padding:0 18px 4px;min-height:18px}
+.crow{display:flex;align-items:center;gap:6px;padding:8px 12px 14px}
+.crow .cbtn{background:none;border:0;color:#3b7bf0;font-size:16.5px;font-weight:600;padding:10px 12px;border-radius:10px;cursor:pointer}
+.crow .cbtn:active{background:#eef3fe}
+.crow .csp{flex:1}
 /* ---------- the lock ----------
    Sits above everything, including the reminder gate, and is shown by a
    class on <html> set before the page paints, so nothing is glimpsed first. */
@@ -479,18 +506,6 @@ html.locked body{overflow:hidden}
 .gatebox{background:var(--panel);border:1px solid var(--warn);border-radius:14px;max-width:400px;width:100%;
   padding:20px;box-shadow:0 18px 50px rgba(0,0,0,.7);max-height:none}
 .gatebox .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--warn)}
-/* the app's own time picker: the phone's one paints the AM/PM choice the same
-   blue as its banner, so which half of the day is picked can't be seen */
-.ampm{display:flex;gap:8px}
-.ampm button{flex:1;padding:12px 8px;border-radius:10px;border:1px solid var(--line-2);background:var(--panel-2);
-  color:var(--ink-2);font-size:18px;font-weight:700;display:flex;flex-direction:column;align-items:center;
-  gap:2px;cursor:pointer;letter-spacing:.04em}
-.ampm button small{font-size:11px;font-weight:400;color:var(--ink-3);letter-spacing:.04em}
-.ampm button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#08110f}
-.ampm button[aria-pressed="true"] small{color:#08110f;opacity:.75}
-.ampm button[aria-pressed="true"]:before{content:"\2713";font-size:14px;line-height:1}
-#timeSheet .gatebox{border-color:var(--line-2)}
-#timeSheet .gatebox .k{color:var(--accent)}
 .gatebox h3{margin:7px 0 6px;font-size:19px}
 .gatebox p{margin:0 0 15px;font-size:14px;color:var(--ink-2)}
 .gatebox .row{gap:8px}
@@ -677,14 +692,14 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         </div>
         <div class="wtotal" id="wTotal">—</div>
         <div class="row" style="margin-top:14px">
-          <label class="fld"><span>Bedtime</span><input type="time" id="sBed" data-clock></label>
-          <label class="fld"><span>Woke at</span><input type="time" id="sWake" data-clock></label>
+          <label class="fld"><span>Bedtime</span><input type="time" id="sBed"></label>
+          <label class="fld"><span>Woke at</span><input type="time" id="sWake"></label>
         </div>
         <div class="eyebrow" style="margin:16px 0 8px">Awake in the night</div>
         <div id="wakeList"></div>
         <div class="row" style="gap:8px;margin-top:8px;align-items:flex-end">
           <label class="fld" style="flex:0 1 130px"><span>Woke at</span>
-            <input type="time" id="wakeAt" data-clock></label>
+            <input type="time" id="wakeAt"></label>
           <label class="fld" style="flex:0 1 120px"><span>For how long</span>
             <select id="wakeLen">
               <option value="10">10 min</option><option value="20">20 min</option>
@@ -1880,23 +1895,18 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   </div>
 </div>
 
-<div class="gate" id="timeSheet">
-  <div class="gatebox" style="max-width:420px">
-    <div class="k">time</div>
-    <h3 id="tsTitle" style="margin-bottom:10px">Set the time</h3>
-    <div class="wheelwrap">
-      <div class="wcol"><div class="wcap">hour</div><div class="wheel" id="tsH" tabindex="0"></div></div>
-      <div class="wcol"><div class="wcap">minute</div><div class="wheel" id="tsM" tabindex="0"></div></div>
+<div class="gate" id="clockSheet" role="dialog" aria-label="Set the time">
+  <div class="clockbox">
+    <div class="cbanner">
+      <div class="ctime"><button type="button" class="cseg on" id="ckH" aria-label="Hour">5</button><span class="ccolon">:</span><button type="button" class="cseg" id="ckM" aria-label="Minute">30</button></div>
+      <div class="campm"><button type="button" data-ckap="AM" class="on">AM</button><button type="button" data-ckap="PM">PM</button></div>
     </div>
-    <div class="ampm" style="margin-top:12px">
-      <button type="button" data-ampm="AM" aria-pressed="false">AM<small>morning</small></button>
-      <button type="button" data-ampm="PM" aria-pressed="false">PM<small>afternoon &amp; evening</small></button>
-    </div>
-    <div class="wtotal" id="tsPreview" style="margin-top:12px"></div>
-    <div class="row" style="margin-top:14px;gap:8px">
-      <button type="button" class="btn pri" id="tsSet" style="flex:1">Set</button>
-      <button type="button" class="btn gho" id="tsClear">Clear</button>
-      <button type="button" class="btn gho" id="tsCancel">Cancel</button>
+    <div class="cface"><svg viewBox="0 0 260 260" id="ckSvg" aria-hidden="true"></svg></div>
+    <div class="chint" id="ckHint"></div>
+    <div class="crow">
+      <button type="button" class="cbtn" id="ckClear">Clear</button><span class="csp"></span>
+      <button type="button" class="cbtn" id="ckCancel">Cancel</button>
+      <button type="button" class="cbtn" id="ckSet">Set</button>
     </div>
   </div>
 </div>
@@ -2157,7 +2167,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 117;
+const BUILD = 118;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3280,74 +3290,10 @@ function setWheel(el, v) {
   el.scrollTop = (i < 0 ? 0 : i) * 40; markWheel(el);
 }
 
-/* ---------- the time sheet ----------
-   Every time field in the app opens this instead of the phone's own clock.
-   Hours and minutes on wheels, and AM / PM as two buttons where the chosen
-   one is filled and ticked — visible before Set is pressed, not after. */
-let tsTarget = null, tsAmPm = "AM";
-function tsPreview() {
-  const h = wheelVal($("#tsH")), m = wheelVal($("#tsM"));
-  $("#tsPreview").innerHTML = "<b>" + h + ":" + pad(m) + " " + tsAmPm + "</b>";
-}
-function tsSetAmPm(v) {
-  tsAmPm = v;
-  $$("#timeSheet [data-ampm]").forEach(b => b.setAttribute("aria-pressed", b.dataset.ampm === v ? "true" : "false"));
-  tsPreview();
-}
-function openTimeSheet(input) {
-  if (!input || !$("#timeSheet")) return;
-  tsTarget = input;
-  const lbl = input.closest("label.fld"), sp = lbl && lbl.querySelector("span");
-  $("#tsTitle").textContent = sp && sp.textContent.trim() ? sp.textContent.trim() : "Set the time";
-  $("#timeSheet").classList.add("on");
-  const v = /^(\d{1,2}):(\d{2})/.exec(input.value || "");
-  const now = new Date();
-  const H = v ? +v[1] : now.getHours(), M = v ? +v[2] : now.getMinutes();
-  let h12 = H % 12; if (h12 === 0) h12 = 12;
-  setWheel($("#tsH"), h12); setWheel($("#tsM"), M);
-  tsSetAmPm(H >= 12 ? "PM" : "AM");
-}
-function tsCommit(clear) {
-  const t = tsTarget; if (!t) return;
-  if (clear) t.value = "";
-  else { let h = wheelVal($("#tsH")) % 12; if (tsAmPm === "PM") h += 12; t.value = pad(h) + ":" + pad(wheelVal($("#tsM"))); }
-  $("#timeSheet").classList.remove("on"); tsTarget = null;
-  t.dispatchEvent(new Event("input", { bubbles: true }));
-  t.dispatchEvent(new Event("change", { bubbles: true }));
-}
-function initTimeSheet() {
-  const H = $("#tsH"), M = $("#tsM"); if (!H || !M) return;
-  buildWheel(H, 12, 1, tsPreview);
-  const zero = H.querySelector('.wi[data-v="0"]'); if (zero) zero.remove();   // hours run 1 to 12
-  H._items = Array.from(H.querySelectorAll(".wi"));
-  buildWheel(M, 59, 1, tsPreview);
-  $("#tsSet").onclick = () => tsCommit(false);
-  $("#tsClear").onclick = () => tsCommit(true);
-  $("#tsCancel").onclick = () => { $("#timeSheet").classList.remove("on"); tsTarget = null; };
-  $("#timeSheet").addEventListener("click", e => { if (e.target === $("#timeSheet")) $("#tsCancel").onclick(); });
-  $$("#timeSheet [data-ampm]").forEach(b => b.onclick = () => tsSetAmPm(b.dataset.ampm));
-  // every time field, including ones rendered later: take the tap before the
-  // phone's clock gets it. The sleep times are the exception (data-clock):
-  // scrolling a minute wheel to 47 is slower than the clock face, so those
-  // keep the phone's clock and show AM / PM in colour beside the field instead.
-  document.addEventListener("click", e => {
-    const inp = e.target && e.target.closest && e.target.closest('input[type="time"]');
-    if (!inp || inp.disabled || inp.hasAttribute("data-clock")) return;
-    e.preventDefault(); inp.blur();
-    openTimeSheet(inp);
-  }, true);
-  document.addEventListener("keydown", e => {
-    const inp = e.target && e.target.matches && e.target.matches('input[type="time"]:not([data-clock])');
-    if (inp && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openTimeSheet(e.target); }
-  });
-  ["input", "change"].forEach(ev => document.addEventListener(ev, e => {
-    if (e.target && e.target.matches && e.target.matches('input[type="time"][data-clock]')) paintClock(e.target);
-  }, true));
-  paintClocks();
-}
-/* AM / PM, in colour, for the fields that use the phone's own clock. The
-   clock's dialog can't be styled, so the answer is shown where it can be:
-   the field's border and a tag next to its name — yellow AM, blue PM. */
+/* ---------- AM / PM in colour ----------
+   The field's border and a tag next to its name — orange AM, purple PM —
+   whenever a field holds a time, so the half of the day can be seen without
+   opening the clock. */
 function paintClock(inp) {
   const v = /^(\d{1,2}):/.exec(inp.value || "");
   const half = v ? (+v[1] >= 12 ? "pm" : "am") : "";
@@ -3357,9 +3303,124 @@ function paintClock(inp) {
   let tag = sp.querySelector(".ampmtag");
   if (!tag) { tag = document.createElement("i"); tag.className = "ampmtag"; sp.appendChild(tag); }
   tag.className = "ampmtag" + (half ? " " + half : "");
-  tag.textContent = half === "am" ? "AM ☀" : half === "pm" ? "PM ☾" : "";
+  const txt = half === "am" ? "AM \u2600" : half === "pm" ? "PM \u263E" : "";
+  if (tag.textContent !== txt) tag.textContent = txt;   // a write here is itself a change the observer sees
 }
-function paintClocks() { $$('input[type="time"][data-clock]').forEach(paintClock); }
+function paintClocks() { $$('input[type="time"]').forEach(paintClock); }
+/* ---------- the clock ----------
+   Every time field opens this instead of the phone's own dialog. It is a copy
+   of that dialog — tap an hour, it moves on to minutes, Set writes it back —
+   with the one thing the phone's version lacks: the chosen AM or PM filled in
+   so it can be seen. */
+let ckTarget = null, ckMode = "h", ckH = 12, ckM = 0, ckAP = "AM", ckDrag = null;
+function openClock(input) {
+  if (!input || !$("#clockSheet")) return;
+  ckTarget = input;
+  const v = /^(\d{1,2}):(\d{2})/.exec(input.value || "");
+  const now = new Date();
+  const H = v ? +v[1] : now.getHours(), M = v ? +v[2] : now.getMinutes();
+  ckH = H % 12 || 12; ckM = M; ckAP = H >= 12 ? "PM" : "AM"; ckMode = "h";
+  const lbl = input.closest("label.fld"), sp = lbl && lbl.querySelector(":scope > span");
+  const name = sp ? sp.textContent.replace(/\s*(AM|PM)\s*[\u2600\u263E]?\s*$/, "").trim() : "";
+  $("#clockSheet").setAttribute("aria-label", name ? name : "Set the time");
+  $("#clockSheet").classList.add("on");
+  ckPaint();
+}
+function ckClose() { $("#clockSheet").classList.remove("on"); ckTarget = null; ckDrag = null; }
+function ckCommit(clear) {
+  const t = ckTarget; if (!t) return;
+  if (clear) t.value = "";
+  else t.value = pad(ckH % 12 + (ckAP === "PM" ? 12 : 0)) + ":" + pad(ckM);
+  ckClose();
+  t.dispatchEvent(new Event("input", { bubbles: true }));
+  t.dispatchEvent(new Event("change", { bubbles: true }));
+}
+function ckPaint() {
+  $("#ckH").textContent = ckH; $("#ckM").textContent = pad(ckM);
+  $("#ckH").classList.toggle("on", ckMode === "h"); $("#ckM").classList.toggle("on", ckMode === "m");
+  $$("#clockSheet [data-ckap]").forEach(b => b.classList.toggle("on", b.dataset.ckap === ckAP));
+  $("#ckHint").textContent = ckMode === "h" ? "Tap the hour" : "Tap or drag for the minute";
+  // the face
+  const C = 130, R = 118, LR = 92;
+  const val = ckMode === "h" ? ckH % 12 * 30 : ckM * 6;        // degrees from the top
+  const rad = (val - 90) * Math.PI / 180;
+  const hx = C + LR * Math.cos(rad), hy = C + LR * Math.sin(rad);
+  let o = '<circle cx="' + C + '" cy="' + C + '" r="' + R + '" fill="#eceff3"/>';
+  o += '<line x1="' + C + '" y1="' + C + '" x2="' + hx.toFixed(1) + '" y2="' + hy.toFixed(1) + '" stroke="#3b7bf0" stroke-width="2.5"/>';
+  o += '<circle cx="' + C + '" cy="' + C + '" r="4" fill="#3b7bf0"/>';
+  o += '<circle cx="' + hx.toFixed(1) + '" cy="' + hy.toFixed(1) + '" r="21" fill="#3b7bf0"/>';
+  const onMark = ckMode === "h" || ckM % 5 === 0;
+  if (!onMark) o += '<circle cx="' + hx.toFixed(1) + '" cy="' + hy.toFixed(1) + '" r="3.5" fill="#fff"/>';
+  for (let i = 0; i < 12; i++) {
+    const n = ckMode === "h" ? (i === 0 ? 12 : i) : i * 5;
+    const a = (i * 30 - 90) * Math.PI / 180;
+    const x = C + LR * Math.cos(a), y = C + LR * Math.sin(a);
+    const sel = ckMode === "h" ? n === ckH : n === ckM;
+    o += '<text x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '"' + (sel ? ' class="sel"' : "") + ">" + (ckMode === "h" ? n : pad(n)) + "</text>";
+  }
+  $("#ckSvg").innerHTML = o;
+}
+function ckFromPoint(e, snap5) {
+  const svg = $("#ckSvg"), r = svg.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * 260 - 130, y = (e.clientY - r.top) / r.height * 260 - 130;
+  if (Math.hypot(x, y) < 22) return false;                       // the centre: nothing
+  let deg = Math.atan2(x, -y) * 180 / Math.PI; if (deg < 0) deg += 360;
+  if (ckMode === "h") ckH = Math.round(deg / 30) % 12 || 12;
+  else { const step = snap5 ? 30 : 6; ckM = Math.round(deg / step) * (snap5 ? 5 : 1) % 60; }
+  ckPaint(); return true;
+}
+function initClocks() {
+  // every time field, including ones rendered later: take the tap before the
+  // phone's dialog gets it
+  document.addEventListener("click", e => {
+    const inp = e.target && e.target.closest && e.target.closest('input[type="time"]');
+    if (!inp || inp.disabled) return;
+    e.preventDefault(); inp.blur();
+    openClock(inp);
+  }, true);
+  document.addEventListener("keydown", e => {
+    const inp = e.target && e.target.matches && e.target.matches('input[type="time"]');
+    if (inp && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openClock(e.target); }
+    if (ckTarget && e.key === "Escape") { e.preventDefault(); ckClose(); }
+    if (ckTarget && e.key === "Enter" && !inp) { e.preventDefault(); ckCommit(false); }
+  });
+  const sh = $("#clockSheet"); if (!sh) return;
+  $("#ckSet").onclick = () => ckCommit(false);
+  $("#ckClear").onclick = () => ckCommit(true);
+  $("#ckCancel").onclick = () => ckClose();
+  sh.addEventListener("click", e => { if (e.target === sh) ckClose(); });
+  $("#ckH").onclick = () => { ckMode = "h"; ckPaint(); };
+  $("#ckM").onclick = () => { ckMode = "m"; ckPaint(); };
+  $$("#clockSheet [data-ckap]").forEach(b => b.onclick = () => { ckAP = b.dataset.ckap; ckPaint(); });
+  const svg = $("#ckSvg");
+  svg.addEventListener("pointerdown", e => {
+    e.preventDefault(); svg.setPointerCapture(e.pointerId);
+    ckDrag = { x: e.clientX, y: e.clientY, moved: false };
+    ckFromPoint(e, ckMode === "m");
+  });
+  svg.addEventListener("pointermove", e => {
+    if (!ckDrag) return;
+    if (Math.hypot(e.clientX - ckDrag.x, e.clientY - ckDrag.y) > 6) ckDrag.moved = true;
+    if (ckDrag.moved) ckFromPoint(e, false);                     // dragging reaches every minute
+  });
+  const up = e => {
+    if (!ckDrag) return;
+    const d = ckDrag; ckDrag = null;
+    if (ckMode === "h") setTimeout(() => { if (ckTarget) { ckMode = "m"; ckPaint(); } }, 180);   // as the phone does: hour, then minute
+    else if (!d.moved) ckFromPoint(e, true);                      // a plain tap lands on a five
+  };
+  svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", () => { ckDrag = null; });
+  // the AM / PM tags beside the fields
+  ["input", "change"].forEach(ev => document.addEventListener(ev, e => {
+    if (e.target && e.target.matches && e.target.matches('input[type="time"]')) paintClock(e.target);
+  }, true));
+  // fields are re-rendered and filled by code all over the app; rather than
+  // chase every one, repaint whenever the page's contents change
+  let t = 0;
+  const later = () => { if (t) return; t = requestAnimationFrame(() => { t = 0; paintClocks(); }); };
+  if (window.MutationObserver) new MutationObserver(later).observe(document.body, { childList: true, subtree: true });
+  paintClocks();
+}
 /* Minutes between bedtime and waking, allowing for the crossing of midnight. */
 function spanMins(bed, wake) {
   if (!bed || !wake) return null;
@@ -10577,7 +10638,7 @@ function init() {
   buildWheel($("#wSM"), 55, 5, () => pushScreen(false));
   buildWheel($("#wNH"), 5, 1, pushNap);
   buildWheel($("#wNM"), 55, 5, pushNap);
-  initTimeSheet();
+  initClocks();
   bindSliders($("#v-log"));   // delegated, so every slider group is covered
 
   // start on the check-in you're in; anything earlier still open is in the badge
