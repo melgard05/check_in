@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:119-->
+<!DOCTYPE html><!--build:120-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -73,6 +73,11 @@ header{position:sticky;top:0;z-index:40;background:linear-gradient(180deg,#0b0d1
 .planbar{display:none;align-items:center;gap:8px;margin-top:9px;padding:9px 11px;border-radius:8px;
   background:#151d24;border:1px solid #35505f;font-size:13px;line-height:1.45}
 .planbar.on{display:flex}
+.movebar{display:none;align-items:center;gap:8px;margin-top:9px;padding:9px 11px;border-radius:8px;
+  background:#0f2320;border:1px solid var(--accent);font-size:13px;line-height:1.45}
+.movebar.on{display:flex}
+.movebar span{flex:1;color:var(--ink)}
+.movebar .btn{padding:5px 11px;font-size:12.5px}
 .connbar{display:none;align-items:center;gap:8px;margin-top:9px;padding:9px 11px;border-radius:8px;
   background:#2b1f14;border:1px solid var(--warn);font-size:13px;line-height:1.45}
 .connbar.on{display:flex}
@@ -611,6 +616,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
     <div class="spacer"></div>
     <button class="synclight" id="syncLight" title="Sync status"><i class="dot" id="syncDot"></i><span id="syncTxt">local</span></button>
     <div class="badge" id="dueBadge">—</div>
+  </div>
+  <div class="movebar" id="moveBar">
+    <span id="moveTxt">Baseline has moved to a new address. Tap <b>Move now</b> to carry this device across &mdash; your entries,
+      settings and PIN come with you. Then add the new one to your home screen and remove this icon.</span>
+    <button class="btn sm pri" id="moveGo">Move now</button>
+    <button class="btn sm gho" id="moveHide">Later</button>
   </div>
   <div class="connbar" id="connBar">
     <span id="connTxt"></span>
@@ -1403,6 +1414,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       <div class="row" style="margin-top:11px;gap:8px">
         <button class="btn sm" id="mkLink">Copy reconnect link</button>
         <button class="btn sm" id="mkLinkFb">Include Firebase</button>
+        <button class="btn sm" id="moveCopy">Copy move link</button>
       </div>
       <div class="mini" style="margin-top:7px">Bookmark it. If this machine ever loses its browser
         data, opening that bookmark puts everything back in one tap. <b>Treat it like a password</b>
@@ -2168,7 +2180,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 119;
+const BUILD = 120;
 
 const DEFAULT_CFG = {
   windows: [
@@ -9233,6 +9245,40 @@ function syncIdle() {
   setSync(CFG.cloud.push ? "ok" : "warn", CFG.cloud.push ? "synced" : "no push");
 }
 
+/* ---------- the move to a new address ----------
+   Baseline and Task Board used to share one site, so the phone gave them one
+   notification permission between them and kept taking it away. Baseline now
+   lives at HOME, on its own. A copy still served from the old address shows
+   a banner that carries the device across: the data is already in the worker
+   and Firebase, so the trip is a reconnect link, not a copy. */
+const HOME = "https://baseline-kelly.pages.dev/";
+function atHome() { try { return location.hostname === new URL(HOME).hostname; } catch (e) { return true; } }
+function moveLink() {
+  const o = { u: CFG.cloud.url, a: CFG.cloud.account || CFG.cloud.uid };
+  if (CFG.cloud.key) o.k = CFG.cloud.key;
+  if (CFG.fb.url) { o.fu = CFG.fb.url; o.fk = CFG.fb.apiKey; o.fe = CFG.fb.email; }
+  return HOME + "index.html?setup=" + b64urlEnc(JSON.stringify(o));
+}
+async function moveNow() {
+  if (!cloudBase() || !acctId()) {
+    toast("This device isn't connected to the worker, so there's nothing to carry the data across with. Data \u2192 Cloudflare first.", true);
+    return;
+  }
+  const btn = $("#moveGo"); btn.disabled = true; btn.textContent = "Saving\u2026";
+  try { await syncAll(true); } catch (e) {}          // everything here is in the cloud before leaving
+  try { await reportState(); } catch (e) {}
+  // let go of this address's reminders, so the worker doesn't go on trying to
+  // reach a device that is about to be uninstalled
+  if (CFG.cloud.push) { try { await pushDisable(); } catch (e) {} }
+  try { credNote("moved to the new address"); } catch (e) {}
+  btn.textContent = "Opening\u2026";
+  location.href = moveLink();
+}
+function refreshMove() {
+  const bar = $("#moveBar"); if (!bar) return;
+  const show = !atHome() && !dashOn && STATE.moveHidden !== todayISO();
+  bar.classList.toggle("on", show);
+}
 /* ---------- say plainly when the app has quietly gone local ----------
    Losing site data wipes the worker URL and account, after which everything
    still appears to work while nothing syncs and nothing reminds you. */
@@ -10014,7 +10060,8 @@ function setupLink(includeFb) {
   const o = { u: CFG.cloud.url, a: CFG.cloud.account || CFG.cloud.uid };
   if (CFG.cloud.key) o.k = CFG.cloud.key;
   if (includeFb && CFG.fb.url) { o.fu = CFG.fb.url; o.fk = CFG.fb.apiKey; o.fe = CFG.fb.email; }
-  return location.origin + location.pathname + "?setup=" + b64urlEnc(JSON.stringify(o));
+  const base = atHome() ? location.origin + location.pathname : HOME + "index.html";
+  return base + "?setup=" + b64urlEnc(JSON.stringify(o));
 }
 async function applySetup(enc) {
   let o;
@@ -12275,6 +12322,14 @@ function init() {
   try { renderFlags(daily(0)); showFlagBanner(); } catch (e) {}
   refreshConn();
   setInterval(refreshConn, 120000);
+  $("#moveGo").onclick = () => moveNow();
+  $("#moveHide").onclick = async () => { STATE.moveHidden = todayISO(); await saveState(); refreshMove(); };
+  $("#moveCopy").onclick = async () => {
+    if (!cloudBase() || !acctId()) { toast("Connect the worker first", true); return; }
+    try { await navigator.clipboard.writeText(moveLink()); toast("Move link copied \u2014 open it in Chrome on the device you want to move"); }
+    catch (e) { prompt("Move link:", moveLink()); }
+  };
+  refreshMove();
   $("#buildTag").textContent = "b" + BUILD;
   checkBuild();
   syncIdle();
