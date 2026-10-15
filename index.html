@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:120-->
+<!DOCTYPE html><!--build:121-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2180,7 +2180,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 120;
+const BUILD = 121;
 
 const DEFAULT_CFG = {
   windows: [
@@ -9143,6 +9143,10 @@ async function cloudSync(quiet) {
   try {
     const o = await api("/backup?uid=" + encodeURIComponent(acct));
     if (o) {
+      // The snapshot carries the shared settings too. A device that has never
+      // had them (a fresh install, or one that just moved address) takes them
+      // here, before it writes its own blank ones over the top below.
+      if (o.cfg && adoptCfg(o.cfg)) { cfgChanged = true; await saveCfg(); }
       if (Array.isArray(o.entries)) pulled = mergeEntries(o.entries);
       if (o.state) {
         // tombstones first, so a deletion made anywhere wins the merge below
