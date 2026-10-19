@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:121-->
+<!DOCTYPE html><!--build:122-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2180,7 +2180,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 121;
+const BUILD = 122;
 
 const DEFAULT_CFG = {
   windows: [
@@ -4094,7 +4094,9 @@ async function clearNotifs(onlyIds) {
       const ns = await reg.getNotifications();
       ns.forEach(n => {
         if (!n.tag || n.tag.indexOf("baseline") !== 0) return;
-        if (n.tag === "baseline-digest") return;          // that one is informational
+        // The weekly review is informational: it stays up until the app is actually
+        // looked at, then goes, rather than sitting there as a "1" for days.
+        if (n.tag === "baseline-digest" && document.visibilityState !== "visible") return;
         if (onlyIds && n.data && n.data.win && onlyIds.indexOf(n.data.win) < 0) return;
         n.close();
       });
