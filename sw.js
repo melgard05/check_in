@@ -3,6 +3,11 @@
 const CACHE = "baseline-v7";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
+/* The small status-bar icon. Android paints every solid pixel white, so it has
+   to be a white shape on a transparent background or it shows as a white
+   square. Inline, so there is no image file to keep in step. */
+const BADGE = "data:image/png;base64,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";
+
 /* Written in by the app on subscribe and on every open: the worker URL, this
    device's id, and the whole registration record (account, key, schedule), so a
    re-subscribe made from here is as complete as one made by the app. */
@@ -85,7 +90,7 @@ self.addEventListener("push", e => {
       return self.registration.showNotification("Check-in reminder", {
         body: "A check-in is probably open. Open Baseline to see which \u2014 the reminder helper lost its settings and opening the app puts them back.",
         tag: "baseline-checkin", renotify: true, requireInteraction: true,
-        icon: "./icon-192.png", badge: "./icon-badge.png", data: { count: 1, due: [], nocfg: true },
+        icon: "./icon-192.png", badge: BADGE, data: { count: 1, due: [], nocfg: true },
         actions: [{ action: "log", title: "Open" }]
       });
     }
@@ -108,7 +113,7 @@ self.addEventListener("push", e => {
       return self.registration.showNotification("Push is working", {
         body: count ? count + " check-in" + (count > 1 ? "s" : "") + " open right now."
                     : "Test notification. Nothing is due at the moment.",
-        tag: "baseline-test", renotify: true, icon: "./icon-192.png", badge: "./icon-badge.png",
+        tag: "baseline-test", renotify: true, icon: "./icon-192.png", badge: BADGE,
         data: { test: true }
       });
     }
@@ -117,7 +122,7 @@ self.addEventListener("push", e => {
       return self.registration.showNotification("Your week in review", {
         body: "Seven days of check-ins are summarised in Patterns.",
         tag: "baseline-digest", renotify: false, requireInteraction: false,
-        icon: "./icon-192.png", badge: "./icon-badge.png", data: { digest: true }
+        icon: "./icon-192.png", badge: BADGE, data: { digest: true }
       });
     }
 
@@ -135,7 +140,7 @@ self.addEventListener("push", e => {
       await self.registration.showNotification("All caught up", {
         body: "That check-in was logged on another device.",
         tag: "baseline-checkin", renotify: false, requireInteraction: false,
-        silent: true, icon: "./icon-192.png", badge: "./icon-badge.png",
+        silent: true, icon: "./icon-192.png", badge: BADGE,
         data: { transient: true }
       });
       await new Promise(r => setTimeout(r, 4000));
@@ -160,7 +165,7 @@ self.addEventListener("push", e => {
       renotify: true,              // but re-alert each time it's re-sent
       requireInteraction: true,    // desktop: stays until touched
       silent: false,
-      badge: "./icon-badge.png",
+      badge: BADGE,
       icon: "./icon-192.png",
       data: { count, due, at: Date.now() },
       actions: [
