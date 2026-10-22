@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:122-->
+<!DOCTYPE html><!--build:123-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2180,7 +2180,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 122;
+const BUILD = 123;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3331,7 +3331,16 @@ function openClock(input) {
   ckTarget = input;
   const v = /^(\d{1,2}):(\d{2})/.exec(input.value || "");
   const now = new Date();
-  const H = v ? +v[1] : now.getHours(), M = v ? +v[2] : now.getMinutes();
+  let H = v ? +v[1] : now.getHours(), M = v ? +v[2] : now.getMinutes();
+  // An empty bedtime is filled in the morning, about the night before, so the
+  // current time (AM) is the wrong place to start. Open on PM instead, at the
+  // most recent evening bedtime logged, or 10:00 PM if there isn't one.
+  if (!v && input.id === "sBed") {
+    const last = ENTRIES.filter(e => e.sleep && /^(1[2-9]|2[0-3]):\d{2}/.test(e.sleep.bed || ""))
+      .sort((a, b) => a.date < b.date ? -1 : 1).pop();
+    const p = last ? last.sleep.bed.split(":") : ["22", "00"];
+    H = +p[0]; M = +p[1];
+  }
   ckH = H % 12 || 12; ckM = M; ckAP = H >= 12 ? "PM" : "AM"; ckMode = "h";
   const lbl = input.closest("label.fld"), sp = lbl && lbl.querySelector(":scope > span");
   const name = sp ? sp.textContent.replace(/\s*(AM|PM)\s*[\u2600\u263E]?\s*$/, "").trim() : "";
