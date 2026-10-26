@@ -95,17 +95,39 @@ self.addEventListener("push", e => {
       });
     }
 
-    if (cfg.worker && cfg.uid) {
+    // Ask the worker what's open. On a patchy connection the push can arrive
+    // while this request fails, and treating that as "nothing open" used to
+    // flash "All caught up" and delete the reminder. So try three times, and
+    // if the worker still can't be reached, say a check-in may be open rather
+    // than saying nothing is.
+    let reached = false;
+    for (let attempt = 0; attempt < 3 && !reached; attempt++) {
+      if (attempt) await new Promise(r => setTimeout(r, 3000 * attempt));
       try {
         const r = await fetch(cfg.worker.replace(/\/+$/, "") + "/due?uid=" + encodeURIComponent(cfg.uid),
           { cache: "no-store" });
         if (r.ok) { const j = await r.json(); due = j.due || []; count = j.count || 0;
-          isTest = !!j.test; isDigest = !!j.digest; }
+          isTest = !!j.test; isDigest = !!j.digest; reached = true; }
       } catch (err) {}
     }
     // if a payload did come through, prefer it
     if (!count && e.data) {
-      try { const j = e.data.json(); due = j.due || []; count = j.count || due.length; } catch (err) {}
+      try { const j = e.data.json(); due = j.due || []; count = j.count || due.length; reached = true; } catch (err) {}
+    }
+
+    if (!reached) {
+      // A reminder already on screen is left exactly as it is.
+      try {
+        const up = await self.registration.getNotifications({ tag: "baseline-checkin" });
+        if (up.some(n => !(n.data && n.data.transient))) return;
+      } catch (err) {}
+      try { if (self.navigator && navigator.setAppBadge) await navigator.setAppBadge(1); } catch (err) {}
+      return self.registration.showNotification("Check-in reminder", {
+        body: "A check-in may be open. The connection dropped before Baseline could check which \u2014 open it to see.",
+        tag: "baseline-checkin", renotify: true, requireInteraction: true,
+        icon: "./icon-192.png", badge: BADGE, data: { count: 1, due: [], offline: true },
+        actions: [{ action: "log", title: "Open" }]
+      });
     }
 
     if (isTest) {
