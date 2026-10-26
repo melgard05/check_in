@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:124-->
+<!DOCTYPE html><!--build:125-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2180,7 +2180,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 124;
+const BUILD = 125;
 
 const DEFAULT_CFG = {
   windows: [
@@ -9336,11 +9336,11 @@ function connState() {
     msg: "Your worker is refusing this device \u2014 the access key is missing or wrong, so nothing " +
          "is syncing. Everything logged here is safe. Data \u2192 Cloudflare to paste it back." };
   if (cronGap > CRON_STALE) return { level: "cron",
-    msg: "Reminders have stopped on every device \u2014 Cloudflare hasn\u2019t run your worker\u2019s schedule " +
+    msg: "Reminders have stopped on every device \u2014 Cloudflare hasn\u2019t run the reminder timer " +
          "since " + new Date(cronLastRun).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) +
          " (" + agoText(cronGap) + " ago). Nothing is wrong with this device or your entries. " +
-         "Fix it opens Cloudflare: Settings \u2192 Trigger events, delete the cron, Save, then add " +
-         "\u201cevery 5 minutes\u201d back and Save." };
+         "Fix it opens the baseline-timer worker in Cloudflare: Settings \u2192 Trigger events, " +
+         "delete the cron, Save, then add \u201cevery 5 minutes\u201d back and Save." };
   if (!("Notification" in window)) return { level: "ok" };
   if (Notification.permission === "denied") return { level: "perm",
     msg: "Notifications are blocked for this site, so reminders can't reach you here." };
@@ -12028,7 +12028,8 @@ function init() {
   $("#connGo").onclick = async () => {
     const st = connState();
     if (st.level === "cron") {
-      const name = (cloudBase().match(/^https?:\/\/([^.\/]+)\./) || [])[1] || "baseline-push";
+      // the schedule lives on its own small worker since baseline-push's stopped (Oct 2026)
+      const name = "baseline-timer";
       window.open("https://dash.cloudflare.com/?to=/:account/workers/services/view/" +
         encodeURIComponent(name) + "/production/settings", "_blank", "noopener");
       return;
