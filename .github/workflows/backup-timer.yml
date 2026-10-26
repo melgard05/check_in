@@ -6,7 +6,7 @@
 name: Baseline backup timer
 on:
   schedule:
-    - cron: "3-58/5 * * * *"
+    - cron: "2-57/5 * * * *"
   workflow_dispatch:
 jobs:
   tick:
