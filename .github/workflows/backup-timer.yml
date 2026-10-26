@@ -1,0 +1,19 @@
+# Backup timer for Baseline reminders.
+# Cloudflare's own schedule for the baseline-push worker stopped on Oct 23 2026
+# and didn't come back on its own. This asks the worker to do its 5-minute
+# check from outside Cloudflare as well. The worker keeps its own spacing, so a
+# run here never sends a reminder twice. No secrets are needed or stored.
+name: Baseline backup timer
+on:
+  schedule:
+    - cron: "3-58/5 * * * *"
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ask the worker to check what's due
+        # Never marks the run failed, so GitHub doesn't email about a blip.
+        # The app's banner is what reports a real stop.
+        run: curl -sS -m 60 -X POST https://baseline-push.melgard05.workers.dev/tick || true
