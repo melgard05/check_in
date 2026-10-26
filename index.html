@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:123-->
+<!DOCTYPE html><!--build:124-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2180,7 +2180,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 123;
+const BUILD = 124;
 
 const DEFAULT_CFG = {
   windows: [
@@ -9297,6 +9297,33 @@ function refreshMove() {
 /* ---------- say plainly when the app has quietly gone local ----------
    Losing site data wipes the worker URL and account, after which everything
    still appears to work while nothing syncs and nothing reminds you. */
+/* The worker's own schedule is what sends every reminder, to every device. If
+   Cloudflare stops running it (it did, for a weekend in October 2026, with no
+   error anywhere) the only symptom is silence. The worker notes each run;
+   this asks for that note every 10 minutes or so and says so when it's stale. */
+const CRON_STALE = 45 * 60000;
+let cronGap = 0, cronLastRun = 0, cronAsked = 0, cronBusy = false;
+async function checkCron(force) {
+  if (cronBusy || !cloudBase() || dashOn) return;
+  if (!force && Date.now() - cronAsked < 10 * 60000) return;
+  cronBusy = true; cronAsked = Date.now();
+  try {
+    const h = await api("/health");
+    if (h && h.lastTick > 0) {
+      cronLastRun = h.lastTick;
+      // measured on the worker's clock, so a phone clock that's off can't fake it
+      cronGap = Math.max(0, (h.now > 0 ? h.now : Date.now()) - h.lastTick);
+    } else { cronGap = 0; cronLastRun = 0; }          // older worker: nothing to judge by
+  } catch (e) { /* offline is a different problem, and says so elsewhere */ }
+  cronBusy = false;
+  refreshConn();
+}
+function agoText(ms) {
+  const m = Math.round(ms / 60000);
+  if (m < 90) return m + " minutes";
+  const h = Math.round(m / 60);
+  return h < 48 ? h + " hours" : Math.round(h / 24) + " days";
+}
 function connState() {
   if (!cloudBase() || !acctId()) return { level: "setup",
     msg: "Not connected to your worker. Check-ins are saving on this device only \u2014 " +
@@ -9308,6 +9335,12 @@ function connState() {
   if (authFail && Date.now() - authFail < 6 * 3600000) return { level: "key",
     msg: "Your worker is refusing this device \u2014 the access key is missing or wrong, so nothing " +
          "is syncing. Everything logged here is safe. Data \u2192 Cloudflare to paste it back." };
+  if (cronGap > CRON_STALE) return { level: "cron",
+    msg: "Reminders have stopped on every device \u2014 Cloudflare hasn\u2019t run your worker\u2019s schedule " +
+         "since " + new Date(cronLastRun).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) +
+         " (" + agoText(cronGap) + " ago). Nothing is wrong with this device or your entries. " +
+         "Fix it opens Cloudflare: Settings \u2192 Trigger events, delete the cron, Save, then add " +
+         "\u201cevery 5 minutes\u201d back and Save." };
   if (!("Notification" in window)) return { level: "ok" };
   if (Notification.permission === "denied") return { level: "perm",
     msg: "Notifications are blocked for this site, so reminders can't reach you here." };
@@ -9332,6 +9365,7 @@ function renderCredLog() {
 function refreshConn() {
   const bar = $("#connBar"); if (!bar) return;
   if (dashOn) { bar.classList.remove("on"); return; }   // read-only view stays clean
+  checkCron(false);
   const st = connState();
   if (st.level === "ok" || STATE.connHidden === todayISO()) { bar.classList.remove("on"); return; }
   $("#connTxt").textContent = st.msg;
@@ -11993,6 +12027,12 @@ function init() {
   };
   $("#connGo").onclick = async () => {
     const st = connState();
+    if (st.level === "cron") {
+      const name = (cloudBase().match(/^https?:\/\/([^.\/]+)\./) || [])[1] || "baseline-push";
+      window.open("https://dash.cloudflare.com/?to=/:account/workers/services/view/" +
+        encodeURIComponent(name) + "/production/settings", "_blank", "noopener");
+      return;
+    }
     if (st.level === "push" && CFG.cloud.pushWas && Notification.permission !== "denied") {
       $("#connGo").disabled = true;
       const ok = await pushRepair().catch(() => false);
@@ -12324,6 +12364,7 @@ function init() {
 
   document.addEventListener("visibilitychange", async () => {
     if (document.hidden) return;
+    checkCron(Date.now() - cronAsked > 2 * 60000);
     const changed = await pullDue();
     refreshDue(); checkForNewBuild();
     await syncAll(true);        // pull entries first
