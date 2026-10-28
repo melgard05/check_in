@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:126-->
+<!DOCTYPE html><!--build:127-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -581,6 +581,16 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
   opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;box-shadow:0 6px 20px rgba(0,0,0,.5)}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.warn{background:var(--warn)}
+/* the day's saying: shown after every saved check-in, stays until tapped */
+.saycard{position:fixed;left:50%;bottom:150px;transform:translateX(-50%) translateY(12px);z-index:79;
+  width:min(440px,calc(100% - 32px));box-sizing:border-box;display:flex;gap:10px;align-items:flex-start;
+  background:var(--panel-2);border:1px solid var(--line-2);border-left:3px solid var(--accent);border-radius:10px;
+  padding:12px 12px 12px 14px;box-shadow:0 10px 28px rgba(0,0,0,.55);
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;cursor:pointer}
+.saycard.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+.saycard .k{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.saycard .t{color:var(--ink);font-size:15px;line-height:1.45}
+.saycard button{flex:none;background:none;border:0;color:var(--ink-3);font-size:20px;line-height:1;padding:0 2px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 /* ---------- dashboard: read-only, wide, self-refreshing ---------- */
@@ -2012,6 +2022,10 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="saycard" id="sayCard" role="status" aria-live="polite">
+  <div style="flex:1"><div class="k">For today</div><div class="t" id="sayTxt"></div></div>
+  <button id="sayX" aria-label="Close">&times;</button>
+</div>
 
 <script>
 "use strict";
@@ -2180,7 +2194,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 126;
+const BUILD = 127;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2370,6 +2384,34 @@ function toast(msg, warn) {
   const t = $("#toast"); t.textContent = msg; t.className = "toast on" + (warn ? " warn" : "");
   clearTimeout(t._h); t._h = setTimeout(() => { t.className = "toast" + (warn ? " warn" : ""); }, 2200);
 }
+/* ---------- the day's saying ----------
+   One a day, picked by the local date, so every check-in that day shows the
+   same one and tomorrow brings the next. Shown after each saved check-in. */
+const SAYINGS = [
+  "Be who you are and stand on it. You don't need to know what people think, and you don't have to guess. Your job is to show up as yourself.",
+  "Don't read minds. Live your own.",
+  "Their opinion isn't my business. My character is.",
+  "Stop guessing what they think. Start owning what I know.",
+  "I don't need permission to be myself.",
+  "I can't control the story in their head. I can control how I show up.",
+  "Being myself isn't a risk. Pretending is.",
+  "If I'm guessing what they think, I'm guessing wrong. Back to what I know.",
+  "Steady, honest, and myself. That's enough for today.",
+  "I stand by who I am, even when nobody's clapping."
+];
+function getDailySaying(date) {
+  date = date || new Date();
+  const dayNumber = Math.floor((date.getTime() - date.getTimezoneOffset() * 60000) / 86400000);
+  return SAYINGS[((dayNumber % SAYINGS.length) + SAYINGS.length) % SAYINGS.length];
+}
+function showSaying() {
+  const c = $("#sayCard"); if (!c || dashOn) return;
+  $("#sayTxt").textContent = getDailySaying();
+  c.classList.add("on");
+  clearTimeout(c._h);
+  c._h = setTimeout(() => c.classList.remove("on"), 25000);   // long enough to read twice
+}
+function hideSaying() { const c = $("#sayCard"); if (c) { clearTimeout(c._h); c.classList.remove("on"); } }
 function winById(id) { return CFG.windows.find(w => w.id === id) || CFG.windows[0]; }
 function sortWindows() {
   CFG.windows.sort((a, b) => minsOf(a.time) - minsOf(b.time));
@@ -10728,6 +10770,7 @@ function commit(skip, reason) {
     STATE.dirty = STATE.dirty || {}; STATE.dirty[draft.date + "_" + draft.win] = 1;
     saveEnt(); saveState();
     toast("Saved");
+    showSaying();
   }
   gateKey = null;
   gateWin = null;
@@ -11417,6 +11460,7 @@ function init() {
   });
 
   $("#saveBtn").onclick = () => commit(false);
+  $("#sayCard").onclick = hideSaying;          // tap anywhere on it, or the ×, to put it away
   $("#skipBtn").onclick = () => { const r = prompt("Skip this check-in. Why? (optional — asleep, at work, forgot)");
     if (r === null) return; commit(true, r.trim()); };
 
