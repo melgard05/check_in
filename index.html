@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:125-->
+<!DOCTYPE html><!--build:126-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2180,7 +2180,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 125;
+const BUILD = 126;
 
 const DEFAULT_CFG = {
   windows: [
@@ -3946,7 +3946,9 @@ function renderLog() {
 
   // meds — only the ones she was actually on that day, so a check-in from before
   // a medication started doesn't offer a tick that can never be right
-  const list = (CFG.medList || []).filter(m => medOn(m, draft.date));
+  // a row added in Settings but never named is not a dose: showing it gave a
+  // blank chip that "Tick all" (rightly) skipped, so it could never say all ticked
+  const list = (CFG.medList || []).filter(m => (m.name || "").trim() && medOn(m, draft.date));
   $("#medBlock").style.display = list.length ? "" : "none";   // always ask: it confounds everything else
   if (list.length) {
     const isLast = draft.win === lastWinId();
