@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:128-->
+<!DOCTYPE html><!--build:129-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -590,6 +590,13 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 .saycard.on{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
 .saycard .k{font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
 .saycard .t{color:#fff;font-size:20px;line-height:1.5;font-weight:500}
+.sayrow{display:flex;gap:12px;align-items:baseline;padding:10px 12px;border-radius:9px;margin:0 0 6px;
+  border:1px solid var(--line);color:var(--ink-2);font-size:15px;line-height:1.45}
+.sayrow .n{flex:none;width:18px;color:var(--ink-3);font-variant-numeric:tabular-nums;font-size:12.5px}
+.sayrow .tx{flex:1}
+.sayrow .tag{flex:none;font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.sayrow.today{background:#1f2b2a;border:2px solid var(--accent);border-left-width:6px;color:#fff;font-weight:500;font-size:16.5px}
+.sayrow.today .tag{color:var(--accent)}
 .saycard button{flex:none;background:none;border:0;color:#cfd8e1;font-size:28px;line-height:1;padding:0 4px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
@@ -1042,6 +1049,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
   <!-- ============ PATTERNS ============ -->
   <section class="view" id="v-pat">
+    <div class="card" id="sayListCard">
+      <h2>Your sayings</h2>
+      <p class="sub">One a day, in this order, then round again. Today&rsquo;s is the one that pops up
+        after each check-in.</p>
+      <div id="sayList"></div>
+    </div>
     <div class="card" id="plainCard">
       <h2>In plain terms</h2>
       <p class="sub">The short version. Everything below is the working out.</p>
@@ -2194,7 +2207,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 128;
+const BUILD = 129;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2410,6 +2423,18 @@ function showSaying() {
   c.classList.add("on");
   clearTimeout(c._h);
   c._h = setTimeout(() => c.classList.remove("on"), 25000);   // long enough to read twice
+}
+/* all ten on Patterns, today's marked, so the one from yesterday can be found again */
+function renderSayList() {
+  const el = $("#sayList"); if (!el) return;
+  const now = new Date(), today = getDailySaying(now);
+  const tmw = getDailySaying(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12));
+  el.innerHTML = SAYINGS.map((t, i) => {
+    const isT = t === today, isN = t === tmw;
+    return '<div class="sayrow' + (isT ? " today" : "") + '"><span class="n">' + (i + 1) + "</span>" +
+      '<span class="tx">' + esc(t) + "</span>" +
+      (isT ? '<span class="tag">Today</span>' : isN ? '<span class="tag">Tomorrow</span>' : "") + "</div>";
+  }).join("");
 }
 function hideSaying() { const c = $("#sayCard"); if (c) { clearTimeout(c._h); c.classList.remove("on"); } }
 function winById(id) { return CFG.windows.find(w => w.id === id) || CFG.windows[0]; }
@@ -5547,7 +5572,7 @@ function reportHTML(full) {
   const root = src.cloneNode(true);
   // the full report is normally behind a button; the email always carries it
   const deep = root.querySelector("#deepWrap"); if (deep) deep.style.display = "";
-  root.querySelectorAll("#deepTog, #deepHint, #sumOpen, #jrnCard, .chartcard, svg, canvas, button, select, input, textarea, label, nav")
+  root.querySelectorAll("#deepTog, #deepHint, #sumOpen, #jrnCard, #sayListCard, .chartcard, svg, canvas, button, select, input, textarea, label, nav")
     .forEach(n => n.remove());
   // anything the page itself is hiding right now stays hidden
   root.querySelectorAll("[style*='display:none'], [style*='display: none']").forEach(n => n.remove());
@@ -6358,6 +6383,7 @@ function renderSummary(rows, corr, cut) {
 }
 
 function renderPatterns() {
+  try { renderSayList(); } catch (e) {}
   renderMissed();
   renderStroke();
   renderCalls();
