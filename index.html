@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:131-->
+<!DOCTYPE html><!--build:132-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -645,6 +645,11 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 .amctl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
 .amctl .chip{padding:4px 10px;font-size:12px}
 .amctl input{width:72px;padding:4px 8px}
+#amberPop .amh,#amberPop .amwins .k,#amberSheet .amh{color:#8fb8d6}
+#amberPop .gatebox{max-width:460px;border-color:#2c3d4a;max-height:88vh;overflow-y:auto}
+.amppl{font-size:14.5px;line-height:1.45;padding:7px 0;border-top:1px solid var(--line)}
+.amppl .amsub{font-size:12px}
+.ampev{background:#14202a;border:1px solid #2c3d4a;border-radius:10px;padding:9px 11px;font-size:14.5px;line-height:1.45;margin-bottom:6px}
 #amberSheet .gatebox{max-width:520px;border-color:#2c3d4a;max-height:88vh;overflow-y:auto}
 </style>
 </head>
@@ -2023,6 +2028,19 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   </div>
 </div>
 
+<div class="gate" id="amberPop">
+  <div class="gatebox">
+    <div class="k" style="color:#8fb8d6" id="amberPopK">this week with amber</div>
+    <h3 style="margin-bottom:6px">Amber&rsquo;s plan</h3>
+    <div class="mini" style="margin:0 0 10px" id="amberPopWhen"></div>
+    <div id="amberPopBody"></div>
+    <div class="row" style="margin-top:16px;gap:8px">
+      <button class="btn pri" style="flex:2 1 160px" id="amberPopGo">Got it</button>
+      <button class="btn gho" style="flex:1 1 120px" id="amberPopCard">Tonight&rsquo;s card</button>
+    </div>
+  </div>
+</div>
+
 <div class="gate" id="amberSheet">
   <div class="gatebox">
     <div class="k" style="color:#8fb8d6">rehab</div>
@@ -2255,7 +2273,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 131;
+const BUILD = 132;
 
 const DEFAULT_CFG = {
   windows: [
@@ -7078,7 +7096,11 @@ function paintDayTone() {
 function showFlagBanner() {
   const bar = $("#flagBar"); if (!bar || dashOn) return;
   paintDayTone();
-  const due = latestFlags.filter(flagDue);
+  // The banner used to carry every pattern finding; Amber's plan took its place
+  // as the thing that greets you. Only the serious ones — mood running high, or
+  // low mood with high irritability — still get the top of the screen. The rest
+  // are on the Patterns tab, unchanged.
+  const due = latestFlags.filter(flagDue).filter(f => f[0] === "hi" || CFG.flagBarAll);
   if (!due.length) { bar.classList.remove("on"); return; }
   // Serious ones first, but not the same one every time. Each appearance today
   // starts one further down the list, so four check-ins surface four different
@@ -10141,6 +10163,48 @@ function amberSetAnswer(id, val) {
 }
 const amberTouched = d => !!(d && d.amber && d.amber.r && Object.keys(d.amber.r).length);
 
+/* ---------- the pop-up on opening ----------
+   Took the place of the pattern banner at the top: her plan, once per check-in,
+   when the app is opened. The evening card is still where it gets answered. */
+function showAmberPop(force) {
+  const sh = $("#amberPop"); if (!sh || dashOn) return;
+  if (lockMode || document.documentElement.classList.contains("locked")) return;
+  const today = todayISO();
+  const w = amberWeekFor(today);
+  if (!w || amberAge(w, today) > 13) return;
+  const win = (draft && draft.date === today) ? draft.win : bestWindow(today);
+  const key = today + "|" + win;
+  STATE.amberPopSeen = STATE.amberPopSeen || {};
+  if (!force && STATE.amberPopSeen[key]) return;
+  if (!force && $$(".gate.on").length) return;           // the due prompt or the wins sheet first
+  const age = amberAge(w, today);
+  $("#amberPopWhen").textContent = "From your session on " + fmtDate(w.date) +
+    (age === 0 ? " (today)" : age === 1 ? " (yesterday)" : " (" + age + " days ago)");
+  const every = w.plan.filter(x => x.every);
+  const rest = w.plan.filter(x => !x.every);
+  const counts = w.cont.filter(x => x.kind === "count");
+  const r = draft && draft.amber && draft.amber.w === w.id ? (draft.amber.r || {}) : {};
+  let h = every.map(x => '<div class="ampev">' + esc(x.text) +
+    (x.sub.length ? '<div class="amsub">' + x.sub.map(esc).join("<br>") + "</div>" : "") +
+    '<div class="amsub" style="margin-top:5px">Read it out loud if you\u2019re on your own.</div></div>').join("");
+  if (rest.length) h += '<div class="k amh" style="margin-top:10px">This week</div>' + rest.map(x =>
+    '<div class="amppl">' + esc(x.text) +
+    (x.sub.length ? '<div class="amsub">' + x.sub.map(esc).join("<br>") + "</div>" : "") + "</div>").join("");
+  if (counts.length) h += '<div class="k amh">Every day</div>' + counts.map(x =>
+    '<div class="amppl">' + esc(amberShort(x.text)) +
+    '<div class="amsub">goal ' + esc(amberGoalText(x)) + "</div></div>").join("");
+  if (w.wins.length) h += '<div class="amwins" style="margin-top:12px"><div class="k">Wins she noted</div>' +
+    w.wins.map(x => "<div>\u2605 " + esc(x) + "</div>").join("") + "</div>";
+  $("#amberPopBody").innerHTML = h;
+  $("#amberPopCard").style.display = win === lastWinId() ? "" : "none";
+  STATE.amberPopSeen[key] = Date.now();
+  const ks = Object.keys(STATE.amberPopSeen);
+  if (ks.length > 120) ks.sort().slice(0, ks.length - 120).forEach(k2 => delete STATE.amberPopSeen[k2]);
+  saveState();
+  sh.classList.add("on");
+}
+const amberPopSoon = ms => setTimeout(() => { try { showAmberPop(); } catch (e) {} }, ms || 300);
+
 /* ---------- the Wednesday import ----------
    A scheduled task finds her email and leaves the text with the Worker. This
    picks it up, runs the same parser as the paste box, and adds any session it
@@ -10280,6 +10344,13 @@ function amberBind() {
     }
   });
   $("#amberParse").onclick = amberDoParse;
+  $("#amberPopGo").onclick = () => $("#amberPop").classList.remove("on");
+  $("#amberPopCard").onclick = () => {
+    $("#amberPop").classList.remove("on");
+    const b = $("#amberBlock");
+    if (b && b.scrollIntoView) setTimeout(() => b.scrollIntoView({ block: "start", behavior: "smooth" }), 60);
+  };
+  $("#amberPop").addEventListener("click", e => { if (e.target.id === "amberPop") $("#amberPop").classList.remove("on"); });
   $("#amberSave").onclick = amberSave;
   $("#amberDel").onclick = amberDelete;
   $("#amberCancel").onclick = amberClose;
@@ -10441,6 +10512,7 @@ function lockOpen(mode, then) {        // unlock | verify | set1 | set2
 function lockClose() {
   lockMode = null; lockBuf = ""; lockThen = null;
   $("#lockScreen").classList.remove("on"); document.documentElement.classList.remove("locked");
+  try { amberPopSoon(300); } catch (e) {}
 }
 function lockWant() { return lockMode === "unlock" || lockMode === "verify" ? ((CFG.pin && CFG.pin.len) || 4) : 0; }
 function lockPaint() {
@@ -11349,6 +11421,7 @@ function init() {
     if (document.visibilityState !== "visible") { hiddenAt = Date.now(); return; }
     if (hiddenAt && Date.now() - hiddenAt > 10 * 60000) rollDraft(true);
     hiddenAt = 0;
+    amberPopSoon(500);
   });
   scheduleNotifs();
   // whatever was being written when the tab was last closed
@@ -11462,7 +11535,7 @@ function init() {
   $("#readMore").onclick = () => { readBump++; renderRead(); };
   $("#strokeWarnOk").onclick = () => { STATE.strokeWarnOk = Date.now(); saveState();
     $("#strokeWarn").style.display = "none"; };
-  $("#readSheetGo").onclick = () => { $("#readSheet").classList.remove("on"); };
+  $("#readSheetGo").onclick = () => { $("#readSheet").classList.remove("on"); amberPopSoon(250); };
   $("#readSheetMore").onclick = () => { readBump++; showReadSheet(true); renderRead(); };
   $("#winNone").onclick = () => {
     // Not a skip. Turning it on stores an explicit "there wasn't one", which is
@@ -11977,6 +12050,7 @@ function init() {
       toast("That one is already saved — check the date and check-in above", true);
     // the due prompt was in the way when setDraft tried; now it isn't
     setTimeout(() => { try { showReadSheet(); } catch (e) {} }, 140);
+    amberPopSoon(400);
   };
   $("#gateSkip").onclick = () => { const due = dueWindows(todayISO());
     if (!due.length) { $("#gate").classList.remove("on"); return; }
@@ -12922,6 +12996,7 @@ function init() {
   setInterval(refreshDue, 60000);
   maybeOfferPlan();
   try { renderFlags(daily(0)); showFlagBanner(); } catch (e) {}
+  amberPopSoon(600);                          // Amber's plan, once per check-in, on opening
   refreshConn();
   setInterval(refreshConn, 120000);
   $("#moveGo").onclick = () => moveNow();
