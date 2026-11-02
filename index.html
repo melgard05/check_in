@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:129-->
+<!DOCTYPE html><!--build:130-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -623,6 +623,29 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 .chtools button{background:none;border:1px solid var(--line-2);border-radius:6px;padding:4px 9px;
   font-family:var(--mono);font-size:10.5px;color:var(--ink-3);cursor:pointer;letter-spacing:.08em}
 .chtools button:hover{color:var(--ink);border-color:var(--ink-3)}
+/* Amber's weekly plan */
+.amcard{border-color:#2c3d4a}
+.amcard .k,.amh{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#8fb8d6}
+.amh{margin:14px 0 6px}
+.amnow .amline{font-size:14.5px;line-height:1.45;margin-top:6px}
+.amrow{display:flex;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.amrow.col{flex-direction:column;align-items:stretch}
+.amtx{flex:1;font-size:14px;line-height:1.4}
+.amsub{font-size:12px;color:var(--ink-3);margin-top:3px;line-height:1.35}
+.amgoal{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+.amgoal.met{color:var(--accent)} .amgoal.over{color:var(--warn)}
+.amcnt{display:flex;align-items:center;gap:8px}
+.amcnt b{min-width:26px;text-align:center;font-size:17px}
+.amcnt .btn{min-width:38px}
+.amseg{margin-top:7px}
+.amwins{background:#14191f;border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:13px;line-height:1.5;color:var(--ink-2)}
+.amwins .k{margin-bottom:4px}
+.amstale{font-size:12.5px;color:var(--warn);margin-bottom:10px}
+.amprow{padding:8px 0;border-top:1px solid var(--line)}
+.amctl{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center}
+.amctl .chip{padding:4px 10px;font-size:12px}
+.amctl input{width:72px;padding:4px 8px}
+#amberSheet .gatebox{max-width:520px;border-color:#2c3d4a;max-height:88vh;overflow-y:auto}
 </style>
 </head>
 <body>
@@ -702,6 +725,7 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
       <div class="mini" id="eStatus" style="margin-top:11px"></div>
     </div>
+    <div id="amberNow" style="display:none"></div>
 
     <div id="sleepBlock" style="display:none">
       <div class="eyebrow">Sleep</div>
@@ -952,6 +976,11 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
         </div>
         <div class="mini" id="readNote"></div>
       </div>
+    </div>
+
+    <div id="amberBlock" style="display:none">
+      <div class="eyebrow">This week with Amber</div>
+      <div class="card amcard" id="amberBody"></div>
     </div>
 
     <div id="winBlock" style="display:none">
@@ -1994,6 +2023,25 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
   </div>
 </div>
 
+<div class="gate" id="amberSheet">
+  <div class="gatebox">
+    <div class="k" style="color:#8fb8d6">rehab</div>
+    <h3 style="margin-bottom:8px">Amber&rsquo;s session notes</h3>
+    <p class="sub">Copy the whole email and paste it here. Her Plan or Homework, Continue and
+      Success sections are pulled out; the signature and the rest are ignored. Nothing is sent anywhere.</p>
+    <textarea id="amberIn" rows="5" placeholder="Paste the email text"></textarea>
+    <div class="row" style="margin-top:9px;gap:8px">
+      <button class="btn sm pri" id="amberParse">Read it</button>
+    </div>
+    <div id="amberPrev"></div>
+    <div class="row" style="margin-top:14px;gap:8px">
+      <button class="btn pri" style="flex:2 1 150px;display:none" id="amberSave">Use this plan</button>
+      <button class="btn gho" style="flex:1 1 100px" id="amberCancel">Close</button>
+    </div>
+    <button class="btn sm gho" id="amberDel" style="display:none;margin-top:10px">Remove these notes</button>
+  </div>
+</div>
+
 <div class="gate" id="spikeSheet">
   <div class="gatebox" style="border-color:var(--warn);max-width:440px">
     <div class="k">spike</div>
@@ -2207,7 +2255,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 129;
+const BUILD = 130;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2644,6 +2692,7 @@ async function load() {
   if (!Array.isArray(STATE.spikes)) STATE.spikes = [];
   if (!Array.isArray(STATE.stars)) STATE.stars = [];
   if (!Array.isArray(STATE.journal)) STATE.journal = [];
+  amberWeeks();                                 // Amber's weekly plans
   // ids of things deliberately removed, so a sync can't resurrect them
   if (!STATE.gone || typeof STATE.gone !== "object") STATE.gone = {};
   if (!Array.isArray(STATE.flagLog)) STATE.flagLog = [];      // what was raised, and when
@@ -4075,6 +4124,7 @@ function renderLog() {
   renderAllNote();
   renderRead();
   renderWin();
+  try { renderAmber(); } catch (e) { console.error(e); }
   renderSug();
   renderSpikeCount();
   renderStarCount();
@@ -9109,6 +9159,7 @@ function mergeOne(newer, older) {
   if ((!out.medoff || !out.medoff.st) && older.medoff && older.medoff.st) out.medoff = older.medoff;
   if ((!out.nap || !out.nap.on) && older.nap && older.nap.on) out.nap = older.nap;
   if (!out.period && older.period) out.period = true;
+  if (!amberTouched(out) && amberTouched(older)) out.amber = older.amber;
   return out;
 }
 
@@ -9241,6 +9292,7 @@ async function cloudSync(quiet) {
         mergeSpikes(o.state.spikes);
         mergeStars(o.state.stars);
         mergeJournal(o.state.journal);
+        mergeAmber(o.state.amber && o.state.amber.weeks);
         renderSug(); renderSpikeCount(); renderStarCount(); renderJournal();
       }
       // a real entry always beats a skip for the same slot
@@ -9816,6 +9868,388 @@ function renderWin() {
       : wk
         ? wk + " logged in the last seven days."
         : "Tag what it took, if anything fits. That\u2019s what turns a list of wins into a list of strengths.";
+}
+
+/* ============================================================
+   AMBER — the weekly plan from rehab, worked into the check-ins
+   Her session notes arrive by email once a week and then sit in the inbox.
+   Pasted in here, they become a short card on the last check-in of the day,
+   so the homework gets looked at every evening instead of once.
+   Stored in STATE.amber.weeks, keyed by session date; each evening's answers
+   live on that check-in's entry as draft.amber = { w: weekId, r: { itemId: … } }.
+   ============================================================ */
+const AMBER_WORDNUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const AMBER_ROTATE = 2;                    // ongoing check-type habits asked per evening
+
+function amberHash(s) {
+  let h = 5381; s = String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+/* Guess how an item should be asked. A count when it names a number of things a
+   day; a yes/partly/no otherwise. The preview lets either be switched. */
+function amberKind(text) {
+  const t = String(text || "").toLowerCase();
+  const num = w => AMBER_WORDNUM[w] || +w || null;
+  if (/brain breaks?|breaks per day/.test(t)) {
+    const m = t.match(/(\d+|one|two|three|four|five|six|seven|eight)\s*(?:(?:-|to|–)\s*(\d+)\s*)?(?:\d+\s*(?:-|to|–)\s*\d+\s*min\w*\s*)?(?:brain\s+)?breaks/);
+    const lo = m ? num(m[1]) : null, hi = m && m[2] ? +m[2] : null;
+    return { kind: "count", unit: "breaks", goal: lo, cap: null, hi: hi };
+  }
+  const mins = t.match(/(\d+)\s*(?:-|to|–)\s*(\d+)\s*min/);
+  if (mins && /cognitiv|stimulat|task|sudoku|tiles|puzzle|work/.test(t))
+    return { kind: "count", unit: "min", goal: +mins[1], cap: +mins[2], hi: null };
+  const times = t.match(/\(?(\d+)\s*times?\b/);
+  if (times) return { kind: "count", unit: "times", goal: +times[1], cap: null, hi: null };
+  return { kind: "check", unit: "", goal: null, cap: null, hi: null };
+}
+function amberItem(text, sub, sec) {
+  const k = amberKind(text);
+  return { id: "ai" + amberHash(sec + "|" + text), text: text, sub: sub || [], sec: sec,
+    kind: k.kind, unit: k.unit, goal: k.goal, cap: k.cap, hi: k.hi,
+    every: sec === "plan" && /check-?\s?in/i.test(text + " " + (sub || []).join(" ")) };
+}
+function amberParse(raw) {
+  const lines = String(raw || "").replace(/\r/g, "").split("\n");
+  let date = "";
+  const dm = String(raw || "").match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
+  if (dm) {
+    const y = dm[3].length === 2 ? 2000 + +dm[3] : +dm[3];
+    date = y + "-" + pad(+dm[1]) + "-" + pad(+dm[2]);
+  }
+  const out = { wins: [], plan: [], cont: [], scores: [] };
+  let sec = null, last = null;
+  const seenBullet = {};
+  const head = s => {
+    const h = s.replace(/[:\s]+$/, "").trim().toLowerCase();
+    if (/^(success(es)?|wins?)$/.test(h)) return "wins";
+    if (/^(this week'?s plan|this week|plan|homework|this week'?s homework)$/.test(h)) return "plan";
+    if (/^continue$/.test(h)) return "cont";
+    if (/^(rehab|rehab recap|rehab skill task performance|rehab task performance|session recap|task performance)$/.test(h)) return "scores";
+    return null;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const s = lines[i].trim();
+    if (!s) continue;
+    if (/^(let me know|thank you|thanks|see you|amber l\.|keep up|--\s*$)/i.test(s)) {
+      if (sec) { sec = null; last = null; }
+      if (/^amber l\./i.test(s)) break;
+      continue;
+    }
+    const h = head(s);
+    if (h) { sec = h; last = null; continue; }
+    if (!sec) continue;
+    if (/^>/.test(s)) {                              // ">> detail" belongs to the line above
+      const t = s.replace(/^>+\s*/, "").trim();
+      if (!t) continue;
+      if (last) last.sub.push(t);
+      else if (sec === "wins" && out.wins.length) out.wins[out.wins.length - 1] += " — " + t;
+      continue;
+    }
+    const bullet = /^(?:[-*•●]|\d+[.)])\s*/.test(s);
+    const t = s.replace(/^(?:[-*•●]|\d+[.)])\s*/, "").trim();
+    if (!t) continue;
+    if (bullet) seenBullet[sec] = true;
+    // an unmarked line under a bulleted list is a note on the line above it
+    if (!bullet && seenBullet[sec]) {
+      if ((sec === "plan" || sec === "cont") && last) { last.sub.push(t); continue; }
+      if (sec === "wins" && out.wins.length) { out.wins[out.wins.length - 1] += " — " + t; continue; }
+    }
+    if (sec === "wins") { out.wins.push(t); last = null; continue; }
+    if (sec === "scores") { out.scores.push(t); last = null; continue; }
+    last = { text: t, sub: [] };
+    out[sec].push(last);
+  }
+  // a quoted phrase on its own line after an item ("This is the time I have energy for.")
+  // already landed as an item of its own; that's fine — it can be removed in the preview
+  return {
+    date: date || todayISO(),
+    wins: out.wins,
+    plan: out.plan.map(x => amberItem(x.text, x.sub, "plan")),
+    cont: out.cont.map(x => amberItem(x.text, x.sub, "cont")),
+    scores: out.scores
+  };
+}
+
+/* ---------- storage ---------- */
+function amberFixWeek(w) {
+  if (!w || typeof w !== "object") return null;
+  ["wins", "scores"].forEach(k => { w[k] = Array.isArray(w[k]) ? w[k].filter(x => typeof x === "string")
+    : (w[k] && typeof w[k] === "object" ? Object.keys(w[k]).map(i => w[k][i]) : []); });
+  ["plan", "cont"].forEach(k => {
+    let a = w[k];
+    if (a && !Array.isArray(a) && typeof a === "object") a = Object.keys(a).map(i => a[i]);
+    w[k] = (Array.isArray(a) ? a : []).filter(x => x && x.id && x.text).map(x => {
+      if (!Array.isArray(x.sub)) x.sub = x.sub && typeof x.sub === "object" ? Object.keys(x.sub).map(i => x.sub[i]) : [];
+      if (x.kind !== "count") x.kind = "check";
+      x.every = !!x.every;
+      return x;
+    });
+  });
+  return w.id && w.date ? w : null;
+}
+function amberWeeks() {
+  if (!STATE.amber || typeof STATE.amber !== "object") STATE.amber = { weeks: {} };
+  if (!STATE.amber.weeks || typeof STATE.amber.weeks !== "object") STATE.amber.weeks = {};
+  const gone = STATE.gone || {};
+  return Object.keys(STATE.amber.weeks).map(k => amberFixWeek(STATE.amber.weeks[k]))
+    .filter(w => w && !gone[w.id]).sort((a, b) => a.date < b.date ? -1 : 1);
+}
+function mergeAmber(remote) {
+  if (!remote || typeof remote !== "object") return;
+  amberWeeks();
+  const gone = STATE.gone || {};
+  Object.keys(remote).forEach(k => {
+    const r = remote[k];
+    if (!r || !r.id || gone[r.id]) return;
+    const cur = STATE.amber.weeks[r.id];
+    if (!cur || (r.ts || "") > (cur.ts || "")) STATE.amber.weeks[r.id] = r;
+  });
+  Object.keys(STATE.amber.weeks).forEach(k => { if (gone[k]) delete STATE.amber.weeks[k]; });
+}
+/* the plan in force on a given day: the latest session on or before it */
+function amberWeekFor(dateISO) {
+  const ws = amberWeeks().filter(w => w.date <= dateISO);
+  return ws.length ? ws[ws.length - 1] : null;
+}
+const amberDayNo = iso => { const p = iso.split("-"); return Math.floor(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); };
+const amberAge = (w, iso) => amberDayNo(iso) - amberDayNo(w.date);
+function amberGoalText(it) {
+  if (it.kind !== "count") return "";
+  const u = it.unit === "min" ? " min" : it.unit === "breaks" ? " breaks" : it.unit === "times" ? "×" : "";
+  if (it.goal != null && it.cap != null) return it.goal + "–" + it.cap + u;
+  if (it.goal != null && it.hi != null) return it.goal + "–" + it.hi + u;
+  if (it.goal != null) return it.goal + u;
+  return "";
+}
+const amberShort = t => String(t || "").replace(/\s*\(\s*\d+\s*times?\??\s*\)\s*/i, " ").trim();
+
+/* Which items tonight's card asks: every plan item, every count, and a couple of
+   the ongoing habits in turn — plus anything already answered on this entry. */
+function amberAsked(w, d) {
+  const r = (d.amber && d.amber.w === w.id && d.amber.r) || {};
+  const plan = w.plan;
+  const counts = w.cont.filter(x => x.kind === "count");
+  const checks = w.cont.filter(x => x.kind !== "count");
+  let rot = [];
+  if (checks.length) {
+    const n = checks.length, base = (amberDayNo(d.date) * AMBER_ROTATE) % n;
+    for (let i = 0; i < Math.min(AMBER_ROTATE, n); i++) rot.push(checks[(base + i) % n]);
+  }
+  const shown = new Set(rot.map(x => x.id));
+  checks.forEach(x => { if (r[x.id] != null && !shown.has(x.id)) { rot.push(x); shown.add(x.id); } });
+  if (amberShowAll) checks.forEach(x => { if (!shown.has(x.id)) { rot.push(x); shown.add(x.id); } });
+  return { plan: plan, counts: counts, rot: rot, hidden: checks.length - rot.length };
+}
+let amberShowAll = false;
+
+function amberRowHtml(it, r) {
+  const v = r[it.id];
+  const sub = it.sub && it.sub.length
+    ? '<div class="amsub">' + it.sub.map(esc).join("<br>") + "</div>" : "";
+  if (it.kind === "count") {
+    const g = amberGoalText(it);
+    const n = typeof v === "number" ? v : null;
+    const met = n != null && it.goal != null && n >= it.goal && (it.cap == null || n <= it.cap);
+    const over = n != null && it.cap != null && n > it.cap;
+    return '<div class="amrow"><div class="amtx">' + esc(amberShort(it.text)) + sub +
+      (g ? '<div class="amgoal' + (met ? " met" : over ? " over" : "") + '">goal ' + esc(g) +
+        (over ? " · over the cap" : met ? " · hit it" : "") + "</div>" : "") + "</div>" +
+      '<div class="amcnt"><button class="btn sm" data-amstep="' + it.id + ':-1" aria-label="less">−</button>' +
+      '<b>' + (n == null ? "–" : n) + "</b>" +
+      '<button class="btn sm" data-amstep="' + it.id + ':1" aria-label="more">+</button></div></div>';
+  }
+  const opt = [["d", "Done"], ["p", "Partly"], ["s", "Not today"]];
+  return '<div class="amrow col"><div class="amtx">' + esc(it.text) + sub + "</div>" +
+    '<div class="seg amseg">' + opt.map(o => '<button data-amset="' + it.id + ":" + o[0] +
+      '" aria-pressed="' + (v === o[0] ? "true" : "false") + '">' + o[1] + "</button>").join("") + "</div></div>";
+}
+
+/* the last few evenings against this week's plan, in one line */
+function amberWeekLine(w, uptoISO) {
+  const es = ENTRIES.filter(e => e.amber && e.amber.w === w.id && e.date >= w.date && e.date <= uptoISO &&
+    e.win === lastWinId());
+  if (!es.length) return "";
+  let done = 0, part = 0, asked = 0;
+  const sums = {};
+  es.forEach(e => Object.keys(e.amber.r || {}).forEach(k => {
+    const v = e.amber.r[k];
+    if (typeof v === "number") { (sums[k] = sums[k] || []).push(v); return; }
+    asked++; if (v === "d") done++; else if (v === "p") part++;
+  }));
+  const bits = [];
+  if (asked) bits.push(done + " done" + (part ? ", " + part + " partly" : "") + " of " + asked + " asked");
+  w.plan.concat(w.cont).filter(x => x.kind === "count" && sums[x.id]).forEach(x => {
+    const a = sums[x.id], avg = a.reduce((s, y) => s + y, 0) / a.length;
+    const lbl = x.unit === "breaks" ? "brain breaks" : x.unit === "min" ? "min of brain work" : "× " +
+      amberShort(x.text).split(/[\s-]+/).slice(0, 2).join(" ").toLowerCase();
+    bits.push((Math.round(avg * 10) / 10) + " " + lbl + "/day");
+  });
+  return "Since " + fmtDate(w.date) + " (" + es.length + " evening" + (es.length === 1 ? "" : "s") + "): " + bits.join(" · ");
+}
+
+function renderAmber() {
+  const blk = $("#amberBlock"), now = $("#amberNow");
+  if (!blk || !now || !draft) return;
+  const w = amberWeekFor(draft.date);
+  const evening = draft.win === lastWinId();
+  // the reminder meant for every check-in, wherever it pops up
+  const every = w ? w.plan.filter(x => x.every) : [];
+  if (every.length && amberAge(w, draft.date) <= 13) {
+    now.style.display = "";
+    now.innerHTML = '<div class="card amcard amnow"><div class="k">From Amber · every check-in</div>' +
+      every.map(x => '<div class="amline">' + esc(x.text) +
+        (x.sub.length ? '<div class="amsub">' + x.sub.map(esc).join("<br>") + "</div>" : "") + "</div>").join("") +
+      '<div class="mini" style="margin-top:6px">Read it out loud if you’re on your own.</div></div>';
+  } else { now.style.display = "none"; now.innerHTML = ""; }
+
+  if (!evening) { blk.style.display = "none"; return; }
+  blk.style.display = "";
+  const body = $("#amberBody");
+  if (!w) {
+    body.innerHTML = '<p class="sub" style="margin:0 0 10px">Paste Amber’s weekly session notes and ' +
+      "this card turns them into a few quick questions each evening.</p>" +
+      '<button class="btn sm pri" data-amopen="1">Paste her notes</button>';
+    return;
+  }
+  const age = amberAge(w, draft.date);
+  const r = (draft.amber && draft.amber.w === w.id && draft.amber.r) || {};
+  const a = amberAsked(w, draft);
+  let h = "";
+  if (age > 7) h += '<div class="amstale">These are from ' + fmtDate(w.date) + " — " + age +
+    ' days old. <button class="btn sm" data-amopen="1">Paste the newest</button></div>';
+  if (w.wins.length) h += '<div class="amwins"><div class="k">Wins she noted</div>' +
+    w.wins.map(x => "<div>★ " + esc(x) + "</div>").join("") + "</div>";
+  if (a.plan.length) h += '<div class="k amh">This week’s plan</div>' + a.plan.map(x => amberRowHtml(x, r)).join("");
+  if (a.counts.length) h += '<div class="k amh">Today’s counts</div>' + a.counts.map(x => amberRowHtml(x, r)).join("");
+  if (a.rot.length) h += '<div class="k amh">Keep going with</div>' + a.rot.map(x => amberRowHtml(x, r)).join("");
+  if (a.hidden > 0 || amberShowAll) h += '<button class="btn sm gho" data-amall="1" style="margin-top:6px">' +
+    (amberShowAll ? "Just tonight’s two" : "Show all " + (a.hidden + a.rot.length) + " ongoing habits") + "</button>";
+  const line = amberWeekLine(w, draft.date);
+  h += '<div class="mini">' + (line ? esc(line) : "Untouched rows are saved as blank, not as a no.") +
+    ' · <a href="#" data-amopen="1">edit or update</a></div>';
+  body.innerHTML = h;
+}
+
+function amberSetAnswer(id, val) {
+  const w = amberWeekFor(draft.date); if (!w) return;
+  if (!draft.amber || draft.amber.w !== w.id) draft.amber = { w: w.id, r: {} };
+  if (!draft.amber.r || typeof draft.amber.r !== "object") draft.amber.r = {};
+  if (val == null) delete draft.amber.r[id]; else draft.amber.r[id] = val;
+  if (!Object.keys(draft.amber.r).length) delete draft.amber;
+  renderAmber();
+}
+const amberTouched = d => !!(d && d.amber && d.amber.r && Object.keys(d.amber.r).length);
+
+/* ---------- the paste sheet ---------- */
+let amberDraftWeek = null;
+function amberOpen() {
+  const cur = amberWeekFor(todayISO());
+  amberDraftWeek = cur ? JSON.parse(JSON.stringify(cur)) : null;
+  $("#amberIn").value = "";
+  amberPreview();
+  $("#amberSheet").classList.add("on");
+}
+function amberClose() { $("#amberSheet").classList.remove("on"); amberDraftWeek = null; }
+function amberDoParse() {
+  const raw = $("#amberIn").value;
+  if (!raw.trim()) { toast("Paste the email text first", true); return; }
+  const p = amberParse(raw);
+  if (!p.plan.length && !p.cont.length) {
+    toast("Couldn’t find a Plan, Homework or Continue section in that", true); return;
+  }
+  amberDraftWeek = Object.assign({ id: "aw_" + p.date }, p);
+  amberPreview();
+}
+function amberPreview() {
+  const box = $("#amberPrev"), w = amberDraftWeek;
+  $("#amberSave").style.display = w ? "" : "none";
+  $("#amberDel").style.display = w && STATE.amber && STATE.amber.weeks && STATE.amber.weeks[w.id] ? "" : "none";
+  if (!w) { box.innerHTML = ""; return; }
+  const row = (x, sec, i) => '<div class="amprow"><div class="amtx">' + esc(x.text) +
+    (x.sub.length ? '<div class="amsub">' + x.sub.map(esc).join("<br>") + "</div>" : "") + "</div>" +
+    '<div class="amctl">' +
+    '<button class="chip" data-amkind="' + sec + ":" + i + '">' + (x.kind === "count" ? "count" : "done / not") + "</button>" +
+    (x.kind === "count" ? '<input type="number" min="0" max="999" data-amgoal="' + sec + ":" + i + '" value="' +
+      (x.goal == null ? "" : x.goal) + '" placeholder="goal" aria-label="goal">' : "") +
+    (sec === "plan" ? '<button class="chip" data-amevery="' + i + '" aria-pressed="' + (x.every ? "true" : "false") +
+      '">every check-in</button>' : "") +
+    '<button class="chip" data-amrm="' + sec + ":" + i + '" aria-label="remove">×</button></div></div>';
+  box.innerHTML =
+    '<label class="fld" style="margin-top:10px"><span>Session date</span><input type="date" id="amberDate" value="' +
+      esc(w.date) + '"></label>' +
+    (w.wins.length ? '<div class="k amh">Wins</div><div class="mini" style="margin-top:2px">' + w.wins.map(esc).join("<br>") + "</div>" : "") +
+    '<div class="k amh">This week’s plan — asked every evening</div>' +
+    (w.plan.map((x, i) => row(x, "plan", i)).join("") || '<div class="mini">none</div>') +
+    '<div class="k amh">Continue — counts every evening, the rest ' + AMBER_ROTATE + " a night in turn</div>" +
+    (w.cont.map((x, i) => row(x, "cont", i)).join("") || '<div class="mini">none</div>') +
+    (w.scores.length ? '<div class="k amh">Rehab scores</div><div class="mini" style="margin-top:2px">' +
+      w.scores.map(esc).join("<br>") + "</div>" : "");
+}
+async function amberSave() {
+  const w = amberDraftWeek; if (!w) return;
+  const d = ($("#amberDate") || {}).value;
+  if (/^\d{4}-\d\d-\d\d$/.test(d || "") && d !== w.date) {
+    // a new date is a new session; the old key goes to the tombstones
+    if (STATE.amber && STATE.amber.weeks && STATE.amber.weeks[w.id]) {
+      delete STATE.amber.weeks[w.id]; STATE.gone = STATE.gone || {}; STATE.gone[w.id] = Date.now();
+    }
+    w.date = d; w.id = "aw_" + d;
+  }
+  amberWeeks();
+  if (STATE.gone) delete STATE.gone[w.id];
+  w.ts = new Date().toISOString();
+  STATE.amber.weeks[w.id] = w;
+  await saveState();
+  amberClose(); renderAmber();
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  toast("Amber’s plan saved — it’s on tonight’s check-in");
+}
+async function amberDelete() {
+  const w = amberDraftWeek; if (!w || !confirm("Remove the notes from " + fmtDate(w.date) + "?")) return;
+  amberWeeks();
+  delete STATE.amber.weeks[w.id];
+  STATE.gone = STATE.gone || {}; STATE.gone[w.id] = Date.now();
+  await saveState(); amberClose(); renderAmber();
+  if (CFG.cloud.sync || CFG.fb.on) syncAll(true);
+  toast("Removed");
+}
+function amberBind() {
+  document.addEventListener("click", ev => {
+    const t = ev.target.closest("[data-amset],[data-amstep],[data-amopen],[data-amall],[data-amkind],[data-amevery],[data-amrm]");
+    if (!t) return;
+    if (t.dataset.amopen) { ev.preventDefault(); amberOpen(); return; }
+    if (t.dataset.amall) { amberShowAll = !amberShowAll; renderAmber(); return; }
+    if (t.dataset.amset) {
+      const p = t.dataset.amset.split(":"), cur = draft.amber && draft.amber.r && draft.amber.r[p[0]];
+      amberSetAnswer(p[0], cur === p[1] ? null : p[1]); return;      // tap again to clear
+    }
+    if (t.dataset.amstep) {
+      const p = t.dataset.amstep.split(":"), cur = draft.amber && draft.amber.r && draft.amber.r[p[0]];
+      const n = typeof cur === "number" ? cur + (+p[1]) : (+p[1] > 0 ? 1 : null);
+      amberSetAnswer(p[0], n == null || n < 0 ? null : Math.min(n, 999)); return;
+    }
+    const w = amberDraftWeek; if (!w) return;
+    if (t.dataset.amkind) {
+      const p = t.dataset.amkind.split(":"), x = w[p[0]][+p[1]];
+      if (x.kind === "count") x.kind = "check";
+      else { const k = amberKind(x.text); x.kind = "count"; x.unit = k.unit; if (x.goal == null) x.goal = k.goal; }
+    } else if (t.dataset.amevery) { const x = w.plan[+t.dataset.amevery]; x.every = !x.every; }
+    else if (t.dataset.amrm) { const p = t.dataset.amrm.split(":"); w[p[0]].splice(+p[1], 1); }
+    amberPreview();
+  });
+  document.addEventListener("change", ev => {
+    const t = ev.target;
+    if (t && t.dataset && t.dataset.amgoal && amberDraftWeek) {
+      const p = t.dataset.amgoal.split(":"), x = amberDraftWeek[p[0]][+p[1]];
+      x.goal = t.value === "" ? null : Math.max(0, +t.value || 0);
+    }
+  });
+  $("#amberParse").onclick = amberDoParse;
+  $("#amberSave").onclick = amberSave;
+  $("#amberDel").onclick = amberDelete;
+  $("#amberCancel").onclick = amberClose;
+  $("#amberSheet").addEventListener("click", e => { if (e.target.id === "amberSheet") amberClose(); });
 }
 
 let starDraft = null;
@@ -10447,6 +10881,7 @@ async function fbSync(quiet) {
       mergeSpikes(Object.keys(st.spikes || {}).map(k => st.spikes[k]));
       mergeStars(Object.keys(st.stars || {}).map(k => st.stars[k]));
       mergeJournal(Object.keys(st.journal || {}).map(k => st.journal[k]));
+      mergeAmber(st.amber && st.amber.weeks);
       await saveState();                      // the pull is worth keeping even if no entries moved
       renderSug(); renderSpikeCount(); renderStarCount(); renderJournal();
     }
@@ -10483,6 +10918,7 @@ async function fbSync(quiet) {
         spikes: (STATE.spikes || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
         stars: (STATE.stars || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
         journal: (STATE.journal || []).reduce((a, x) => { a[x.id] = x; return a; }, {}),
+        amber: { weeks: (STATE.amber && STATE.amber.weeks) || {} },
         meta: { at: new Date().toISOString(), build: BUILD, device: CFG.cloud.uid || "?" } })
     });
     await fetch(fbPath(tok, "/settings"), {
@@ -10542,6 +10978,7 @@ function draftTouched() {
   if (ctxOf(draft).length) return true;
   if (draft.gold && ((draft.gold.what || "").trim() || draft.gold.none ||
       (draft.gold.str || []).length)) return true;
+  if (amberTouched(draft)) return true;
   return false;
 }
 
@@ -10692,7 +11129,7 @@ function commit(skip, reason) {
     const anyScreen = !!draft.screen || !!draft.screenAt;
     const anyWin = !!(draft.gold && ((draft.gold.what || "").trim() || draft.gold.none));
     if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap && !anyCtx && !anyMedOff && !anyPeriod &&
-        !anyScreen && !anyWin && !draft.tags.length && !draft.warns.length && !draft.note) {
+        !anyScreen && !anyWin && !amberTouched(draft) && !draft.tags.length && !draft.warns.length && !draft.note) {
       toast("Nothing filled in yet", true); return;
     }
     // A reading a long way from your usual is the one worth having words against.
@@ -11486,6 +11923,7 @@ function init() {
   });
 
   $("#saveBtn").onclick = () => commit(false);
+  try { amberBind(); } catch (e) { console.error(e); }
   $("#sayCard").onclick = hideSaying;          // tap anywhere on it, or the ×, to put it away
   $("#skipBtn").onclick = () => { const r = prompt("Skip this check-in. Why? (optional — asleep, at work, forgot)");
     if (r === null) return; commit(true, r.trim()); };
