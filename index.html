@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:130-->
+<!DOCTYPE html><!--build:131-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2255,7 +2255,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 130;
+const BUILD = 131;
 
 const DEFAULT_CFG = {
   windows: [
@@ -9909,7 +9909,7 @@ function amberItem(text, sub, sec) {
     kind: k.kind, unit: k.unit, goal: k.goal, cap: k.cap, hi: k.hi,
     every: sec === "plan" && /check-?\s?in/i.test(text + " " + (sub || []).join(" ")) };
 }
-function amberParse(raw) {
+function amberParse(raw, fallbackDate) {
   const lines = String(raw || "").replace(/\r/g, "").split("\n");
   let date = "";
   const dm = String(raw || "").match(/\b(\d{1,2})\/(\d{1,2})\/(\d{2,4})\b/);
@@ -9963,7 +9963,7 @@ function amberParse(raw) {
   // a quoted phrase on its own line after an item ("This is the time I have energy for.")
   // already landed as an item of its own; that's fine — it can be removed in the preview
   return {
-    date: date || todayISO(),
+    date: date || fallbackDate || todayISO(),
     wins: out.wins,
     plan: out.plan.map(x => amberItem(x.text, x.sub, "plan")),
     cont: out.cont.map(x => amberItem(x.text, x.sub, "cont")),
@@ -10140,6 +10140,40 @@ function amberSetAnswer(id, val) {
   renderAmber();
 }
 const amberTouched = d => !!(d && d.amber && d.amber.r && Object.keys(d.amber.r).length);
+
+/* ---------- the Wednesday import ----------
+   A scheduled task finds her email and leaves the text with the Worker. This
+   picks it up, runs the same parser as the paste box, and adds any session it
+   doesn't already have. Something pasted or edited here always wins: an import
+   never overwrites a week that exists, and a week you removed stays removed. */
+async function amberPull() {
+  if (!cloudBase()) return 0;
+  let o;
+  try { o = await api("/amber"); } catch (e) { return 0; }
+  const items = (o && Array.isArray(o.items)) ? o.items : [];
+  if (!STATE.amberSeen || typeof STATE.amberSeen !== "object") STATE.amberSeen = {};
+  amberWeeks();
+  const gone = STATE.gone || {}, oldest = addDays(todayISO(), -21);
+  let added = 0, touched = false;
+  items.forEach(it => {
+    if (!it || !it.mid || STATE.amberSeen[it.mid]) return;
+    STATE.amberSeen[it.mid] = Date.now(); touched = true;
+    const sent = /^\d{4}-\d\d-\d\d/.test(it.sent || "") ? it.sent.slice(0, 10) : "";
+    const p = amberParse(it.text, sent);
+    if (!p.plan.length && !p.cont.length) return;          // a scheduling note, not session notes
+    if (p.date < oldest) return;
+    const id = "aw_" + p.date;
+    if (STATE.amber.weeks[id] || gone[id]) return;
+    STATE.amber.weeks[id] = Object.assign({ id: id, ts: new Date().toISOString(), src: "email" }, p);
+    added++;
+  });
+  if (touched) await saveState();
+  if (added) {
+    try { renderAmber(); } catch (e) {}
+    toast("Amber\u2019s new session notes are in \u2014 they\u2019re on tonight\u2019s check-in");
+  }
+  return added;
+}
 
 /* ---------- the paste sheet ---------- */
 let amberDraftWeek = null;
@@ -10943,6 +10977,7 @@ async function fbSync(quiet) {
 
 /* run every configured destination */
 async function syncAll(quiet) {
+  try { await amberPull(); } catch (e) { console.error(e); }
   if (CFG.cloud.sync) await cloudSync(quiet);
   if (CFG.fb.on) await fbSync(quiet);
   lastSyncAt = Date.now();
