@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:132-->
+<!DOCTYPE html><!--build:133-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2273,7 +2273,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 132;
+const BUILD = 133;
 
 const DEFAULT_CFG = {
   windows: [
@@ -9945,7 +9945,7 @@ function amberParse(raw, fallbackDate) {
   const head = s => {
     const h = s.replace(/[:\s]+$/, "").trim().toLowerCase();
     if (/^(success(es)?|wins?)$/.test(h)) return "wins";
-    if (/^(this week'?s plan|this week|plan|homework|this week'?s homework)$/.test(h)) return "plan";
+    if (/^(this week['\u2019]?s plan|this week|plan|homework( plan)?|this week['\u2019]?s homework( plan)?)$/.test(h)) return "plan";
     if (/^continue$/.test(h)) return "cont";
     if (/^(rehab|rehab recap|rehab skill task performance|rehab task performance|session recap|task performance)$/.test(h)) return "scores";
     return null;
