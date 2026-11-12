@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:136-->
+<!DOCTYPE html><!--build:137-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -1097,6 +1097,16 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
            aria-label="Hours slept per night"></svg>
       <div class="chtools"><button data-png="sleepCh" data-nm="sleep">PNG</button>
         <button data-svg="sleepCh" data-nm="sleep">SVG</button></div>
+    </div>
+    <div class="card chartcard">
+      <h2>Brain training</h2>
+      <p class="sub">Minutes each day, from the evening check-in. The line is the 7-day average. A small dot on the
+        baseline means you answered &ldquo;none&rdquo;; no mark means it wasn&rsquo;t entered that day.</p>
+      <svg class="ch" id="brainCh" viewBox="0 0 700 180" preserveAspectRatio="none" role="img"
+           aria-label="Minutes of brain training per day"></svg>
+      <div class="chtools"><button data-png="brainCh" data-nm="brain-training">PNG</button>
+        <button data-svg="brainCh" data-nm="brain-training">SVG</button></div>
+      <div class="readout" id="brainSum"></div>
     </div>
     <div class="card chartcard" id="dayCard">
       <h2>Daylight</h2>
@@ -2303,7 +2313,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 136;
+const BUILD = 137;
 
 const DEFAULT_CFG = {
   windows: [
@@ -4788,7 +4798,61 @@ function drawMain() {
     '" style="color:' + (series[k] ? SCOL[k] : "var(--ink-3)") + '"><i></i>' + esc(ITEM[k].label) + "</button>").join("");
 }
 
+/* Brain training per day. Drawn alongside sleep, so every place that redraws
+   the charts (range change, sync, dashboard) redraws this too. */
+function drawBrain() {
+  const svg = $("#brainCh"); if (!svg) return;
+  const rows = daily(range), n = rows.length, H = 180, top = 12, bot = 28;
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  const ans = rows.filter(r => r.brain != null);
+  if (!ans.length) {
+    svg.innerHTML = '<text x="' + (W / 2) + '" y="' + (H / 2) + '" fill="#63707e" font-size="13" text-anchor="middle" ' +
+      'font-family="system-ui">Enter minutes at the evening check-in to fill this in.</text>';
+    $("#brainSum").textContent = "Nothing entered in this window yet.";
+    return;
+  }
+  const peak = Math.max.apply(null, ans.map(r => r.brain));
+  const stepM = peak <= 60 ? 15 : peak <= 120 ? 30 : peak <= 240 ? 60 : 120;
+  const MAXM = Math.max(60, Math.ceil(peak / stepM) * stepM);
+  const yAt = m => top + (MAXM - m) / MAXM * (H - top - bot);
+  let g = "";
+  for (let m = 0; m <= MAXM; m += stepM) {
+    const y = yAt(m);
+    g += '<line x1="' + PADL + '" x2="' + (W - PADR) + '" y1="' + y + '" y2="' + y + '" stroke="#232a33" stroke-width="1" opacity=".8"/>';
+    g += '<text x="' + (PADL - 6) + '" y="' + (y + 4) + '" fill="#63707e" font-size="10.5" ' +
+         'font-family="ui-monospace,monospace" text-anchor="end">' + m + "</text>";
+  }
+  const bw = Math.max(2.5, Math.min(20, (W - PADL - PADR) / Math.max(n, 1) * .62));
+  rows.forEach((r, i) => {
+    if (r.brain == null) return;
+    const x = xAt(i, n);
+    if (r.brain === 0) { g += '<circle cx="' + x.toFixed(1) + '" cy="' + (yAt(0) - 3).toFixed(1) + '" r="2.4" fill="#63707e"/>'; return; }
+    const y = yAt(Math.min(MAXM, r.brain));
+    g += '<rect x="' + (x - bw / 2).toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) +
+         '" height="' + (yAt(0) - y).toFixed(1) + '" rx="2" fill="#5ec8b4" opacity=".85"><title>' +
+         esc(fmtDate(r.date) + ": " + r.brain + " min") + "</title></rect>";
+  });
+  // 7-day average over the days answered (none counts as 0); needs 3 answers in the week
+  let d = "", pen = false;
+  rows.forEach((r, i) => {
+    const wk = rows.slice(Math.max(0, i - 6), i + 1).filter(x => x.brain != null);
+    if (wk.length < 3) { pen = false; return; }
+    const a = wk.reduce((s2, x) => s2 + x.brain, 0) / wk.length;
+    d += (pen ? "L" : "M") + xAt(i, n).toFixed(1) + " " + yAt(Math.min(MAXM, a)).toFixed(1) + " "; pen = true;
+  });
+  if (d) g += '<path d="' + d + '" fill="none" stroke="#e6ecf2" stroke-width="1.8" opacity=".7"/>';
+  const step = Math.max(1, Math.ceil(n / 6));
+  rows.forEach((r, i) => { if (i % step === 0 || i === n - 1)
+    g += '<text x="' + xAt(i, n) + '" y="' + (H - 8) + '" fill="#63707e" font-size="10.5" ' +
+         'font-family="ui-monospace,monospace" text-anchor="middle">' + fmtDate(r.date) + "</text>"; });
+  svg.innerHTML = g;
+  const trained = ans.filter(r => r.brain > 0), total = trained.reduce((s2, r) => s2 + r.brain, 0);
+  $("#brainSum").innerHTML = "<b>" + trained.length + "</b> training day" + (trained.length === 1 ? "" : "s") +
+    " out of <b>" + ans.length + "</b> answered in this window &nbsp;&middot;&nbsp; <b>" + hm(total) + "</b> in total" +
+    (trained.length ? " &nbsp;&middot;&nbsp; <b>" + Math.round(total / trained.length) + " min</b> on an average training day" : "") + ".";
+}
 function drawSleep() {
+  try { drawBrain(); } catch (e) {}
   const rows = daily(range), n = rows.length, H = 200, top = 12, bot = 28;
   const svg = $("#sleepCh");
   const any = rows.some(r => r.sleep || r.nap);
