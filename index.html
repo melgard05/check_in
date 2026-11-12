@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:134-->
+<!DOCTYPE html><!--build:135-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -569,6 +569,16 @@ svg.ch{display:block;width:100%;height:auto;overflow:visible;touch-action:pan-y}
 .flag.hi{border-color:var(--high-2);background:#1e1413}
 .flag b{display:block;margin-bottom:2px;font-size:13.5px}
 .flag span{color:var(--ink-2);font-size:12.5px}
+/* the readings behind a finding, opened from the card */
+.flag .fevtog{display:inline-block;margin-top:9px;background:none;border:1px solid var(--line-2);color:var(--ink);
+  border-radius:7px;padding:6px 11px;font-size:12.5px;font-weight:600;cursor:pointer}
+.fev{margin-top:11px;padding-top:10px;border-top:1px solid rgba(255,255,255,.09)}
+.fevk{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin:0 0 4px}
+.fevr{color:var(--ink);font-size:13px;line-height:1.5;margin-bottom:8px}
+.fevf{color:var(--ink-3);font-size:12px;line-height:1.45;margin-top:6px}
+.fevt td,.fevt th{white-space:nowrap}
+.fevt tr.on td{color:#fff;font-weight:600;background:rgba(255,255,255,.05)}
+.fevt tr.on td:first-child{box-shadow:inset 3px 0 var(--flag,var(--warn))}
 .empty{text-align:center;padding:26px 14px;color:var(--ink-3);font-size:13.5px}
 .empty b{display:block;color:var(--ink-2);font-size:15px;margin-bottom:5px;font-weight:600}
 .tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
@@ -2273,7 +2283,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 134;
+const BUILD = 135;
 
 const DEFAULT_CFG = {
   windows: [
@@ -4606,9 +4616,10 @@ function rollingMean(rows, key, win) {
 /* Sustained runs, which is what an episode looks like on a chart.
    Durations follow the usual clinical shape: elevated stretches are treated as
    notable sooner than low ones. Descriptive only — not a diagnosis. */
+const EP_HI = 7.2, EP_LO = 3.6, EP_MIN_HI = 4, EP_MIN_LO = 7;
 function episodes(rows) {
   const roll = rollingMean(rows, "mood", 5);
-  const runs = [], HI = 7.2, LO = 3.6, MIN_HI = 4, MIN_LO = 7;
+  const runs = [], HI = EP_HI, LO = EP_LO, MIN_HI = EP_MIN_HI, MIN_LO = EP_MIN_LO;
   let cur = null;
   const close = () => {
     if (cur && cur.len >= (cur.kind === "high" ? MIN_HI : MIN_LO)) runs.push(cur);
@@ -6726,8 +6737,12 @@ function flagDetail(g) {
     fmtDate(latest.date) + "</div>" + esc(latest.body || "") + "</div>";
   h += '<div style="margin-top:8px;font-size:12px;color:var(--ink-2);white-space:normal"><span style="color:var(--ink-3)">Raised on:</span> ' +
     ds.map(fmtDate).join(", ") + "</div>";
-  const extra = flagDays(g.title || "");
-  if (extra) h += extra;
+  // still active: show today's readings for it; otherwise what flagDays can rebuild
+  const cur = latestFlags.find(f => f[1].replace(/\d+/g, "#") === (g.title || "").replace(/\d+/g, "#"));
+  let extra = "";
+  try { extra = cur ? flagEvidence(cur) : ""; } catch (e) {}
+  if (!extra) extra = flagDays(g.title || "");
+  if (extra) h += (cur ? '<div class="fevf" style="margin-top:8px">Still active. These are the readings behind it today:</div>' : "") + extra;
   return h;
 }
 function flagDays(title) {
@@ -7141,8 +7156,161 @@ function clearFlagBanner(all) {
   showFlagBanner();                      // reveal the next one, if any
 }
 
+/* ---------- the readings behind a finding ----------
+   Each card can open the exact days its rule looked at, with the values it
+   counted and the rule in plain words, so nothing has to be pieced together
+   from a chart and misread. The windows here are the same ones the checks use. */
+let flagRows = [];
+const evN = v => v == null ? "\u2014" : (Math.round(v * 10) / 10).toString();
+const evH = h => { if (h == null) return "\u2014"; const m = Math.round(h * 60); return Math.floor(m / 60) + "h " + pad(m % 60) + "m"; };
+const evT = t => { if (!t) return "\u2014"; const p = String(t).split(":"); let h = +p[0];
+  const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12; return h + ":" + (p[1] || "00") + " " + ap; };
+const evDay = iso => new Date(iso + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+function evTable(o) {
+  return '<div class="fev"><div class="fevk">' + esc(o.head || "How this is worked out") + "</div>" +
+    (o.text ? '<div class="fevr">' + esc(o.text) + "</div>" : "") +
+    '<div class="scroll"><table class="tbl fevt"><tr><th>' + esc(o.dayHead || "Day") + "</th>" +
+    o.cols.map(c => "<th>" + esc(c.h) + "</th>").join("") + (o.mark ? "<th>Counted</th>" : "") + "</tr>" +
+    o.days.map(r => { const m = o.mark ? o.mark(r) : "";
+      return "<tr" + (m ? ' class="on"' : "") + "><td>" + esc(evDay(r.date)) + "</td>" +
+        o.cols.map(c => "<td>" + esc(c.f(r)) + "</td>").join("") + (o.mark ? "<td>" + (m ? "\u2713 " + esc(m) : "") + "</td>" : "") + "</tr>"; }).join("") +
+    "</table></div>" + (o.foot ? '<div class="fevf">' + esc(o.foot) + "</div>" : "") + "</div>";
+}
+const EV_AVG = "Ratings are that day\u2019s average across its check-ins. Sleep is the night before that day. Ticked rows are the ones the check counted.";
+function flagEvidence(f) {
+  const rows = flagRows; if (!f || !rows || !rows.length) return "";
+  const t = f[1], lastN = n => rows.slice(-n).filter(r => r.n);
+  const C = {
+    mood: { h: "Mood", f: r => evN(r.v.mood) },
+    energy: { h: "Energy", f: r => evN(r.v.energy) },
+    irrit: { h: "Irritability", f: r => evN(r.v.irrit) },
+    pain: { h: "Pain", f: r => evN(r.v.pain) },
+    sleep: { h: "Sleep (night before)", f: r => r.sleep ? evH(r.sleep.hours) : "\u2014" },
+    bed: { h: "Bedtime", f: r => r.sleep ? evT(r.sleep.bed) : "\u2014" }
+  };
+  if (t === "Short sleep with high energy") return evTable({
+    text: "Looks at the last 5 days. Raised when at least 2 nights were under 6 hours and at least 2 days had energy at 7 or above.",
+    cols: [C.sleep, C.energy], days: rows.slice(-5),
+    mark: r => [r.sleep && r.sleep.hours < 6 ? "under 6h" : "", r.v.energy != null && r.v.energy >= 7 ? "energy 7+" : ""].filter(Boolean).join(", "),
+    foot: EV_AVG });
+  if (t === "Mood at 8+ for several days") return evTable({
+    text: "Looks at your last 5 logged days. Raised when mood was 8 or more on at least 3 of them.",
+    cols: [C.mood, C.energy, C.sleep], days: lastN(5), mark: r => r.v.mood != null && r.v.mood >= 8 ? "8+" : "", foot: EV_AVG });
+  if (t === "Mood at 3 or below for a stretch") return evTable({
+    text: "Looks at your last 7 logged days. Raised when mood was 3 or below on at least 4 of them.",
+    cols: [C.mood, C.energy, C.sleep], days: lastN(7), mark: r => r.v.mood != null && r.v.mood <= 3 ? "3 or below" : "", foot: EV_AVG });
+  if (t === "Low mood with high irritability") return evTable({
+    text: "Looks at your last 7 logged days. Raised when at least 2 days had mood at 4 or below and irritability at 7 or above on the same day.",
+    cols: [C.mood, C.irrit], days: lastN(7),
+    mark: r => r.v.mood != null && r.v.irrit != null && r.v.mood <= 4 && r.v.irrit >= 7 ? "both" : "", foot: EV_AVG });
+  if (t === "Doses going unticked") {
+    const sched = (CFG.medList || []).filter(m => (m.name || "").trim() && (m.whens || [m.when]).some(x => x !== "prn"));
+    const missed = r => {
+      const tk = {};
+      ENTRIES.filter(e => e.date === r.date).forEach(e => Object.keys((e.meds || {}).taken || {}).forEach(k => { if (e.meds.taken[k]) tk[k] = true; }));
+      const out = [];
+      sched.filter(m => medOn(m, r.date)).forEach(m => (m.whens || [m.when]).forEach(wq => {
+        if (wq !== "prn" && !tk[m.id + "@" + wq] && !tk[m.id]) out.push(m.name + " (" + (wq === "am" ? "AM" : "PM") + ")"); }));
+      return out.join(", ") || "\u2014";
+    };
+    return evTable({
+      text: "Looks at your last 7 logged days that had medication ticks. Raised when at least 3 of them had fewer than 75% of that day\u2019s scheduled doses ticked.",
+      cols: [{ h: "Doses ticked", f: r => Math.round(r.meds * 100) + "%" }, { h: "Left unticked", f: missed }],
+      days: lastN(7).filter(r => r.meds != null), mark: r => r.meds < 0.75 ? "under 75%" : "",
+      foot: "This counts what was ticked, so a dose taken but not ticked looks the same as one missed." });
+  }
+  if (t === "Bedtime swinging") {
+    const nights = rows.slice(-10).filter(r => r.sleep && r.sleep.bed);
+    const m = r => { const x = minsOf(r.sleep.bed); return x > 720 ? x - 1440 : x; };
+    const lo = Math.min.apply(null, nights.map(m)), hi = Math.max.apply(null, nights.map(m));
+    const e = nights.find(r => m(r) === lo), l = nights.find(r => m(r) === hi);
+    return evTable({
+      text: "Looks at the last 10 nights that have a bedtime. Raised when the earliest and latest are 2\u00bd hours or more apart.",
+      dayHead: "Night before", cols: [C.bed, { h: "Sleep", f: r => evH(r.sleep.hours) }], days: nights,
+      mark: r => r === e ? "earliest" : r === l ? "latest" : "",
+      foot: "Earliest " + evT(e.sleep.bed) + ", latest " + evT(l.sleep.bed) + ": " + hm(hi - lo) + " apart." });
+  }
+  if (t === "Pain at 7+ for several days") return evTable({
+    text: "Looks at your last 7 logged days. Raised when pain was 7 or more on at least 3 of them.",
+    cols: [C.pain, { h: "Where", f: r => (r.sites || []).join(", ") || "\u2014" }], days: lastN(7),
+    mark: r => r.v.pain != null && r.v.pain >= 7 ? "7+" : "", foot: EV_AVG });
+  if (/ days of sustained (elevation|low mood)$/.test(t)) return evRun(f, rows);
+  if (/^Broken sleep on /.test(t)) return evTable({
+    text: "Looks at the last 14 nights with sleep logged. Raised when 4 or more of them had a waking logged.",
+    dayHead: "Night before", cols: [{ h: "Sleep", f: r => evH(r.sleep.hours) },
+      { h: "Woke", f: r => (r.sleep.wakes || []).length ? (r.sleep.wakes || []).length + "\u00d7" : "\u2014" },
+      { h: "Awake", f: r => (r.sleep.wakes || []).length ? hm(r.sleep.awakeMins || 0) : "\u2014" },
+      { h: "When", f: r => (r.sleep.wakes || []).map(x => evT(x.at)).join(", ") || "\u2014" }],
+    days: rows.slice(-14).filter(r => r.sleep), mark: r => (r.sleep.wakes || []).length ? "woke" : "" });
+  if (/^Napping on /.test(t)) return evTable({
+    text: "Looks at the last 14 logged days. Raised when 5 or more of them had a nap.",
+    cols: [{ h: "Nap", f: r => r.nap ? evH(r.nap.hours) : "\u2014" }, { h: "Started", f: r => r.nap ? evT(r.nap.start) : "\u2014" }, C.sleep],
+    days: rows.slice(-14).filter(r => r.n), mark: r => r.nap ? "nap" : "" });
+  if (/^Late-afternoon naps on /.test(t)) return evTable({
+    text: "Looks at naps in the last 14 days. Raised when 3 or more started at 3 PM or later.",
+    cols: [{ h: "Started", f: r => evT(r.nap.start) }, { h: "Nap", f: r => evH(r.nap.hours) }],
+    days: rows.slice(-14).filter(r => r.nap), mark: r => r.nap.start && minsOf(r.nap.start) >= 15 * 60 ? "after 3 PM" : "" });
+  if (t === "Recurring early warning signs") {
+    const d = lastN(10), wn = {};
+    d.forEach(r => r.warns.forEach(w => { wn[w] = (wn[w] || 0) + 1; }));
+    const rep = Object.keys(wn).filter(w => wn[w] >= 3);
+    return evTable({
+      text: "Looks at your last 10 logged days. Raised when the same warning sign was ticked on 3 or more of them.",
+      cols: [{ h: "Warning signs ticked", f: r => r.warns.join(", ") || "\u2014" }], days: d,
+      mark: r => r.warns.filter(w => rep.indexOf(w) > -1).length ? "repeat" : "" });
+  }
+  if (/^Coming back from time off/.test(t)) return flagDays(t);
+  return "";
+}
+/* A sustained run: the days in it with the average that put them there, and
+   the week of sleep leading in, set against the month before that. */
+function evRun(f, rows) {
+  const src = rows.filter(r => r.n), roll = rollingMean(src, "mood", 5);
+  const ep = episodes(src).find(e => { const a = src[e.start], b = src[e.end];
+    return a && b && (f[2] || "").indexOf(fmtDate(a.date) + " to " + fmtDate(b.date)) === 0; });
+  if (!ep) return "";
+  const high = ep.kind === "high", line = high ? EP_HI : EP_LO;
+  const days = src.slice(ep.start, ep.end + 1).map((r, i) => Object.assign({ avg5: roll[ep.start + i] }, r));
+  const running = ep.end === src.length - 1;
+  let h = evTable({
+    text: "Each logged day gets the average of its mood and the 4 logged days before it (a 5-day average). Raised when that average stays " +
+      (high ? "at " + EP_HI + " or above for " + EP_MIN_HI : "at " + EP_LO + " or below for " + EP_MIN_LO) +
+      " or more logged days in a row. Single days can sit on either side of the line; it\u2019s the average that counts.",
+    cols: [{ h: "Mood that day", f: r => evN(r.v.mood) }, { h: "5-day average", f: r => evN(r.avg5) },
+      { h: "Energy", f: r => evN(r.v.energy) }, { h: "Sleep (night before)", f: r => r.sleep ? evH(r.sleep.hours) : "\u2014" }],
+    days, mark: r => r.avg5 != null && (high ? r.avg5 >= line : r.avg5 <= line) ? (high ? "at/above " : "at/below ") + line : "",
+    foot: days.length + " logged days, " + fmtDate(days[0].date) + " to " + fmtDate(days[days.length - 1].date) + "." +
+      (running ? " Still running as of your latest check-in." : " It has ended.") + " Ratings are that day\u2019s average across its check-ins." });
+  const start = days[0].date;
+  const lead = rows.filter(r => r.date > addDays(start, -7) && r.date <= start);
+  const usual = rows.filter(r => r.sleep && r.date > addDays(start, -37) && r.date <= addDays(start, -7));
+  const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+  const slept = lead.filter(r => r.sleep);
+  const leadH = mean(slept.map(r => r.sleep.hours)), usualH = mean(usual.map(r => r.sleep.hours));
+  const under = slept.filter(r => r.sleep.hours < 6).length;
+  const sum = !slept.length ? "No sleep was logged in the week before it started."
+    : "Those " + slept.length + " nights averaged " + evH(leadH) +
+      (usualH != null ? ", against " + evH(usualH) + " a night over the month before (" + usual.length + " nights logged)" : "") +
+      ". " + under + " night" + (under === 1 ? "" : "s") + " under 6 hours.";
+  h += evTable({ head: "Sleep in the week before it started", text: sum, dayHead: "Night before",
+    cols: [{ h: "Mood that day", f: r => evN(r.v.mood) }, { h: "Sleep", f: r => r.sleep ? evH(r.sleep.hours) : "not logged" }, { h: "Bedtime", f: r => r.sleep ? evT(r.sleep.bed) : "\u2014" },
+      { h: "Woke up", f: r => r.sleep ? evT(r.sleep.wake) : "\u2014" },
+      { h: "Woken in night", f: r => r.sleep && (r.sleep.wakes || []).length ? (r.sleep.wakes || []).length + "\u00d7" : "\u2014" }],
+    days: lead, mark: r => r.sleep && r.sleep.hours < 6 ? "under 6h" : "",
+    foot: "The last row is the night going into the first day of the run. Because the run is built from a 5-day average, it usually starts a few days after mood itself changed \u2014 the Mood column shows where that happened." });
+  return h;
+}
+function openFlagData(key) {
+  const i = latestFlags.findIndex(f => f[1] === key);
+  if (i >= 3 && !flagsAll) { flagsAll = true; renderFlags(daily(0)); }
+  const card = key ? Array.prototype.find.call(document.querySelectorAll("#flags .flag"), c => c.dataset.fk === key) : null;
+  if (card) { const b = card.querySelector("[data-fev]"); if (b && b.getAttribute("aria-expanded") !== "true") b.click(); }
+  const tgt = card || $("#flags");
+  if (tgt && tgt.scrollIntoView) tgt.scrollIntoView({ block: card ? "start" : "center", behavior: "smooth" });
+}
 function renderFlags(rows) {
   paintDayTone();
+  flagRows = rows;
   const recent = rows.slice(-14).filter(r => r.n);
   const out = [];
   const last = n => rows.slice(-n).filter(r => r.n);
@@ -7489,8 +7657,12 @@ function renderFlags(rows) {
   recordFlags(out);
   try { renderFlagMap(rows); } catch (e) {}
   const shown = out.slice(0, flagsAll ? out.length : 3);
+  const evs = shown.map(f => { try { return flagEvidence(f); } catch (e) { return ""; } });
+  $("#flags")._ev = evs;
   $("#flags").innerHTML = out.length
-    ? shown.map(f => '<div class="flag ' + f[0] + '"><b>' + esc(f[1]) + "</b><span>" + esc(f[2]) + "</span></div>").join("") +
+    ? shown.map((f, i) => '<div class="flag ' + f[0] + '" data-fk="' + esc(f[1]) + '"><b>' + esc(f[1]) + "</b><span>" + esc(f[2]) + "</span>" +
+        (evs[i] ? '<button class="fevtog" data-fev="' + i + '" aria-expanded="false">Show the data \u25be</button><div class="fevbox" hidden></div>' : "") +
+        "</div>").join("") +
       (out.length > 3 && !flagsAll
         ? '<button class="btn sm gho full" id="flagsMore" style="margin-top:8px">Show ' +
           (out.length - 3) + " more</button>" : "") +
@@ -11594,6 +11766,15 @@ function init() {
       return;
     }
     if (ev.target.closest("#flagsMore")) { flagsAll = true; renderFlags(daily(0)); return; }
+    const fv = ev.target.closest("[data-fev]");
+    if (fv) {
+      const box = fv.nextElementSibling, open = !box.hidden;
+      if (!open && !box.innerHTML) box.innerHTML = ($("#flags")._ev || [])[+fv.dataset.fev] || "";
+      box.hidden = open;
+      fv.setAttribute("aria-expanded", open ? "false" : "true");
+      fv.textContent = open ? "Show the data \u25be" : "Hide the data \u25b4";
+      return;
+    }
     const wk = ev.target.closest("[data-wakedel]");
     if (wk && draft.sleep) {
       draft.sleep.wakes.splice(+wk.dataset.wakedel, 1);
@@ -12698,8 +12879,10 @@ function init() {
       if (c && c.scrollIntoView) c.scrollIntoView({ block: "start", behavior: "smooth" }); }, 60);
   };
   $("#flagClear").onclick = () => clearFlagBanner(false);
-  $("#flagMore").onclick = () => { clearFlagBanner(true); show("pat");
-    setTimeout(() => { const c = $("#flags"); if (c) c.scrollIntoView({ block: "center", behavior: "smooth" }); }, 60); };
+  // Details opens the finding it was showing, with its readings already open
+  $("#flagMore").onclick = () => { const key = ($("#flagBar").dataset || {}).key || "";
+    clearFlagBanner(true); show("pat");
+    setTimeout(() => openFlagData(key), 60); };
   $("#planBarClose").onclick = () => {
     $("#planBar").classList.remove("on");
     STATE.planHidden = todayISO(); saveState();
