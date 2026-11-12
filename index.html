@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:135-->
+<!DOCTYPE html><!--build:136-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -889,6 +889,26 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
             <div style="flex:1 1 150px;align-self:end;padding-bottom:9px" class="mini" id="napHint"></div>
           </div>
           <div id="napItems"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="brainBlock" style="display:none">
+      <div class="eyebrow">Brain training</div>
+      <div class="card">
+        <p class="sub" style="margin:0 0 10px">How many minutes of brain training did you do today? Add up all of it,
+          across the whole day.</p>
+        <div class="row" style="gap:10px;align-items:end">
+          <label class="fld" style="flex:0 1 140px"><span>Minutes today</span>
+            <input type="number" id="brainMin" inputmode="numeric" min="0" max="1440" step="1" placeholder="0"></label>
+          <div class="mini" id="brainHint" style="flex:1 1 150px;padding-bottom:10px"></div>
+        </div>
+        <div class="row" style="gap:6px;margin-top:10px">
+          <button type="button" class="btn sm" data-brainadd="5">+5</button>
+          <button type="button" class="btn sm" data-brainadd="10">+10</button>
+          <button type="button" class="btn sm" data-brainadd="15">+15</button>
+          <button type="button" class="btn sm" data-brainadd="30">+30</button>
+          <button type="button" class="btn sm gho" id="brainNone">None today</button>
         </div>
       </div>
     </div>
@@ -2283,7 +2303,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 135;
+const BUILD = 136;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2825,8 +2845,11 @@ function newDraft(date, winId) {
     medoff: { st: "", at: "", crashAt: "", crashEnd: "", fx: [] },
     recall: false, period: false,
     sleep: null, screen: null, screenAt: null, meds: { taken: {}, at: {}, prn: {} }, tags: [], warns: [], note: "",
-    tch: {}, gold: { what: "", str: [], none: false } };
+    tch: {}, gold: { what: "", str: [], none: false }, brain: null };
 }
+/* Brain training, in whole minutes for the day; null means not answered, 0 is "none". */
+const brainVal = v => { if (v == null || v === "") return null; const n = Math.round(+v);
+  return isFinite(n) && n >= 0 ? Math.min(n, 1440) : null; };
 function fixDraft(d) {                       // older records, and anything Firebase handed back
   if (!d || typeof d !== "object") return newDraft(todayISO(), (CFG.windows[0] || {}).id || "am");
   // Firebase deletes keys whose value is an empty array or object, so a saved
@@ -2847,6 +2870,7 @@ function fixDraft(d) {                       // older records, and anything Fire
   if (typeof d.note !== "string") d.note = d.note == null ? "" : String(d.note);
   d.recall = !!d.recall;
   d.period = !!d.period;
+  d.brain = brainVal(d.brain);
   if (d.v && d.v.alcohol != null && d.v.binge == null) delete d.v.alcohol;   // retired item
   d.ctx = ctxOf(d);                             // string or array in, clean array out
   if (!d.medoff || typeof d.medoff !== "object" || Array.isArray(d.medoff)) d.medoff = {};
@@ -4022,6 +4046,10 @@ function renderLog() {
     pushScreen(draft.screen == null);
     $("#screenNone").textContent = draft.screen == null ? "Enter it after all" : "Didn't check / skip";
   }
+  // brain training: asked at the evening check-in, once the day's training is done
+  const wantBrain = draft.win === lastWinId() || draft.brain != null;
+  $("#brainBlock").style.display = wantBrain ? "" : "none";
+  if (wantBrain) { $("#brainMin").value = draft.brain == null ? "" : String(draft.brain); brainHint(); }
   const wantNap = (CFG.napWins || []).indexOf(draft.win) > -1;
   $("#napBlock").style.display = wantNap ? "" : "none";
   if (wantNap) {
@@ -4337,7 +4365,7 @@ function daily(days) {
   return dates.map(date => {
     const es = ENTRIES.filter(e => e.date === date);
     const row = { date, n: es.length, v: {}, sleep: null, tags: [], warns: [], meds: null, notes: [],
-      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", ctxs: [], worked: null, screenAll: null, screenWork: 0, screenOn: [], screenOther: "", reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [] };
+      inotes: {}, sites: [], kinds: [], nap: null, total: 0, ctx: "", ctxs: [], worked: null, screenAll: null, screenWork: 0, screenOn: [], screenOther: "", reentry: false, outdoors: false, appt: false, medoff: null, recall: false , spikes: [], medAt: {}, prn: 0, screen: null, stars: [], brain: null };
     ITEMS.forEach(it => {
       const vs = es.map(e => e.v[it.key]).filter(v => v != null);
       if (vs.length) row.v[it.key] = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -4401,6 +4429,7 @@ function daily(days) {
         if (e.meds.at[k]) row.medAt[k] = e.meds.at[k]; });
       if (e.meds && e.meds.prn) Object.keys(e.meds.prn).forEach(k => {
         row.prn += +e.meds.prn[k] || 0; });
+      if (e.brain != null) row.brain = (row.brain || 0) + e.brain;
     });
 
     // A dose ticked at any check-in counts for the day. Working this out one
@@ -4876,6 +4905,7 @@ function readoutFor(i) {
       "</span>" : ""));
   if (r.medoff && r.medoff.st) bits.push("meds " + (r.medoff.st === "still" ? "<b>lasted all day</b>"
     : r.medoff.st === "none" ? "<b>unclear</b>" : "off at <b>" + esc(r.medoff.at) + "</b>"));
+  if (r.brain != null) bits.push("brain training <b>" + (r.brain ? r.brain + " min" : "none") + "</b>");
   if (r.nap) bits.push('<span style="color:#9b7fd4">napped <b>' + Math.floor(r.nap.hours) + "h " +
     pad(Math.round((r.nap.hours % 1) * 60)) + "m</b>" + (r.nap.start ? " at " + esc(r.nap.start) : "") + "</span>");
   s += bits.join(" &nbsp;·&nbsp; ");
@@ -7693,7 +7723,7 @@ function buildExport(kind) {
       "night_wakings", "awake_minutes", "waking_times",
       "nap_hours", "nap_start", "nap_carried_from_prev_evening", "total_sleep_hours",
       "med_wore_off", "med_wore_off_time", "crash_time", "crash_end", "crash_minutes", "crash_effects",
-      "from_memory", "med_adherence", "med_taken_am", "med_taken_pm", "prn_doses",
+      "from_memory", "med_adherence", "med_taken_am", "med_taken_pm", "prn_doses", "brain_training_minutes",
       "screen_hours_own", "screen_hours_total", "spike_count", "spike_times", "daylight_hours"]
       .concat(on.map(i => i.key))
       .concat(["pain_sites", "pain_kinds"])
@@ -7717,7 +7747,7 @@ function buildExport(kind) {
       r.medoff && r.medoff.fx ? r.medoff.fx.join("; ") : "",
       r.recall ? "yes" : "no",
       r.meds == null ? "" : r.meds.toFixed(2),
-      r.medAt.am || "", r.medAt.pm || "", r.prn || "",
+      r.medAt.am || "", r.medAt.pm || "", r.prn || "", r.brain == null ? "" : r.brain,
       r.screen == null ? "" : r.screen.toFixed(2),
       r.screenAll == null ? "" : r.screenAll.toFixed(2),
       r.spikes.length || "", r.spikes.map(x => x.at).join("; "),
@@ -11263,8 +11293,14 @@ async function syncFresh(reason, minAgeMs) {
   syncing = false;
 }
 /* Has anything been entered into the check-in currently on screen? */
+function brainHint() {
+  const el = $("#brainHint"); if (!el || !draft) return;
+  const b = draft.brain;
+  el.textContent = b == null ? "Not entered yet." : b === 0 ? "None today." : b < 60 ? b + " minutes." : hm(b) + " (" + b + " minutes).";
+}
 function draftTouched() {
   if (!draft) return false;
+  if (draft.brain != null) return true;
   if (Object.keys(draft.tch || {}).length) return true;
   if (Object.keys(draft.n || {}).some(k => (draft.n[k] || "").trim())) return true;
   if ((draft.tags || []).length || (draft.warns || []).length) return true;
@@ -11427,8 +11463,10 @@ function commit(skip, reason) {
     const anyPeriod = !!draft.period;
     const anyScreen = !!draft.screen || !!draft.screenAt;
     const anyWin = !!(draft.gold && ((draft.gold.what || "").trim() || draft.gold.none));
+    if ($("#brainBlock").style.display !== "none") draft.brain = brainVal($("#brainMin").value);
+    const anyBrain = draft.brain != null;
     if (!anyVal && !anySleep && !anyNote && !anyPain && !anyNap && !anyCtx && !anyMedOff && !anyPeriod &&
-        !anyScreen && !anyWin && !amberTouched(draft) && !draft.tags.length && !draft.warns.length && !draft.note) {
+        !anyScreen && !anyWin && !anyBrain && !amberTouched(draft) && !draft.tags.length && !draft.warns.length && !draft.note) {
       toast("Nothing filled in yet", true); return;
     }
     // A reading a long way from your usual is the one worth having words against.
@@ -11676,6 +11714,12 @@ function init() {
     }
     crashHint();
   };
+  $("#brainMin").oninput = () => { draft.brain = brainVal($("#brainMin").value); brainHint(); };
+  $("#brainMin").onblur = () => { $("#brainMin").value = draft.brain == null ? "" : String(draft.brain); };
+  $("#brainNone").onclick = () => { draft.brain = 0; $("#brainMin").value = "0"; brainHint(); };
+  $$("[data-brainadd]").forEach(b => b.onclick = () => {
+    draft.brain = brainVal((draft.brain || 0) + (+b.dataset.brainadd));
+    $("#brainMin").value = String(draft.brain); brainHint(); });
   $("#napStart").onchange = () => {
     draft.nap = Object.assign(draft.nap || {}, { start: $("#napStart").value }); pushNap();
   };
