@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:138-->
+<!DOCTYPE html><!--build:139-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -2334,7 +2334,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 138;
+const BUILD = 139;
 
 const DEFAULT_CFG = {
   windows: [
@@ -2526,17 +2526,11 @@ function toast(msg, warn) {
 }
 /* ---------- the day's saying ----------
    One a day, picked by the local date, so every check-in that day shows the
-   same one and tomorrow brings the next. Shown after each saved check-in. */
+   same one and tomorrow brings the next. Shown after each saved check-in.
+   Three, so each comes round every third day: few enough to learn by heart. */
 const SAYINGS = [
   "Be who you are and stand on it. You don't need to know what people think, and you don't have to guess. Your job is to show up as yourself.",
   "Don't read minds. Live your own.",
-  "Their opinion isn't my business. My character is.",
-  "Stop guessing what they think. Start owning what I know.",
-  "I don't need permission to be myself.",
-  "I can't control the story in their head. I can control how I show up.",
-  "Being myself isn't a risk. Pretending is.",
-  "If I'm guessing what they think, I'm guessing wrong. Back to what I know.",
-  "Steady, honest, and myself. That's enough for today.",
   "I stand by who I am, even when nobody's clapping."
 ];
 function getDailySaying(date) {
