@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--build:139-->
+<!DOCTYPE html><!--build:140-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -648,6 +648,12 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 .amcnt b{min-width:26px;text-align:center;font-size:17px}
 .amcnt .btn{min-width:38px}
 .amseg{margin-top:7px}
+.amtask{align-items:flex-start}
+.amchk{flex:0 0 30px;height:30px;border-radius:8px;border:1.5px solid var(--line-2);background:var(--panel-2);
+  color:var(--accent);font-size:17px;line-height:1;cursor:pointer;padding:0;margin-top:-3px}
+.amchk[aria-pressed="true"]{border-color:var(--accent);background:#14241f}
+.amtask.done .amtx>.amtt{color:var(--ink-2)}
+.amtally{color:var(--accent);letter-spacing:.08em}
 .amwins{background:#14191f;border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:13px;line-height:1.5;color:var(--ink-2)}
 .amwins .k{margin-bottom:4px}
 .amstale{font-size:12.5px;color:var(--warn);margin-bottom:10px}
@@ -893,27 +899,6 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
       </div>
     </div>
 
-    <div id="brainBlock" style="display:none">
-      <div class="eyebrow">Brain training</div>
-      <div class="card">
-        <p class="sub" style="margin:0 0 10px">How many minutes of brain training did you do today? Add up all of it,
-          across the whole day.</p>
-        <div class="row" style="gap:10px;align-items:end">
-          <label class="fld" style="flex:0 1 140px"><span>Minutes today</span>
-            <input type="number" id="brainMin" inputmode="numeric" min="0" max="1440" step="1" placeholder="0"></label>
-          <div class="mini" id="brainHint" style="flex:1 1 150px;padding-bottom:10px"></div>
-        </div>
-        <div class="row" style="gap:6px;margin-top:10px">
-          <button type="button" class="btn sm" data-brainadd="5">+5</button>
-          <button type="button" class="btn sm" data-brainadd="10">+10</button>
-          <button type="button" class="btn sm" data-brainadd="15">+15</button>
-          <button type="button" class="btn sm" data-brainadd="25">+25</button>
-          <button type="button" class="btn sm" data-brainadd="30">+30</button>
-          <button type="button" class="btn sm gho" id="brainNone">None today</button>
-        </div>
-      </div>
-    </div>
-
     <button class="btn full spikebtn" id="spikeBtn">Log a spike happening now</button>
     <div class="mini" style="text-align:center;margin:7px 0 2px">
       Records one moment, with its own time, instead of the whole day. Three check-ins get averaged
@@ -1016,7 +1001,28 @@ body.dash .grid{display:grid;grid-template-columns:1fr;gap:14px;align-items:star
 
     <div id="amberBlock" style="display:none">
       <div class="eyebrow">This week with Amber</div>
-      <div class="card amcard" id="amberBody"></div>
+      <div class="card amcard"><div id="amberBody"></div>
+        <div id="brainPark">
+          <div id="brainBlock" class="amrow col" style="display:none">
+            <div class="amtx"><span id="brainTitle">Brain training</span>
+              <div class="amsub">How many minutes today? Add up all of it, across the whole day.</div>
+              <div class="amgoal" id="brainGoal" style="display:none"></div></div>
+            <div class="row" style="gap:10px;align-items:end">
+              <label class="fld" style="flex:0 1 140px"><span>Minutes today</span>
+                <input type="number" id="brainMin" inputmode="numeric" min="0" max="1440" step="1" placeholder="0"></label>
+              <div class="mini" id="brainHint" style="flex:1 1 150px;padding-bottom:10px"></div>
+            </div>
+            <div class="row" style="gap:6px;margin-top:2px">
+              <button type="button" class="btn sm" data-brainadd="5">+5</button>
+              <button type="button" class="btn sm" data-brainadd="10">+10</button>
+              <button type="button" class="btn sm" data-brainadd="15">+15</button>
+              <button type="button" class="btn sm" data-brainadd="25">+25</button>
+              <button type="button" class="btn sm" data-brainadd="30">+30</button>
+              <button type="button" class="btn sm gho" id="brainNone">None today</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="winBlock" style="display:none">
@@ -2334,7 +2340,7 @@ const WARNS = ["Needing less sleep","Racing thoughts","Talking fast","Spending u
   "Grandiose plans","Withdrawing from people","Hopelessness","Can't feel pleasure","Thoughts speeding up",
   "Very short fuse","Everything is too loud"];
 
-const BUILD = 139;
+const BUILD = 140;
 
 const DEFAULT_CFG = {
   windows: [
@@ -10400,13 +10406,15 @@ function amberWeekLine(w, uptoISO) {
     e.win === lastWinId());
   if (!es.length) return "";
   let done = 0, part = 0, asked = 0;
-  const sums = {};
+  const sums = {}, tasks = w.plan.filter(amberIsTask), taskIds = new Set(tasks.map(x => x.id)), fin = new Set();
   es.forEach(e => Object.keys(e.amber.r || {}).forEach(k => {
     const v = e.amber.r[k];
     if (typeof v === "number") { (sums[k] = sums[k] || []).push(v); return; }
+    if (taskIds.has(k)) { if (v === "d") fin.add(k); return; }
     asked++; if (v === "d") done++; else if (v === "p") part++;
   }));
   const bits = [];
+  if (tasks.length) bits.push(fin.size + " of " + tasks.length + " task" + (tasks.length === 1 ? "" : "s") + " finished");
   if (asked) bits.push(done + " done" + (part ? ", " + part + " partly" : "") + " of " + asked + " asked");
   w.plan.concat(w.cont).filter(x => x.kind === "count" && sums[x.id]).forEach(x => {
     const a = sums[x.id], avg = a.reduce((s, y) => s + y, 0) / a.length;
@@ -10420,8 +10428,12 @@ function amberWeekLine(w, uptoISO) {
 function renderAmber() {
   const blk = $("#amberBlock"), now = $("#amberNow");
   if (!blk || !now || !draft) return;
+  // the brain box lives inside this card; take it out before the card is redrawn
+  const bb = $("#brainBlock"), park = $("#brainPark");
+  if (bb && park && bb.parentNode !== park) park.appendChild(bb);
   const w = amberWeekFor(draft.date);
   const evening = draft.win === lastWinId();
+  const brainOn = !!bb && bb.style.display !== "none";
   // the reminder meant for every check-in, wherever it pops up
   const every = w ? w.plan.filter(x => x.every) : [];
   if (every.length && amberAge(w, draft.date) <= 13) {
@@ -10432,14 +10444,18 @@ function renderAmber() {
       '<div class="mini" style="margin-top:6px">Read it out loud if you’re on your own.</div></div>';
   } else { now.style.display = "none"; now.innerHTML = ""; }
 
-  if (!evening) { blk.style.display = "none"; return; }
-  blk.style.display = "";
   const body = $("#amberBody");
+  if (!evening) {
+    // an older non-evening entry that has brain minutes on it still needs the box
+    blk.style.display = brainOn ? "" : "none"; body.innerHTML = ""; brainHint(); return;
+  }
+  blk.style.display = "";
   if (!w) {
     body.innerHTML = '<p class="sub" style="margin:0 0 10px">Paste Amber’s weekly session notes and ' +
       "this card turns them into a few quick questions each evening.</p>" +
-      '<button class="btn sm pri" data-amopen="1">Paste her notes</button>';
-    return;
+      '<button class="btn sm pri" data-amopen="1">Paste her notes</button>' +
+      '<div class="k amh">Brain training</div><div id="amBrainSlot"></div>';
+    amberSlotBrain(bb); return;
   }
   const age = amberAge(w, draft.date);
   const r = (draft.amber && draft.amber.w === w.id && draft.amber.r) || {};
@@ -10449,8 +10465,16 @@ function renderAmber() {
     ' days old. <button class="btn sm" data-amopen="1">Paste the newest</button></div>';
   if (w.wins.length) h += '<div class="amwins"><div class="k">Wins she noted</div>' +
     w.wins.map(x => "<div>★ " + esc(x) + "</div>").join("") + "</div>";
-  if (a.plan.length) h += '<div class="k amh">This week’s plan</div>' + a.plan.map(x => amberRowHtml(x, r)).join("");
-  if (a.counts.length) h += '<div class="k amh">Today’s counts</div>' + a.counts.map(x => amberRowHtml(x, r)).join("");
+  const mi = amberMinItem(w), slot = '<div id="amBrainSlot"></div>';
+  const row = x => mi && x.id === mi.id ? slot : amberIsTask(x) ? amberTaskHtml(x, r, w) : amberRowHtml(x, r);
+  if (a.plan.length) {
+    const tasks = a.plan.filter(amberIsTask);
+    const fin = tasks.filter(x => r[x.id] === "d" || amberDoneBefore(w, x.id, draft.date)).length;
+    h += '<div class="k amh">This week’s plan' + (tasks.length ? ' <span class="amtally">· ' + fin + " of " +
+      tasks.length + " done" + (fin === tasks.length ? " \u2714" : "") + "</span>" : "") + "</div>" + a.plan.map(row).join("");
+  }
+  if (a.counts.length) h += '<div class="k amh">Today’s counts</div>' + a.counts.map(row).join("");
+  if (!mi) h += '<div class="k amh">Brain training</div>' + slot;
   if (a.rot.length) h += '<div class="k amh">Keep going with</div>' + a.rot.map(x => amberRowHtml(x, r)).join("");
   if (a.hidden > 0 || amberShowAll) h += '<button class="btn sm gho" data-amall="1" style="margin-top:6px">' +
     (amberShowAll ? "Just tonight’s two" : "Show all " + (a.hidden + a.rot.length) + " ongoing habits") + "</button>";
@@ -10458,6 +10482,35 @@ function renderAmber() {
   h += '<div class="mini">' + (line ? esc(line) : "Untouched rows are saved as blank, not as a no.") +
     ' · <a href="#" data-amopen="1">edit or update</a></div>';
   body.innerHTML = h;
+  amberSlotBrain(bb);
+}
+function amberSlotBrain(bb) {
+  const slot = $("#amBrainSlot");
+  if (slot && bb) slot.parentNode.replaceChild(bb, slot);
+  brainHint();
+}
+/* This week's plan is a list of tasks to finish once, not a nightly question.
+   Anything Amber marked for every check-in stays a daily Done / Partly / Not today. */
+const amberIsTask = x => !!x && x.kind !== "count" && !x.every;
+function amberDoneBefore(w, id, beforeISO) {
+  let first = null;
+  ENTRIES.forEach(e => {
+    if (e.date < beforeISO && e.amber && e.amber.w === w.id && e.amber.r && e.amber.r[id] === "d" &&
+        (!first || e.date < first)) first = e.date;
+  });
+  return first;
+}
+function amberTaskHtml(it, r, w) {
+  const sub = it.sub && it.sub.length ? '<div class="amsub">' + it.sub.map(esc).join("<br>") + "</div>" : "";
+  const before = amberDoneBefore(w, it.id, draft.date), tonight = r[it.id] === "d";
+  const done = !!before || tonight;
+  const btn = before
+    ? '<button class="amchk" data-amfin="' + before + '" aria-pressed="true" aria-label="Finished ' + esc(fmtDate(before)) + '">\u2714</button>'
+    : '<button class="amchk" data-amset="' + it.id + ':d" aria-pressed="' + (tonight ? "true" : "false") +
+      '" aria-label="' + (tonight ? "Not finished after all" : "Mark finished") + '">' + (tonight ? "\u2714" : "") + "</button>";
+  return '<div class="amrow amtask' + (done ? " done" : "") + '">' + btn +
+    '<div class="amtx"><div class="amtt">' + esc(it.text) + "</div>" + sub +
+    (done ? '<div class="amgoal met">\u2714 finished ' + (before ? fmtDate(before) : "tonight") + "</div>" : "") + "</div></div>";
 }
 
 /* Minutes of brain work go up and down 25 at a time (one session), and are the same
@@ -10468,15 +10521,15 @@ function brainToAmber() {
   if (!draft || draft.win !== lastWinId()) return;
   const mi = amberMinItem(amberWeekFor(draft.date)); if (!mi) return;
   const cur = draft.amber && draft.amber.r ? draft.amber.r[mi.id] : null;
-  if ((cur == null ? null : cur) !== draft.brain) amberSetAnswer(mi.id, draft.brain);
+  if ((cur == null ? null : cur) !== draft.brain) amberSetAnswer(mi.id, draft.brain, true);
 }
-function amberSetAnswer(id, val) {
+function amberSetAnswer(id, val, quiet) {
   const w = amberWeekFor(draft.date); if (!w) return;
   if (!draft.amber || draft.amber.w !== w.id) draft.amber = { w: w.id, r: {} };
   if (!draft.amber.r || typeof draft.amber.r !== "object") draft.amber.r = {};
   if (val == null) delete draft.amber.r[id]; else draft.amber.r[id] = val;
   if (!Object.keys(draft.amber.r).length) delete draft.amber;
-  renderAmber();
+  if (!quiet) renderAmber();
 }
 const amberTouched = d => !!(d && d.amber && d.amber.r && Object.keys(d.amber.r).length);
 
@@ -10631,8 +10684,9 @@ async function amberDelete() {
 }
 function amberBind() {
   document.addEventListener("click", ev => {
-    const t = ev.target.closest("[data-amset],[data-amstep],[data-amopen],[data-amall],[data-amkind],[data-amevery],[data-amrm]");
+    const t = ev.target.closest("[data-amset],[data-amstep],[data-amopen],[data-amall],[data-amkind],[data-amevery],[data-amrm],[data-amfin]");
     if (!t) return;
+    if (t.dataset.amfin) { toast("Finished " + fmtDate(t.dataset.amfin) + " \u2714 \u2014 to undo it, open that evening\u2019s check-in"); return; }
     if (t.dataset.amopen) { ev.preventDefault(); amberOpen(); return; }
     if (t.dataset.amall) { amberShowAll = !amberShowAll; renderAmber(); return; }
     if (t.dataset.amset) {
@@ -10990,7 +11044,16 @@ function amberCell(it, v) {
   }
   return { t: v === "d" ? "Done" : v === "p" ? "Partly" : v === "s" ? "Not today" : "\u2014", ok: v === "d" ? true : v === "s" ? false : null };
 }
-function amberItemSummary(it, days) {
+/* A task in her plan counts once: the evening it was ticked off. Older weeks answered
+   Done / Partly / Not today each night keep the old summary. */
+function amberTaskFin(it, days, w) {
+  if (!w || w.plan.indexOf(it) < 0 || !amberIsTask(it)) return undefined;
+  if (days.some(d => d.r[it.id] === "p" || d.r[it.id] === "s")) return undefined;
+  const d = days.find(d => d.r[it.id] === "d"); return d ? d.date : null;
+}
+function amberItemSummary(it, days, w) {
+  const tf = amberTaskFin(it, days, w);
+  if (tf !== undefined) return tf ? "\u2714 finished " + fmtDate(tf) : "not ticked off yet";
   const vals = days.map(d => it.unit === "min" ? d.brain : d.r[it.id]);
   const n = days.length;
   if (it.kind === "count") {
@@ -11026,20 +11089,26 @@ function amberRepBuild(from, to) {
     if (items.length) {
       html += "<ol class='items'>" + items.map(it => "<li>" + esc(amberShort(it.text)) +
         (it.kind === "count" && amberGoalText(it) ? " <span class='goal'>goal " + esc(amberGoalText(it)) + "</span>" : "") +
-        "<div class='sum'>" + esc(amberItemSummary(it, g.days)) + "</div></li>").join("") + "</ol>";
+        "<div class='sum'>" + esc(amberItemSummary(it, g.days, w)) + "</div></li>").join("") + "</ol>";
       items.forEach((it, i) => text.push((i + 1) + ". " + amberShort(it.text) + (amberGoalText(it) ? " (goal " + amberGoalText(it) + ")" : ""),
-        "   " + amberItemSummary(it, g.days)));
+        "   " + amberItemSummary(it, g.days, w)));
     }
+    const fins = {}; cols.forEach(it => { fins[it.id] = amberTaskFin(it, g.days, w); });
+    const cell = (it, d) => {
+      const f = fins[it.id];
+      if (f === undefined) return amberCell(it, it.unit === "min" ? d.brain : d.r[it.id]);
+      return f && d.date === f ? { t: "\u2714 Finished", ok: true } : f && d.date > f ? { t: "\u2714", ok: true } : { t: "\u2014", ok: null };
+    };
     const th = ["Day"].concat(cols.map((it, i) => "#" + (i + 1) + " " + amberLbl(it.text, 22)))
       .concat(brainCol ? ["Brain training"] : []).concat(o.meds ? ["Meds ticked"] : []).concat(o.sleep ? ["Sleep"] : []);
     html += "<table><tr>" + th.map(h => "<th>" + esc(h) + "</th>").join("") + "</tr>" +
       g.days.map(d => "<tr><td>" + esc(day(d.date)) + "</td>" +
-        cols.map(it => { const c = amberCell(it, it.unit === "min" ? d.brain : d.r[it.id]);
+        cols.map(it => { const c = cell(it, d);
           return "<td class='" + (c.ok === true ? "ok" : c.ok === false ? "no" : "") + "'>" + esc(c.t) + "</td>"; }).join("") +
         (brainCol ? "<td>" + (d.brain == null ? "\u2014" : d.brain + " min") + "</td>" : "") +
         (o.meds ? "<td>" + medPct(d.row) + "</td>" : "") + (o.sleep ? "<td>" + slp(d.row) + "</td>" : "") + "</tr>").join("") + "</table>";
     text.push("");
-    g.days.forEach(d => text.push(day(d.date) + ": " + cols.map((it, i) => "#" + (i + 1) + " " + amberCell(it, it.unit === "min" ? d.brain : d.r[it.id]).t).join(", ") +
+    g.days.forEach(d => text.push(day(d.date) + ": " + cols.map((it, i) => "#" + (i + 1) + " " + cell(it, d).t).join(", ") +
       (brainCol ? (cols.length ? ", " : "") + "brain training " + (d.brain == null ? "\u2014" : d.brain + " min") : "") +
       (o.meds ? ", meds ticked " + medPct(d.row) : "") + (o.sleep ? ", sleep " + slp(d.row) : "")));
     text.push("");
@@ -11567,6 +11636,16 @@ function brainHint() {
   const el = $("#brainHint"); if (!el || !draft) return;
   const b = draft.brain;
   el.textContent = b == null ? "Not entered yet." : b === 0 ? "None today." : b < 60 ? b + " minutes." : hm(b) + " (" + b + " minutes).";
+  const mi = amberMinItem(amberWeekFor(draft.date)), g = mi ? amberGoalText(mi) : "";
+  const tt = $("#brainTitle"), ge = $("#brainGoal");
+  if (tt) tt.textContent = mi ? amberShort(mi.text) : "Brain training";
+  if (ge) {
+    const met = g && b != null && mi.goal != null && b >= mi.goal && (mi.cap == null || b <= mi.cap);
+    const over = g && b != null && mi.cap != null && b > mi.cap;
+    ge.style.display = g ? "" : "none";
+    ge.className = "amgoal" + (met ? " met" : over ? " over" : "");
+    ge.textContent = g ? "goal " + g + (over ? " · over the cap" : met ? " · hit it" : "") : "";
+  }
 }
 function draftTouched() {
   if (!draft) return false;
